@@ -1,0 +1,89 @@
+# Problems met and their fixes, plus verification and delivery
+
+## Problems → causes → fixes
+
+| Problem | Cause | Fix |
+|---|---|---|
+| `node --test tests/` fails | node:test doesn't accept a directory there | `node --test "tests/*.test.js"`. Detect tests with `NODE_TEST_CONTEXT` so scheduler and network code stay off |
+| Theme flash, or a blank page in production | Inline `<script>` blocked by the strict CSP | Move the pre-paint script to `public/theme-init.js`; never inline |
+| Amounts render reversed in Arabic ("DA 500 14") | Bidi algorithm on mixed RTL and number runs | Wrap in `⁦…⁩` (LRI…PDI) and use U+202F as the thousands separator, on client **and** server text |
+| Sidebar hidden in RTL on mobile | `rtl:translate-x-full` outranked `lg:` reset (specificity) | Use `max-lg:ltr:-translate-x-full max-lg:rtl:translate-x-full` |
+| Product with zero spend shown as "winning, scale it" | Verdict computed from CPD = 0 | Verdict `no_ads` when there are no campaigns and spend is 0; only suggest scaling with running campaigns; regression test |
+| Scaling advice "increase 20–30%" | Not aligned with Meta (big jumps can reset learning) | ≤ +20% per step, wait 3–4 days, acknowledgment above 20%, cite Meta's help article |
+| Advisor rules silently missing | One rule threw an exception, and the whole group vanished | try/catch per group, `errors[]` in the output, a test asserting it is empty |
+| `themeFilesUpsert` refused | Shopify requires an exemption for theme file writes from apps | Manual-install modal: the snippet plus the one render line, both copyable |
+| Beacon hits not counted | (a) the server wasn't restarted after the change; (b) headless Chrome's user agent counts as a bot (correct); (c) a CORP same-origin block | Restart the server; test with a mobile user agent; send `Cross-Origin-Resource-Policy: cross-origin` and `ACAO *` on the hit route |
+| A/B "public link" empty | `store_domain` setting empty | Fall back to `project.domain` |
+| `pkill -f pattern` kills your own shell (exit 144) | The pattern matches the bash command line itself | Find the PID with `ps -eo pid,comm,args \| awk '$2=="node" && /pattern/ {print $1}' \| xargs -r kill` |
+| Port already in use after restarts | A stale server process | Kill it by PID as above, then start again |
+| Screenshot script races the login | The page wasn't ready yet | Wait for `'input[autocomplete="username"], main'` before deciding |
+| Meta budgets 100× off | Meta uses the currency's minor units | Multiply or divide by 100, and test it |
+| Duplicate orders from n8n retries | No idempotency | Unique index on source plus external id; upsert |
+| `git push` returns 403 | No GitHub access for this session or repo | Commit locally. Send the user to https://claude.ai/connect-github and the Claude GitHub App install, then push |
+| Vercel or sandbox hosting for the demo not workable | Large uploads through tool calls; no team or project | Publish the demo build as an Artifact instead |
+
+## Verification checklist (run before every delivery)
+
+1. `npm test` passes. Cover at least:
+   - the status transitions;
+   - split weighting, stickiness and routing (no cloaking, bots handled);
+   - the Bayesian winner;
+   - Advisor states and the empty `errors[]`;
+   - the journal;
+   - the `no_ads` verdict;
+   - Shopify-mode config;
+   - snippet JavaScript that parses;
+   - beacons counting humans and not bots.
+2. Start a seeded server (`scripts/seed-demo.mjs`) and screenshot **every page** with Playwright:
+   - AR dark at 1440px, AR at 390px (mobile), FR light;
+   - zero `pageerror` or console errors;
+   - look at the images: RTL numbers, the sidebar, empty states, modals.
+3. For theme snippets: serve a fake store (a tiny HTTP server with `/products/x`, `/pages/x-lp`, `/fr/...`) that injects the snippet with a test config. Assert in a real browser:
+   - the redirect;
+   - parameters kept;
+   - the `utm_content` tag;
+   - stickiness;
+   - the distribution;
+   - the locale prefix;
+   - other pages untouched;
+   - no loop;
+   - no stuck opacity.
+4. For integrations without live credentials: unit-test the mapping functions (statuses, money units, payload shape) against recorded or sample responses. Say plainly which integrations were not tested live.
+5. Re-read the diff for:
+   - secrets;
+   - hardcoded URLs;
+   - missing sensitive-password guards;
+   - missing AR or FR keys.
+
+## Delivery recipe
+
+**Demo link the user can open on the phone:**
+
+1. Start a seeded server with `scripts/demo.sh`, then record real GET responses with `DEMO_PASSWORD=… node scripts/record-demo.cjs http://localhost:3600 <out>/demo-data.json`.
+2. Build with `VITE_DEMO=1 npm --prefix client run build` (output in `client/dist-demo`). Remove `sw.js` from the output.
+3. Copy everything to a scratch folder. Write an `index.html` that holds **only** the title, the stylesheet link, `theme-init.js`, the module script and `<div id="root">`. The Artifact publisher wraps it in its own skeleton.
+4. Publish with `Artifact` (`file_path` = that index, `root` = that folder, `files` = every other file, `icon`).
+5. Load the folder locally once in a 390px viewport. Expect no errors, then give the link.
+6. Tell the user:
+   - browsing works;
+   - saving is disabled;
+   - Meta figures are illustrative until their token is connected.
+
+**Real installation:**
+
+1. Install Node 22.
+2. Copy the folder to the computer.
+3. Run `npm run setup`, then `npm start`.
+4. On first open, create the admin account, the sensitive password and the first project.
+5. Run `tailscale serve --bg 3600` and set `ERP_TRUST_PROXY=1`.
+6. Open the Tailscale URL on the phone, then "Add to Home Screen".
+7. Keep the computer awake: macOS `caffeinate -dimsu &`; Windows power settings plus the startup folder; or pm2.
+
+**Final message** (in the user's language, about 10 lines):
+
+- the link;
+- what was built;
+- how to run it;
+- what was verified, with numbers;
+- what was not verified and why;
+- the next actions for the user: tokens, approvals, budgets.

@@ -85,11 +85,11 @@ export default function Dashboard() {
                 <Card title={t(['المالية التقديرية', 'Finance estimée'])} className="xl:col-span-2">
                   <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
                     <Row label={t(['الإيراد المسلّم', 'CA livré'])} value={da(d.finance.revenue)} strong />
-                    <Row label={t(['تكلفة المنتجات', 'Coût produits'])} value={`− ${da(d.finance.cogs)}`} />
-                    <Row label={t(['تكلفة التوصيل', 'Livraison'])} value={`− ${da(d.finance.shipping_cost)}`} />
-                    <Row label={t(['تكلفة المرتجعات', 'Retours'])} value={`− ${da(d.finance.return_cost)}`} />
-                    <Row label={t(['الإعلانات', 'Publicité'])} value={`− ${da(d.finance.ad_spend_da)}`} />
-                    <Row label={t(['مصاريف أخرى', 'Autres charges'])} value={`− ${da(d.finance.expenses)}`} />
+                    <Row label={t(['تكلفة المنتجات', 'Coût produits'])} value={da(-(d.finance.cogs || 0))} />
+                    <Row label={t(['تكلفة التوصيل', 'Livraison'])} value={da(-(d.finance.shipping_cost || 0))} />
+                    <Row label={t(['تكلفة المرتجعات', 'Retours'])} value={da(-(d.finance.return_cost || 0))} />
+                    <Row label={t(['الإعلانات', 'Publicité'])} value={da(-(d.finance.ad_spend_da || 0))} />
+                    <Row label={t(['مصاريف أخرى', 'Autres charges'])} value={da(-(d.finance.expenses || 0))} />
                     <Row label={t(['الربح', 'Profit'])} value={da(d.finance.profit)} strong tone={d.finance.profit < 0 ? 'text-bad' : 'text-good'} />
                     <Row label={t(['تكلفة الطلبية', 'Coût / commande'])} value={da(d.finance.cpa)} />
                     <Row label={t(['تكلفة المسلّمة', 'Coût / livrée'])} value={da(d.finance.cost_per_delivered)} />

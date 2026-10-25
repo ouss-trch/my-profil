@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { DEMO } from './lib/demo.js';
 import { I18nProvider } from './i18n/index.jsx';
 import { AppProvider, useApp } from './components/ProjectContext.jsx';
 import { SensitiveProvider } from './components/Sensitive.jsx';
@@ -62,15 +63,28 @@ function Gate() {
   );
 }
 
+// نسخة العرض تُفتح داخل رابط مستضاف: التوجيه بعلامة # بدل مسارات الخادم
+const Router = DEMO ? HashRouter : BrowserRouter;
+
+function DemoBanner() {
+  const ar = (document.documentElement.lang || 'ar') === 'ar';
+  return (
+    <div className="sticky top-0 z-[45] bg-warn px-3 py-1.5 text-center text-xs font-semibold text-black">
+      {ar ? 'نسخة عرض ببيانات تجريبية — التصفح كامل، والحفظ معطّل. النسخة الحقيقية تعمل على جهازك عبر Tailscale.' : 'Démo avec données fictives — navigation complète, enregistrement désactivé.'}
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <I18nProvider>
       <ToastProvider>
         <AppProvider>
           <SensitiveProvider>
-            <BrowserRouter>
+            <Router>
+              {DEMO && <DemoBanner />}
               <Gate />
-            </BrowserRouter>
+            </Router>
           </SensitiveProvider>
         </AppProvider>
       </ToastProvider>

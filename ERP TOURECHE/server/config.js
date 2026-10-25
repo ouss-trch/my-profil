@@ -37,6 +37,11 @@ export const config = {
   sensitiveWindowMin: Number(env.ERP_SENSITIVE_WINDOW_MIN || 0),
   trustProxy: env.ERP_TRUST_PROXY === '1' || env.ERP_TRUST_PROXY === 'true',
   disableScheduler: env.ERP_DISABLE_SCHEDULER === '1',
+  // عناوين عامة إضافية مسموحة (مثل رابط Tailscale Funnel أو Cloudflare) عند وجود وسيط يغيّر ترويسة Host
+  allowedOrigins: String(env.ERP_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((x) => x.trim().replace(/\/$/, ''))
+    .filter(Boolean),
   anthropicApiKey: env.ANTHROPIC_API_KEY || '',
   isTest: env.NODE_ENV === 'test' || Boolean(env.NODE_TEST_CONTEXT),
 };

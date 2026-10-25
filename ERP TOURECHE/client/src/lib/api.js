@@ -14,6 +14,8 @@ export class ApiError extends Error {
   }
 }
 
+import { DEMO, demoGet } from './demo.js';
+
 const state = { project: 'all', askSensitive: null, onUnauthorized: null };
 
 export const setApiProject = (p) => (state.project = p ?? 'all');
@@ -35,6 +37,15 @@ async function send(path, { method = 'GET', body, project, password, signal }) {
 }
 
 export async function api(path, opts = {}) {
+  if (DEMO) {
+    const m = opts.method || 'GET';
+    // فحص SEO للقراءة فقط (POST) مسجّل أيضاً
+    if (m === 'POST' && path.endsWith('/seo/check')) return (await demoGet(`POST ${path}`)) ?? { score: 0, checks: [], words: 0 };
+    if (m !== 'GET') throw new ApiError(0, 'demo_mode');
+    const d = await demoGet(path);
+    if (d === null) throw new ApiError(404, 'demo_not_recorded');
+    return d;
+  }
   let password = opts.password;
   let lastError = null;
   for (let attempt = 0; attempt < 4; attempt++) {

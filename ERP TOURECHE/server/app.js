@@ -47,7 +47,7 @@ export function createApp() {
     if (origin) {
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       try {
-        if (new URL(origin).host !== host) return next(new HttpError(403, 'bad_origin'));
+        if (new URL(origin).host !== host && !config.allowedOrigins.includes(origin)) return next(new HttpError(403, 'bad_origin'));
       } catch {
         return next(new HttpError(403, 'bad_origin'));
       }

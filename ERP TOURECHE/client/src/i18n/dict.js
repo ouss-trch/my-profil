@@ -151,4 +151,6 @@ export const DICT = {
   'err.transition_not_allowed': ['لا يمكن الانتقال لهذه الحالة من الحالة الحالية', 'Transition de statut non autorisée'],
   'err.internal_error': ['خطأ داخلي في الخادم', 'Erreur interne du serveur'],
   'err.not_found': ['غير موجود', 'Introuvable'],
+  'err.demo_mode': ['نسخة عرض: الحفظ والتعديل معطّلان هنا — يعملان في نسختك على جهازك', 'Démo : enregistrement désactivé ici'],
+  'err.demo_not_recorded': ['هذه البيانات غير مسجّلة في نسخة العرض', 'Données non enregistrées dans la démo'],
 };
