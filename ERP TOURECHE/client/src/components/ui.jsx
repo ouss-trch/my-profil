@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
+import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Info, Loader2, X, XCircle } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
@@ -21,7 +21,7 @@ export function Button({ variant, size, loading, icon: Icon, children, className
 
 export function IconButton({ icon: Icon, label, className, ...props }) {
   return (
-    <button type="button" aria-label={label} title={label} {...props} className={cx('btn btn-ghost h-9 w-9 p-0', className)}>
+    <button type="button" aria-label={label} title={label} {...props} className={cx('btn btn-ghost h-9 w-9 shrink-0 p-0', className)}>
       <Icon className="h-[18px] w-[18px]" />
     </button>
   );
@@ -77,17 +77,19 @@ export function Field({ label, hint, error, children, className }) {
           {label}
         </label>
       )}
-      {typeof children === 'function' ? children(id) : children}
+      {typeof children === 'function' ? children(id) : isValidElement(children) && !children.props.id ? cloneElement(children, { id }) : children}
       {error ? <p className="mt-1 text-xs text-bad">{error}</p> : hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
     </div>
   );
 }
 
-export const Input = ({ className, ...p }) => <input {...p} className={cx('input', className)} />;
-export const Textarea = ({ className, ...p }) => <textarea {...p} className={cx('input min-h-[80px]', className)} />;
+// دون عنوان مرتبط (حقول البحث والتصفية) يصبح النص التوضيحي اسم الحقل لقارئ الشاشة
+const a11yName = (p) => (p.id || p['aria-label'] || !p.placeholder || typeof p.placeholder !== 'string' ? {} : { 'aria-label': p.placeholder });
+export const Input = ({ className, ...p }) => <input {...a11yName(p)} {...p} className={cx('input', className)} />;
+export const Textarea = ({ className, ...p }) => <textarea {...a11yName(p)} {...p} className={cx('input min-h-[80px]', className)} />;
 export function Select({ className, options = [], placeholder, ...p }) {
   return (
-    <select {...p} className={cx('input pe-8', className)}>
+    <select {...a11yName({ ...p, placeholder })} {...p} className={cx('input pe-8', className)}>
       {placeholder !== undefined && <option value="">{placeholder}</option>}
       {options.map((o) => (
         <option key={String(o.value)} value={o.value} disabled={o.disabled}>
@@ -141,6 +143,9 @@ export function Segmented({ options, value, onChange, size }) {
         <button
           key={o.value}
           type="button"
+          aria-pressed={value === o.value}
+          aria-label={o.title}
+          title={o.title}
           onClick={() => onChange(o.value)}
           className={cx('rounded-md px-2.5 font-medium transition', size === 'sm' ? 'py-1 text-xs' : 'py-1.5 text-sm', value === o.value ? 'bg-surface text-ink shadow-card' : 'text-sub hover:text-ink')}
         >

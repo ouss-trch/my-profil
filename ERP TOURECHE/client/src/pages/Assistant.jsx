@@ -143,7 +143,7 @@ export default function Assistant() {
             )}
             {messages.map((m, k) => (
               <div key={k} className={cx('flex gap-3', m.role === 'user' && 'flex-row-reverse')}>
-                <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', m.role === 'user' ? 'bg-brand text-white' : 'bg-raised text-brand')}>{m.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}</span>
+                <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', m.role === 'user' ? 'bg-brand-fill text-brand-on' : 'bg-raised text-brand')}>{m.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}</span>
                 <div className={cx('max-w-[85%] rounded-xl px-4 py-2.5', m.role === 'user' ? 'bg-brand/10' : 'bg-raised')}>
                   {m.text ? <Rich text={m.text} /> : null}
                   {m.tools?.length > 0 && (
@@ -210,7 +210,7 @@ export default function Assistant() {
               }}
               placeholder={t(['اكتب سؤالك… (Enter للإرسال)', 'Votre question… (Entrée pour envoyer)'])}
             />
-            <Button type="submit" variant="primary" icon={Send} disabled={!input.trim() || sending} />
+            <Button aria-label={t(['إرسال', 'Envoyer'])} type="submit" variant="primary" icon={Send} disabled={!input.trim() || sending} />
           </form>
         </Card>
       </div>

@@ -279,7 +279,7 @@ function SplitForm({ open, onClose, initial }) {
               </div>
               <div className="flex items-center gap-1">
                 <Toggle checked={v.active} onChange={(a) => setV(k, { active: a })} />
-                {f.variants.length > 2 && !initial && <Button size="sm" variant="ghost" icon={XCircle} onClick={() => setF({ ...f, variants: f.variants.filter((_, j) => j !== k) })} />}
+                {f.variants.length > 2 && !initial && <Button aria-label={t(['إزالة النسخة', 'Retirer la variante'])} size="sm" variant="ghost" icon={XCircle} onClick={() => setF({ ...f, variants: f.variants.filter((_, j) => j !== k) })} />}
               </div>
             </div>
           ))}
@@ -335,7 +335,7 @@ function SplitDetail({ id }) {
             {t(['إنهاء', 'Terminer'])}
           </Button>
         )}
-        <Button variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/splits/${s.id}`), { success: t(['حُذف', 'Supprimé']) }).then((r) => r && nav('/splits'))} />
+        <Button aria-label={t('c.delete')} variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/splits/${s.id}`), { success: t(['حُذف', 'Supprimé']) }).then((r) => r && nav('/splits'))} />
       </div>
 
       <Card title={t(['الرابط الذي تضعه في الإعلان', 'Le lien à mettre dans la pub'])}>

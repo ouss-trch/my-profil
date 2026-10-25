@@ -921,7 +921,7 @@ function Drafts() {
                       {t(['متابعة', 'Continuer'])}
                     </Button>
                   )}
-                  {d.status !== 'published' && <Button size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/ads/drafts/${d.id}`)).then((r) => r && reload(true))} />}
+                  {d.status !== 'published' && <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/ads/drafts/${d.id}`)).then((r) => r && reload(true))} />}
                 </div>
               </td>
             </tr>

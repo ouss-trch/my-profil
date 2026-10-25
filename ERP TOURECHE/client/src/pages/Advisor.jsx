@@ -457,9 +457,9 @@ function JournalTab() {
               {j.author && <span>· {j.author}</span>}
               {projects.length > 1 && j.project_name && <span>· {j.project_name}</span>}
               <span className="flex-1" />
-              <Button size="sm" variant="ghost" icon={Pin} onClick={() => run('pin', () => api.patch(`/advisor/journal/${j.id}`, { pinned: !j.pinned }), { success: false }).then(() => reload(true))} />
-              <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEdit({ ...j })} />
-              <Button size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/advisor/journal/${j.id}`)).then((r) => r && reload(true))} />
+              <Button aria-label={t(['تثبيت', 'Épingler'])} size="sm" variant="ghost" icon={Pin} onClick={() => run('pin', () => api.patch(`/advisor/journal/${j.id}`, { pinned: !j.pinned }), { success: false }).then(() => reload(true))} />
+              <Button aria-label={t('c.edit')} size="sm" variant="ghost" icon={Pencil} onClick={() => setEdit({ ...j })} />
+              <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/advisor/journal/${j.id}`)).then((r) => r && reload(true))} />
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-7">{j.text}</p>
           </div>

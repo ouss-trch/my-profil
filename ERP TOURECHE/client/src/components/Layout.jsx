@@ -92,7 +92,7 @@ function Sidebar({ open, onClose, counts }) {
       >
         <div className="flex h-14 items-center justify-between gap-2 border-b border-line px-4">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-bold text-white">T</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-fill text-sm font-bold text-brand-on">T</span>
             <div className="leading-tight">
               <div className="text-sm font-bold tracking-wide">ERP TOURECHE</div>
               <div className="text-[10px] text-muted">COD · Shopify · Meta</div>
@@ -122,7 +122,7 @@ function Sidebar({ open, onClose, counts }) {
                       >
                         <i.icon className={cx('h-[18px] w-[18px] shrink-0', i.highlight && 'text-brand')} />
                         <span className="flex-1 truncate">{t(i.key)}</span>
-                        {counts?.[i.to] ? <span className="chip bg-bad/15 text-bad">{counts[i.to]}</span> : null}
+                        {counts?.[i.to] ? <span className="chip bg-bad text-on-bad">{counts[i.to]}</span> : null}
                       </NavLink>
                     </li>
                   ))}
@@ -291,7 +291,7 @@ function ProjectSwitcher() {
   const { projects, project, setProject } = useApp();
   if (!projects.length) return null;
   return (
-    <select value={project} onChange={(e) => setProject(e.target.value)} className="input w-auto max-w-[11rem] py-1.5 text-sm font-medium" aria-label={t('c.project')}>
+    <select value={project} onChange={(e) => setProject(e.target.value)} className="input w-auto min-w-0 max-w-[11rem] shrink py-1.5 text-sm font-medium" aria-label={t('c.project')}>
       {projects.length > 1 && <option value="all">{t('c.allProjects')}</option>}
       {projects.map((p) => (
         <option key={p.id} value={p.id}>
@@ -372,7 +372,7 @@ export default function Layout() {
     <div className="flex h-full">
       <Sidebar open={menu} onClose={() => setMenu(false)} counts={counts} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-3 backdrop-blur sm:px-4">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/90 px-2 backdrop-blur sm:gap-2 sm:px-4">
           <IconButton icon={Menu} label="menu" className="lg:hidden" onClick={() => setMenu(true)} />
           <ProjectSwitcher />
           <button type="button" onClick={() => setPalette(true)} className="input hidden max-w-xs items-center gap-2 py-1.5 text-start text-muted md:flex">
@@ -387,7 +387,7 @@ export default function Layout() {
           </Button>
           <IconButton icon={RefreshCw} label={t('c.sync')} onClick={syncNow} className={syncing ? 'animate-spin' : ''} />
           <IconButton icon={theme === 'dark' ? Sun : Moon} label={t('c.theme')} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-          <button type="button" onClick={() => setLang(lang === 'ar' ? 'fr' : 'ar')} className="btn btn-ghost h-9 px-2 text-xs font-semibold" title={t('c.language')}>
+          <button type="button" onClick={() => setLang(lang === 'ar' ? 'fr' : 'ar')} className="btn btn-ghost h-9 shrink-0 px-2 text-xs font-semibold" title={t('c.language')}>
             <Languages className="h-4 w-4" />
             {lang === 'ar' ? 'FR' : 'ع'}
           </button>

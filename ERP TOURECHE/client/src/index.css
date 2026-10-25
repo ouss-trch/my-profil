@@ -16,14 +16,18 @@
   --line: 226 232 240;
   --ink: 15 23 42;
   --sub: 71 85 105;
-  --muted: 113 128 150;
+  --muted: 94 108 132;
   --brand: 13 148 136;
   --brand-soft: 220 247 243;
-  --brand-ink: 15 118 110;
-  --good: 21 128 61;
-  --warn: 180 83 9;
-  --bad: 200 30 30;
-  --info: 37 99 235;
+  --brand-ink: 17 94 89;
+  /* تعبئة الأزرار الرئيسية ولون النص فوقها: تباين ≥ 4.5 في الوضعين */
+  --brand-fill: 15 118 110;
+  --on-brand: 255 255 255;
+  --on-bad: 255 255 255;
+  --good: 21 115 55;
+  --warn: 161 72 8;
+  --bad: 185 28 28;
+  --info: 29 78 216;
   /* سلاسل الرسوم البيانية (لوحة مُتحقق منها لعمى الألوان) */
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -44,9 +48,12 @@
   --brand: 20 184 166;
   --brand-soft: 17 60 62;
   --brand-ink: 94 234 212;
+  --brand-fill: 20 184 166;
+  --on-brand: 4 47 46;
+  --on-bad: 69 10 10;
   --good: 52 211 113;
   --warn: 251 176 59;
-  --bad: 248 113 113;
+  --bad: 252 129 129;
   --info: 96 165 250;
   --series-1: #3987e5;
   --series-2: #d95926;
@@ -68,6 +75,11 @@ body {
 ::selection {
   @apply bg-brand/30;
 }
+input[type='checkbox']:not(.sr-only),
+input[type='radio']:not(.sr-only) {
+  @apply h-[18px] w-[18px] cursor-pointer;
+  accent-color: rgb(var(--brand-fill));
+}
 * {
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--line)) transparent;
@@ -87,16 +99,16 @@ body {
     @apply px-2.5 py-1.5 text-xs;
   }
   .btn-primary {
-    @apply border-transparent bg-brand text-white hover:bg-brand/90;
+    @apply border-transparent bg-brand-fill text-brand-on hover:bg-brand-fill/90;
   }
   .btn-danger {
-    @apply border-transparent bg-bad text-white hover:bg-bad/90;
+    @apply border-transparent bg-bad text-on-bad hover:bg-bad/90;
   }
   .btn-ghost {
     @apply border-transparent bg-transparent hover:bg-raised;
   }
   .input {
-    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25 disabled:opacity-60;
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted caret-brand focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25 disabled:opacity-60;
   }
   .label {
     @apply mb-1 block text-xs font-medium text-sub;

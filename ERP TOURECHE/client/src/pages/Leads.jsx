@@ -90,7 +90,7 @@ export default function Leads() {
                         <Button size="sm" onClick={() => move(o, 'no_answer')} loading={busy === `${o.id}:no_answer`}>
                           {t(['لا يرد', 'Sans réponse'])}
                         </Button>
-                        <Button size="sm" variant="ghost" icon={XCircle} onClick={() => move(o, 'cancelled')} />
+                        <Button aria-label={t(['إلغاء الطلبية', 'Annuler la commande'])} size="sm" variant="ghost" icon={XCircle} onClick={() => move(o, 'cancelled')} />
                       </div>
                     </td>
                   </tr>

@@ -688,7 +688,7 @@ export function OrderDrawer({ id, onClose, onChanged }) {
               </a>
             )}
             <span className="flex-1" />
-            <Button
+            <Button aria-label={t('c.delete')}
               variant="ghost"
               icon={Trash2}
               onClick={() =>

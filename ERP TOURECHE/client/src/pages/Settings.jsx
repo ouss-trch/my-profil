@@ -141,12 +141,13 @@ const GLOBAL_GROUPS = [
   },
 ];
 
-function SettingInput({ def, value, onChange }) {
+function SettingInput({ def, value, onChange, id }) {
   const { t } = useI18n();
   if (def.type === 'bool') return <Toggle checked={Boolean(value)} onChange={onChange} label={t(def.label)} />;
   if (value && typeof value === 'object' && value.secret)
     return (
       <Input
+        id={id}
         type="password"
         autoComplete="new-password"
         className="ltr"
@@ -155,8 +156,8 @@ function SettingInput({ def, value, onChange }) {
         onChange={(e) => onChange({ ...value, next: e.target.value })}
       />
     );
-  if (def.type === 'enum') return <Select value={value ?? ''} onChange={(e) => onChange(e.target.value)} options={def.values.map((v) => ({ value: v, label: v || '—' }))} />;
-  if (def.type === 'list') return <Input className="ltr" value={(value || []).join(', ')} onChange={(e) => onChange(e.target.value.split(/[,\s]+/).filter(Boolean).map((x) => x.replace(/^act_/, '')))} />;
+  if (def.type === 'enum') return <Select id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value)} options={def.values.map((v) => ({ value: v, label: v || '—' }))} />;
+  if (def.type === 'list') return <Input id={id} className="ltr" value={(value || []).join(', ')} onChange={(e) => onChange(e.target.value.split(/[,\s]+/).filter(Boolean).map((x) => x.replace(/^act_/, '')))} />;
   if (def.type === 'weights') {
     const w = value || {};
     return (
@@ -174,7 +175,7 @@ function SettingInput({ def, value, onChange }) {
       </div>
     );
   }
-  return <Input type={def.type === 'number' ? 'number' : 'text'} className={def.ltr ? 'ltr' : ''} value={value ?? ''} onChange={(e) => onChange(def.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />;
+  return <Input id={id} type={def.type === 'number' ? 'number' : 'text'} className={def.ltr ? 'ltr' : ''} value={value ?? ''} onChange={(e) => onChange(def.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />;
 }
 
 function SettingsForm({ groups, load, save, projectId }) {
@@ -289,7 +290,7 @@ function Projects() {
                 <Button size="sm" onClick={() => setEdit({ ...p })}>
                   {t('c.edit')}
                 </Button>
-                {projects.length > 1 && <Button size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/projects/${p.id}`)).then((r) => r && loadProjects())} />}
+                {projects.length > 1 && <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/projects/${p.id}`)).then((r) => r && loadProjects())} />}
               </div>
             </div>
           </Card>

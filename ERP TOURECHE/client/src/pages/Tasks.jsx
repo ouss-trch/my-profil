@@ -77,7 +77,7 @@ export default function Tasks() {
                     {x.assignee_name && <Badge tone="info">{x.assignee_name}</Badge>}
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" icon={Trash2} onClick={() => run('d', () => api.del(`/tasks/${x.id}`), { success: false }).then(() => reload(true))} />
+                <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('d', () => api.del(`/tasks/${x.id}`), { success: false }).then(() => reload(true))} />
               </li>
             ))}
           </ul>

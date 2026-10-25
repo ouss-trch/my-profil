@@ -100,7 +100,7 @@ export default function Finance() {
                         <td className="text-xs text-sub">{e.note}</td>
                         <td className="num text-end">{da(e.amount)}</td>
                         <td>
-                          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/finance/expenses/${e.id}`)).then((r) => r && reload(true))} />
+                          <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/finance/expenses/${e.id}`)).then((r) => r && reload(true))} />
                         </td>
                       </tr>
                     ))}

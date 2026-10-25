@@ -256,7 +256,7 @@ function ProductTab({ p, f, set, reload }) {
         </Card>
 
         <Card title={t(['الوصف (HTML)', 'Description (HTML)'])} subtitle={t(['يُفضّل توليده من تبويب SEO', 'Idéalement généré depuis l’onglet SEO'])}>
-          <Textarea className="min-h-[220px] font-mono text-xs" dir="auto" value={f.description_html || ''} onChange={(e) => set({ description_html: e.target.value })} />
+          <Textarea aria-label={t(['الوصف (HTML)', 'Description (HTML)'])} className="min-h-[220px] font-mono text-xs" dir="auto" value={f.description_html || ''} onChange={(e) => set({ description_html: e.target.value })} />
         </Card>
 
         <Card title={t(['المعلومات التقنية والمواصفات', 'Infos techniques & caractéristiques'])}>
@@ -271,7 +271,7 @@ function ProductTab({ p, f, set, reload }) {
                   <div key={k} className="flex gap-2">
                     <Input className="w-40" value={s.label} onChange={(e) => set({ specs: f.specs.map((x, j) => (j === k ? { ...x, label: e.target.value } : x)) })} placeholder={t(['الخاصية', 'Propriété'])} />
                     <Input value={s.value} onChange={(e) => set({ specs: f.specs.map((x, j) => (j === k ? { ...x, value: e.target.value } : x)) })} placeholder={t(['القيمة', 'Valeur'])} />
-                    <Button size="sm" variant="ghost" icon={XCircle} onClick={() => set({ specs: f.specs.filter((_, j) => j !== k) })} />
+                    <Button aria-label={t(['إزالة السطر', 'Retirer la ligne'])} size="sm" variant="ghost" icon={XCircle} onClick={() => set({ specs: f.specs.filter((_, j) => j !== k) })} />
                   </div>
                 ))}
                 <Button size="sm" icon={Plus} onClick={() => set({ specs: [...f.specs, { label: '', value: '' }] })}>

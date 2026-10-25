@@ -92,8 +92,8 @@ export default function Products() {
           value={view}
           onChange={setView}
           options={[
-            { value: 'grid', label: <LayoutGrid className="h-4 w-4" /> },
-            { value: 'list', label: <List className="h-4 w-4" /> },
+            { value: 'grid', label: <LayoutGrid className="h-4 w-4" />, title: t(['عرض بطاقات', 'Vue grille']) },
+            { value: 'list', label: <List className="h-4 w-4" />, title: t(['عرض قائمة', 'Vue liste']) },
           ]}
         />
       </div>

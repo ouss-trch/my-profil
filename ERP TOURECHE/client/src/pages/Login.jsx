@@ -46,7 +46,7 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-lg font-bold text-white">T</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-fill text-lg font-bold text-brand-on">T</span>
             <div>
               <div className="text-lg font-bold tracking-wide">ERP TOURECHE</div>
               <div className="text-xs text-muted">{t(['إدارة المتجر من الطلبية إلى التسليم', 'De la commande à la livraison'])}</div>
