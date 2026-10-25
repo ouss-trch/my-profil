@@ -88,6 +88,9 @@ Every module ships with:
 
 ### 5. Verify (required)
 
+For UI quality, use the vendored **impeccable** skill (`audit`, `polish`, `harden`) or its checklists, plus `scripts/ui-audit.cjs` for measured results.
+
+
 Use the checklist in `references/pitfalls.md`:
 
 - `npm test` (node:test);

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,6 +31,8 @@ export const config = {
   dbFile: path.join(DATA_DIR, 'toureche.db'),
   uploadsDir: path.join(DATA_DIR, 'uploads'),
   backupsDir: path.join(DATA_DIR, 'backups'),
+  // نسخة ثانية خارج الجهاز: مجلد متزامن مع السحابة (Google Drive / OneDrive / iCloud)
+  backupMirrorDir: env.ERP_BACKUP_MIRROR ? path.resolve(env.ERP_BACKUP_MIRROR.replace(/^~(?=$|[\\/])/, os.homedir())) : '',
   clientDist: path.join(ROOT, 'client', 'dist'),
   masterKey: masterKey(),
   sessionDays: Number(env.ERP_SESSION_DAYS || 14),

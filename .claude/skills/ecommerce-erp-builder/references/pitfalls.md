@@ -21,6 +21,14 @@
 | Duplicate orders from n8n retries | No idempotency | Unique index on source plus external id; upsert |
 | `git push` returns 403 | No GitHub access for this session or repo | Commit locally. Send the user to https://claude.ai/connect-github and the Claude GitHub App install, then push |
 | Vercel or sandbox hosting for the demo not workable | Large uploads through tool calls; no team or project | Publish the demo build as an Artifact instead |
+| Every form field read as unlabelled | `Field` generated an id but never passed it to the child control | `Field` clones its single child with `id`; wrappers such as `SettingInput` forward `id`; search inputs get `aria-label` from the placeholder |
+| White text on brand or danger buttons fails contrast (2.5:1 in dark mode) | One `--brand` token used for both accents and button fills | Separate tokens: `--brand-fill` + `--on-brand`, and `--on-bad` (dark text on bright fills in dark mode). Check every pair with the WCAG formula, never by eye |
+| Grey or status text below 4.5:1 in light mode | Slate-400-ish muted, and status colours on 15% tints | Light muted `94 108 132`; status colours one step darker (warn `161 72 8`, info `29 78 216`, good `21 115 55`, bad `185 28 28`) |
+| Phone top bar wider than the screen after a "fix" | `shrink-0` on icon buttons with a fixed-width select beside them | Let the project select shrink (`min-w-0 shrink`), use smaller gaps on mobile, then re-run the overflow check |
+| A test hangs forever, with no output | Node's recursive `mkdirSync` loops on some paths (e.g. under `/proc`) | Don't create cloud paths recursively: if the parent folder doesn't exist, report `mirror_unreachable`. This also avoids a fake local "backup" while Google Drive isn't installed |
+| A later test run hangs or behaves oddly | A stuck background `node --test` process from an earlier run still holds the DB | List with `ps` and kill by PID before rerunning |
+| A third-party skill's engine blocked from running | Session policy blocks executing downloaded binaries | Vendor only the skill files (with LICENSE) and apply its checklists with your own Playwright audit (`scripts/ui-audit.cjs`) |
+| "Contacts" page nobody uses | A generic address book with no link to any workflow | Tie each kind to a job: suppliers ↔ products and reorder; carrier desks ↔ stuck parcels in the order drawer. Otherwise remove the page |
 
 ## Verification checklist (run before every delivery)
 
@@ -34,11 +42,12 @@
    - Shopify-mode config;
    - snippet JavaScript that parses;
    - beacons counting humans and not bots.
-2. Start a seeded server (`scripts/seed-demo.mjs`) and screenshot **every page** with Playwright:
+2. Run `node scripts/ui-audit.cjs <url> out.json` (the Impeccable audit method). It checks 20 routes in dark, light and mobile for contrast below 4.5, buttons without names, fields without labels, horizontal overflow, h1 count and touch targets. Target: 0 contrast, 0 names, 0 labels, 0 overflow.
+3. Start a seeded server (`scripts/seed-demo.mjs`) and screenshot **every page** with Playwright:
    - AR dark at 1440px, AR at 390px (mobile), FR light;
    - zero `pageerror` or console errors;
    - look at the images: RTL numbers, the sidebar, empty states, modals.
-3. For theme snippets: serve a fake store (a tiny HTTP server with `/products/x`, `/pages/x-lp`, `/fr/...`) that injects the snippet with a test config. Assert in a real browser:
+4. For theme snippets: serve a fake store (a tiny HTTP server with `/products/x`, `/pages/x-lp`, `/fr/...`) that injects the snippet with a test config. Assert in a real browser:
    - the redirect;
    - parameters kept;
    - the `utm_content` tag;
@@ -48,8 +57,8 @@
    - other pages untouched;
    - no loop;
    - no stuck opacity.
-4. For integrations without live credentials: unit-test the mapping functions (statuses, money units, payload shape) against recorded or sample responses. Say plainly which integrations were not tested live.
-5. Re-read the diff for:
+5. For integrations without live credentials: unit-test the mapping functions (statuses, money units, payload shape) against recorded or sample responses. Say plainly which integrations were not tested live.
+6. Re-read the diff for:
    - secrets;
    - hardcoded URLs;
    - missing sensitive-password guards;

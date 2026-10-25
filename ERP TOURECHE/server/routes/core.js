@@ -16,7 +16,7 @@ import { listProjects, createProject, updateProject, deleteProject, getProject }
 import { createOrder } from '../services/orders.js';
 import { jobStates, syncShopifyOrders, syncSheet } from '../services/sync.js';
 import { recentFailures } from '../services/effects.js';
-import { backup } from '../services/scheduler.js';
+import { backup, backupStatus } from '../services/backup.js';
 import { makeSnapshot, sendSnapshot } from '../services/snapshot.js';
 
 export const coreRouter = Router();
@@ -142,7 +142,7 @@ coreRouter.get('/audit', requireRole('admin'), (req, res) => {
   );
 });
 
-coreRouter.get('/system/jobs', (_req, res) => res.json({ jobs: jobStates(), effects: recentFailures() }));
+coreRouter.get('/system/jobs', (_req, res) => res.json({ jobs: jobStates(), effects: recentFailures(), backup: backupStatus() }));
 
 coreRouter.post('/system/sync', async (req, res) => {
   const ids = req.body.project_id ? [Number(req.body.project_id)] : listProjects().map((p) => p.id);
@@ -164,9 +164,9 @@ coreRouter.post('/system/sync', async (req, res) => {
 });
 
 coreRouter.post('/system/backup', requireRole('admin'), async (req, res) => {
-  const file = await backup();
-  audit(req, 'backup_created');
-  res.json({ file: file.split(/[\\/]/).pop() });
+  const out = await backup({ force: true });
+  audit(req, 'backup_created', { details: { mirrored: Boolean(out.mirrored), mirror_error: out.mirrorError } });
+  res.json({ file: out.file.split(/[\\/]/).pop(), mirrored: Boolean(out.mirrored), mirror_error: out.mirrorError, status: backupStatus() });
 });
 
 coreRouter.get('/system/snapshot', requireRole('admin', 'manager'), async (_req, res) => res.json(await makeSnapshot()));

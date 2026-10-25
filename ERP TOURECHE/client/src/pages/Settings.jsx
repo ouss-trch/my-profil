@@ -446,11 +446,51 @@ function Security() {
         <ul className="list-disc space-y-1.5 ps-5 text-sm text-sub">
           <li>{t(['افتح الـ ERP من الخارج عبر Tailscale فقط (لا تفتح منفذ الراوتر).', 'Accédez depuis l’extérieur via Tailscale uniquement (pas de port ouvert).'])}</li>
           <li>{t(['المفاتيح السرية مشفرة (AES-256) ولا تُعرض أبداً بعد حفظها.', 'Les secrets sont chiffrés (AES-256) et jamais réaffichés.'])}</li>
-          <li>{t(['نسخة احتياطية تلقائية كل ليلة (آخر 14 يوماً) في مجلد data/backups — انسخها دورياً خارج الجهاز.', 'Sauvegarde automatique chaque nuit (14 jours) dans data/backups — copiez-la ailleurs.'])}</li>
+          <li>{t(['نسخة احتياطية كل ليلة على الجهاز، ونسخة ثانية في مجلد Google Drive أو OneDrive عند ضبط ERP_BACKUP_MIRROR (انظر «النظام»).', 'Sauvegarde chaque nuit sur l’ordinateur, et une copie dans Google Drive / OneDrive avec ERP_BACKUP_MIRROR (voir « Système »).'])}</li>
           <li>{t(['نسيت كلمة المرور؟ من الجهاز: npm run reset-password -- اسم_المستخدم كلمة_جديدة', 'Mot de passe oublié ? Sur la machine : npm run reset-password -- utilisateur nouveau'])}</li>
         </ul>
       </Card>
     </div>
+  );
+}
+
+function BackupCard({ b }) {
+  const { t, lang } = useI18n();
+  const m = b.mirror;
+  const ok = m.configured && m.reachable && !m.behind;
+  return (
+    <Card title={t(['النسخ الاحتياطية', 'Sauvegardes'])}>
+      <div className="grid gap-3 text-sm md:grid-cols-2">
+        <div className="space-y-1">
+          <div className="text-xs text-sub">{t(['على هذا الجهاز (آخر 14 يوماً)', 'Sur cet ordinateur (14 jours)'])}</div>
+          <div className="font-medium">{b.local.last ? `${b.local.last.name} · ${dateTime(b.local.last.at, lang)}` : '—'}</div>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs text-sub">
+            {t(['خارج الجهاز (مجلد سحابي، آخر 30)', 'Hors ordinateur (dossier cloud, 30)'])}
+            <Badge tone={ok ? 'good' : m.configured ? 'bad' : 'warn'}>{ok ? t(['يعمل', 'Actif']) : m.configured ? t(['متوقف', 'En panne']) : t(['غير مفعّل', 'Inactif'])}</Badge>
+          </div>
+          <div className="ltr break-all font-medium">{m.dir || '—'}</div>
+          {m.last && <div className="text-xs text-muted">{`${m.last.name} · ${dateTime(m.last.at, lang)}`}</div>}
+        </div>
+      </div>
+      {!ok && (
+        <div className="mt-3 space-y-1.5 rounded-lg bg-raised p-3 text-xs text-sub">
+          <p>
+            {m.configured
+              ? t(['المجلد غير موجود أو لم يُنسخ إليه اليوم. تأكد أن تطبيق Google Drive أو OneDrive يعمل ثم اضغط «نسخة احتياطية الآن».', 'Dossier introuvable ou pas de copie aujourd’hui. Vérifiez que Google Drive / OneDrive tourne puis « Sauvegarder maintenant ».'])
+              : t(['إن تعطّل الجهاز تضيع البيانات. أضف هذا السطر إلى ملف .env (بمسار مجلد Google Drive أو OneDrive) ثم أعد تشغيل الـ ERP:', 'Si l’ordinateur lâche, les données sont perdues. Ajoutez cette ligne au fichier .env (dossier Google Drive ou OneDrive) puis redémarrez :'])}
+          </p>
+          {!m.configured && (
+            <>
+              <code className="ltr block rounded bg-surface px-2 py-1">ERP_BACKUP_MIRROR='G:\My Drive\ERP-backups'</code>
+              <code className="ltr block rounded bg-surface px-2 py-1">ERP_BACKUP_MIRROR='~/Library/CloudStorage/GoogleDrive-…/My Drive/ERP-backups'</code>
+              <p>{t(['الاسترجاع على جهاز جديد: README ← «إن تعطّل الجهاز».', 'Restauration sur un nouvel ordinateur : README → « Si l’ordinateur lâche ».'])}</p>
+            </>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -465,13 +505,14 @@ function System() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <Button icon={Database} loading={busy === 'bk'} onClick={() => run('bk', () => api.post('/system/backup', {}), { success: t(['تمت النسخة الاحتياطية', 'Sauvegarde effectuée']) })}>
+        <Button icon={Database} loading={busy === 'bk'} onClick={() => run('bk', () => api.post('/system/backup', {}), { success: t(['تمت النسخة الاحتياطية', 'Sauvegarde effectuée']) }).then(() => reload(true))}>
           {t(['نسخة احتياطية الآن', 'Sauvegarder maintenant'])}
         </Button>
         <Button icon={Server} loading={busy === 'snap'} onClick={() => run('snap', () => api.post('/system/snapshot', {}), { success: t(['أُرسل التقرير إلى n8n', 'Rapport envoyé à n8n']) })}>
           {t(['إرسال التقرير الصباحي الآن', 'Envoyer le rapport maintenant'])}
         </Button>
       </div>
+      {data.backup && <BackupCard b={data.backup} />}
       <Card title={t(['المهام الدورية', 'Tâches planifiées'])} pad={false}>
         <table className="table">
           <thead>

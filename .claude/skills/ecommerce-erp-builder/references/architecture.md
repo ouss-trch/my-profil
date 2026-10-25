@@ -95,7 +95,12 @@ All settings live in one typed registry (`lib/settings.js`): key, scope (global/
   - The Origin host must equal the Host header, or appear in `ERP_ALLOWED_ORIGINS`.
   - Inbound hooks are exempt. They authenticate with `x-erp-key`, compared with `safeEqual`.
 - **CSP:** no inline scripts. Pre-paint code such as the theme script lives in `public/theme-init.js`.
-- **Logging and backups:** an audit log records every write. A nightly SQLite backup goes to `data/backups` and keeps 14 days.
+- **Logging and backups:**
+  - An audit log records every write.
+  - A nightly SQLite backup goes to `data/backups` and keeps 14 days.
+  - With `ERP_BACKUP_MIRROR` set, the backup is also copied (copy, then rename) to a Google Drive, OneDrive or iCloud folder, keeping 30.
+  - `npm run restore -- <file>` checks integrity, saves the current DB first, then restores.
+  - The Advisor warns while backups exist only on the computer. Code on GitHub plus data in the cloud folder means a lost computer is not a lost ERP.
 
 ## Scheduler (`services/scheduler.js`)
 

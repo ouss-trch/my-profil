@@ -7,11 +7,12 @@
 | **Anthropic Skills** (skill-creator, frontend-design, webapp-testing…) | [anthropics/skills](https://github.com/anthropics/skills) — ≈179k ⭐ | بنية المهارة الخاصة بالمشروع (`.claude/skills/ecommerce-erp-builder`)، واختبار الواجهة بمتصفح حقيقي (Playwright) لكل الصفحات |
 | **Superpowers** (TDD، التخطيط، التحقق قبل الإعلان) | [obra/superpowers](https://github.com/obra/superpowers) — ≈94k ⭐ | اختبارات `node:test` قبل الاعتماد، إعادة إنتاج كل خطأ قبل إصلاحه (مثل حكم «رابح» بإنفاق صفر)، التحقق قبل كل commit |
 | **Marketing Skills** (CRO، صفحات الهبوط، A/B) | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) — ≈19k ⭐ | منطق اختبار الصفحات A/B، تحليل القمع، نصوص الإعلانات متعددة الزوايا |
+| **Impeccable** (audit، polish، harden، critique) | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) — Apache-2.0 | منسوخة في `.claude/skills/impeccable`: تدقيق الواجهة (التباين 47→0، أزرار بلا اسم 4→0، حقول بلا عنوان 26→0)، وقائمة الجودة لكل تعديل واجهة |
 | **UI/UX Pro Max** | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | نظام الألوان (كحلي + أخضر مائي)، الكثافة، الوضع الداكن/الفاتح، RTL |
 | **n8n Skills** | [czlonkowski/n8n-skills](https://github.com/czlonkowski/n8n-skills) | توافق عقود البيانات مع سير n8n الحالية (الأحداث، المنتجات، التقرير الصباحي، جسر Sheets) |
 | **Trail of Bits Skills** (مراجعة الأمان) | [trailofbits/skills](https://github.com/trailofbits/skills) | تشفير الأسرار، كلمة مرور العمليات الحساسة، CSP، فحص Origin، حدود المعدل، عدم رفع أي سر إلى git |
 
-التثبيت في Claude Code: `bash scripts/install-skills.sh`
+التثبيت في Claude Code: `bash scripts/install-skills.sh` — مهارتا المشروع و Impeccable موجودتان مسبقاً في `.claude/skills/` بجذر المستودع.
 
 ## مهارة المشروع: `ecommerce-erp-builder`
 

@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { db } from '../db/index.js';
 import { config } from '../config.js';
 import { getSetting, projectConfig } from '../lib/settings.js';
@@ -15,6 +13,7 @@ import { syncCampaigns, syncSpend, autoLink } from './ads.js';
 import { sendSnapshot } from './snapshot.js';
 import { aiReport } from './advisor.js';
 import { aiConfigured } from '../integrations/ai.js';
+import { backup } from './backup.js';
 
 /**
  * المهام الدورية (تعمل ما دام الجهاز مشغلاً):
@@ -24,17 +23,6 @@ import { aiConfigured } from '../integrations/ai.js';
  *  يومياً 03:00 : نسخة احتياطية، أسعار شركات التوصيل، إنفاق 30 يوماً (+ تقرير المستشار الذكي كل سبت)
  */
 const quiet = (p) => p.catch(() => {});
-
-export function backup() {
-  const day = dzDay();
-  const file = path.join(config.backupsDir, `toureche-${day}.db`);
-  if (fs.existsSync(file)) return file;
-  return db.backup(file).then(() => {
-    const files = fs.readdirSync(config.backupsDir).filter((f) => f.endsWith('.db')).sort();
-    for (const old of files.slice(0, Math.max(0, files.length - 14))) fs.unlinkSync(path.join(config.backupsDir, old));
-    return file;
-  });
-}
 
 export async function every5min() {
   for (const p of listProjects()) {

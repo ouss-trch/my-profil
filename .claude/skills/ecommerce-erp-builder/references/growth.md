@@ -117,6 +117,18 @@ Campaign diagnosis, in order:
 - there is no redirect loop;
 - there is no stuck opacity.
 
+## Suppliers and delivery contacts (what makes the "contacts" page useful)
+
+- **Supplier ↔ products** (`products.supplier_id`, `contacts.lead_time_days`):
+  - Reorder when stock ≤ `low_stock`, or when days left ≤ lead time + 3.
+  - Suggested quantity = sales per day (last 14 days) × (lead time + 14) − stock.
+  - The supplier card shows a ready WhatsApp order message.
+  - The Advisor's stock alert names the supplier, the lead time and the quantity, and becomes critical when lead time ≥ days left.
+- **Carrier desk or driver ↔ wilaya:**
+  - Each entry counts the stuck parcels (`at_office`, `attempt_failed`) for its carrier and wilaya.
+  - Inside a stuck order the drawer shows that desk's call and WhatsApp buttons with a prefilled message.
+  - 2026 wilayas match their parent wilaya.
+
 ## Niche notes: "مكتبة ألواني" (children's coloring and activity books, puzzles, mazes, notebooks, Algeria)
 
 Treat these as hypotheses to confirm with the owner and the data, not facts.

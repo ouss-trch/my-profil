@@ -13,6 +13,7 @@ import { decisions } from './ads.js';
 import { tariff } from './shipments.js';
 import { splitInsights } from './splits.js';
 import { suppliersById, restockPlan } from './contacts.js';
+import { backupStatus } from './backup.js';
 
 /**
  * «المستشار»: يحلّل بيانات المشروع ويُخرج ملاحظات وتقييمات واستنتاجات واقتراحات قابلة للتنفيذ.
@@ -822,6 +823,27 @@ function setupRules(projectIds, push) {
         project_id: pid,
       });
   }
+  // البيانات خارج الجهاز: الكود في GitHub، لكن الطلبيات والزبائن في قاعدة البيانات المحلية فقط
+  const b = backupStatus().mirror;
+  if (!b.configured || !b.reachable || b.behind)
+    push({
+      key: 'setup.backup_offsite',
+      area: 'setup',
+      type: 'alert',
+      severity: b.configured ? 'high' : 'medium',
+      title: b.configured
+        ? tx('النسخة الاحتياطية خارج الجهاز متوقفة', 'La sauvegarde hors ordinateur ne se fait plus')
+        : tx('النسخ الاحتياطية على هذا الجهاز فقط', 'Sauvegardes uniquement sur cet ordinateur'),
+      insight: tx('إن تعطّل الجهاز تضيع الطلبيات والزبائن والإعدادات. الكود محفوظ في GitHub، أما البيانات فلا.', 'Si l’ordinateur lâche, commandes, clients et réglages sont perdus. Le code est sur GitHub, pas les données.'),
+      evidence: [
+        { label: tx('المجلد السحابي', 'Dossier cloud'), value: b.dir || '✗' },
+        { label: tx('آخر نسخة خارج الجهاز', 'Dernière copie externe'), value: b.last?.name || '—' },
+      ],
+      advice: b.configured
+        ? tx('تأكد أن المجلد موجود وأن تطبيق Google Drive أو OneDrive يعمل، ثم اضغط «نسخة احتياطية الآن».', 'Vérifiez que le dossier existe et que Google Drive / OneDrive tourne, puis « Sauvegarder maintenant ».')
+        : tx('ضع مسار مجلد Google Drive أو OneDrive أو iCloud في ERP_BACKUP_MIRROR داخل ملف .env ثم أعد التشغيل.', 'Indiquez un dossier Google Drive / OneDrive / iCloud dans ERP_BACKUP_MIRROR (.env) puis redémarrez.'),
+      action: { to: '/settings?tab=system', label: tx('النظام', 'Système') },
+    });
 }
 
 // ————————————————————————————————————————————————
