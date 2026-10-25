@@ -60,7 +60,7 @@ export const noest = {
     }
     const body = {
       user_guid: cfg.noest_user_guid,
-      reference: String(o.ref).padEnd(5, '0'),
+      reference: String(o.ref),
       client: o.customer_name || 'Client',
       phone: o.phone,
       ...(o.phone2 ? { phone_2: o.phone2 } : {}),

@@ -2,7 +2,7 @@ import { db, parseJson } from '../db/index.js';
 import { projectConfig } from '../lib/settings.js';
 import { normalizeCarrierStatus, SHIPPING_ACTIVE, SHIPPING_RANK, STATUSES } from '../lib/statuses.js';
 import { shippingWilaya, wilayaByCode } from '../lib/wilayas.js';
-import { HttpError, nowIso, badRequest } from '../lib/util.js';
+import { HttpError, nowIso, badRequest, orderNumber } from '../lib/util.js';
 import { carrier as getCarrier, CARRIERS } from '../integrations/carriers/index.js';
 import { changeStatus, getOrder, addEvent } from './orders.js';
 import { inList } from './projects.js';
@@ -35,7 +35,8 @@ export async function sendToCarrier(orderId, { carrier, commune, stopdesk_id, de
   if (!o.wilaya_code) throw badRequest('wilaya_required');
   const dType = delivery_type || o.delivery_type;
   const payload = {
-    ref: o.ref,
+    // نفس رقم Shopify على ملصق الطرد، فيُعرف الطرد في Shopify وعند شركة التوصيل بنفس الرقم
+    ref: orderNumber(o),
     customer_name: o.customer_name,
     phone: o.phone,
     phone2: o.phone2,

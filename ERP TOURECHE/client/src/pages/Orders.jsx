@@ -645,6 +645,12 @@ export function OrderDrawer({ id, onClose, onChanged }) {
         o ? (
           <div className="flex flex-wrap items-center gap-2">
             <span>{o.shopify_name || o.ref}</span>
+            {o.shopify_admin_url && (
+              <a className="btn btn-sm" href={o.shopify_admin_url} target="_blank" rel="noreferrer" title={t(['فتح الطلبية في Shopify', 'Ouvrir dans Shopify'])}>
+                <ExternalLink className="h-3.5 w-3.5" />
+                Shopify
+              </a>
+            )}
             <StatusBadge status={o.status} />
             <span className="text-xs font-normal text-muted">{dateTime(o.created_at, lang)}</span>
           </div>

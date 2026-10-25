@@ -61,6 +61,10 @@ export const num = (v, fallback = 0) => {
 
 export const randomId = (bytes = 16) => crypto.randomBytes(bytes).toString('base64url');
 
+/** رقم الطلبية الموحّد: رقم Shopify (#1037 ← 1037) إن كانت الطلبية في Shopify، وإلا رقم الـ ERP — نفس الرقم في القائمة والبحث وملصق شركة التوصيل */
+export const shopifyNumber = (name) => (name ? String(name).trim().replace(/^#/, '') : null);
+export const orderNumber = (o) => shopifyNumber(o?.shopify_name) || o?.ref || null;
+
 export const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
 export function median(values) {

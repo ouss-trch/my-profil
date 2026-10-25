@@ -147,6 +147,7 @@ export const DICT = {
   'err.split_variant_url_invalid': ['رابط الصفحة {x} غير صالح', "L'URL de la page {x} est invalide"],
   'err.split_no_active_variant': ['يجب أن تبقى صفحة واحدة مفعّلة بوزن أكبر من 0', 'Au moins une page active avec un poids > 0'],
   'err.name_required': ['الاسم مطلوب', 'Nom obligatoire'],
+  'err.shop_must_be_myshopify': ['استعمل نطاق xxxx.myshopify.com وليس دومين المتجر (Shopify ← الإعدادات ← النطاقات)', 'Utilisez le domaine xxxx.myshopify.com, pas le domaine public (Shopify → Paramètres → Domaines)'],
   'err.supplier_invalid': ['اختر مورداً موجوداً من قائمة الموردين', 'Choisissez un fournisseur existant'],
   'err.carrier_required': ['اختر شركة التوصيل', 'Choisissez le transporteur'],
   'err.carrier_invalid': ['شركة توصيل غير معروفة', 'Transporteur inconnu'],

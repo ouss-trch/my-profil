@@ -14,6 +14,8 @@ const tokenCache = new Map();
 function shopDomain(cfg) {
   const s = String(cfg.shopify_shop || '').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (!s) throw new IntegrationError('shopify', 'config', 'shop_not_configured');
+  // رمز الدخول لا يُطلب إلا من نطاق myshopify (الدومين العام مثل souqnna.com لا يصلح هنا)
+  if (s.includes('.') && !s.endsWith('.myshopify.com')) throw new IntegrationError('shopify', 'config', 'shop_must_be_myshopify');
   return s.includes('.') ? s : `${s}.myshopify.com`;
 }
 
@@ -31,6 +33,17 @@ async function accessToken(cfg) {
   if (!data?.access_token) throw new IntegrationError('shopify', 'auth', 'shopify_auth_failed');
   tokenCache.set(key, { token: data.access_token, expires: Date.now() + (Number(data.expires_in) || 86399) * 1000 });
   return data.access_token;
+}
+
+/** رابط الطلبية في لوحة Shopify (من معرّفها gid://shopify/Order/123) */
+export function adminOrderUrl(cfg, externalId) {
+  const id = /\/Order\/(\d+)$/.exec(String(externalId || ''))?.[1];
+  if (!id || !cfg.shopify_shop) return null;
+  try {
+    return `https://${shopDomain(cfg)}/admin/orders/${id}`;
+  } catch {
+    return null;
+  }
 }
 
 export const isConfigured = (cfg) => Boolean(cfg.shopify_shop && (cfg.shopify_access_token || (cfg.shopify_client_id && cfg.shopify_client_secret)));

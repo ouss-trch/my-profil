@@ -1,7 +1,7 @@
 import { db, parseJson } from '../db/index.js';
 import { STATUSES, canTransition, groupOf, SHIPPED_EVER } from '../lib/statuses.js';
 import { wilayaByCode, parseWilaya } from '../lib/wilayas.js';
-import { HttpError, normalizePhone, nowIso, randomId, round, badRequest, dzDayStartIso } from '../lib/util.js';
+import { HttpError, normalizePhone, nowIso, randomId, round, badRequest, dzDayStartIso, orderNumber, shopifyNumber } from '../lib/util.js';
 import { projectConfig } from '../lib/settings.js';
 import { inList } from './projects.js';
 import { enqueue } from './effects.js';
@@ -27,6 +27,8 @@ export function getOrder(id) {
     .prepare('SELECT e.*, u.display_name AS user_name FROM order_events e LEFT JOIN users u ON u.id = e.user_id WHERE order_id = ? ORDER BY at, id')
     .all(id);
   o.customer = customerSummary(o.phone, o.id);
+  o.number = orderNumber(o);
+  o.shopify_admin_url = shopify.adminOrderUrl(projectConfig(o.project_id), o.external_id);
   return o;
 }
 
@@ -215,7 +217,8 @@ export function upsertFromShopify(projectId, parsed) {
   if (!row) {
     const res = createOrder(
       projectId,
-      { ...parsed, commune_fr: null, status: parsed.cancelled ? 'cancelled' : 'new', tags: parsed.tags },
+      // رقم الطلبية في الـ ERP = رقم Shopify نفسه (إلا إن جاءت بمرجع ERP مسبق من الجدول أو n8n)
+      { ...parsed, ref: parsed.ref || shopifyNumber(parsed.shopify_name), commune_fr: null, status: parsed.cancelled ? 'cancelled' : 'new', tags: parsed.tags },
       { source: 'shopify' },
     );
     return { ...res, created: res.created };
@@ -308,11 +311,11 @@ export const SHEET_STATUS = {
 function afterStatusChange(o, from, to, opts) {
   const cfg = projectConfig(o.project_id);
   const items = parseJson(o.items, []);
-  n8n.emit('order.status_changed', { ref: o.ref, customer_name: o.customer_name, phone: o.phone, total: o.total, from, to }, o.project_id);
+  n8n.emit('order.status_changed', { ref: o.ref, number: orderNumber(o), customer_name: o.customer_name, phone: o.phone, total: o.total, from, to }, o.project_id);
   if (to === 'attempt_failed')
     n8n.emit(
       'order.shipment_updated',
-      { ref: o.ref, customer_name: o.customer_name, phone: o.phone, status: 'attempt_failed', raw: opts.raw || '', location: opts.location || '', carrier: o.carrier, tracking: o.tracking },
+      { ref: o.ref, number: orderNumber(o), customer_name: o.customer_name, phone: o.phone, status: 'attempt_failed', raw: opts.raw || '', location: opts.location || '', carrier: o.carrier, tracking: o.tracking },
       o.project_id,
     );
 
