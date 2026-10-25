@@ -26,6 +26,7 @@ import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import { Badge, Button, Card, Drawer, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Stat, Tabs, Textarea, Toggle, cx, useAction } from '../components/ui.jsx';
 import LaunchCampaign, { LaunchButton } from '../components/LaunchCampaign.jsx';
+import FxEditor from '../components/FxEditor.jsx';
 import { VERDICT } from './ProductEditor.jsx';
 import { TEST_STAGES } from './Products.jsx';
 
@@ -43,6 +44,12 @@ const DIAG = {
   weak_page_or_offer: ['الصفحة أو العرض ضعيف', 'Page ou offre faible', 'warn'],
   audience_fatigue: ['تعب الجمهور (تكرار مرتفع)', 'Audience fatiguée', 'warn'],
   expensive_audience: ['جمهور مكلف (CPM مرتفع)', 'Audience chère (CPM)', 'warn'],
+};
+// مرحلة التعلم حسب Meta: LEARNING · SUCCESS (خرجت) · FAIL (تعلم محدود)
+export const LEARNING = {
+  LEARNING: ['في مرحلة التعلم', 'En apprentissage', 'info'],
+  SUCCESS: ['خرجت من التعلم', 'Apprentissage terminé', 'good'],
+  FAIL: ['تعلم محدود', 'Apprentissage limité', 'warn'],
 };
 const adsManager = (accountId, campaignId) => `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${accountId}${campaignId ? `&selected_campaign_ids=${campaignId}` : ''}`;
 
@@ -66,9 +73,12 @@ export default function Ads() {
         title={t('nav.ads')}
         subtitle={t(['حملات Meta من الـ ERP: الاطلاع، التعديل، الإطلاق لأي منتج، والقرار بالطلبيات المسلّمة لا بالبيكسل', 'Campagnes Meta depuis l’ERP : consulter, modifier, lancer pour tout produit, décider sur les commandes livrées'])}
         actions={
-          <Button icon={RefreshCw} loading={busy === 'sync'} onClick={() => run('sync', () => api.post('/ads/sync', { days: 7 }), { success: t(['تمت مزامنة الحملات والإنفاق', 'Campagnes et dépenses synchronisées']) })}>
-            {t(['مزامنة الإنفاق', 'Sync dépenses'])}
-          </Button>
+          <>
+            <FxEditor />
+            <Button icon={RefreshCw} loading={busy === 'sync'} onClick={() => run('sync', () => api.post('/ads/sync', { days: 7 }), { success: t(['تمت مزامنة الحملات والإنفاق', 'Campagnes et dépenses synchronisées']) })}>
+              {t(['مزامنة الإنفاق', 'Sync dépenses'])}
+            </Button>
+          </>
         }
       />
       <Tabs
@@ -283,6 +293,11 @@ function Explorer() {
                         </td>
                         <td>
                           <Badge tone={GROUPS[c.group]?.[2]}>{t(GROUPS[c.group] || [c.effective_status, c.effective_status])}</Badge>
+                          {c.learning && c.group === 'active' && (
+                            <div className="mt-1">
+                              <Badge tone={LEARNING[c.learning]?.[2]}>{t(LEARNING[c.learning] || [c.learning, c.learning])}</Badge>
+                            </div>
+                          )}
                           {c.issues?.length > 0 && (
                             <div className="mt-1 max-w-[14rem] truncate text-[11px] text-bad" title={c.issues.map((i) => i.feedback).join(' | ')}>
                               {c.issues[0].feedback || c.issues[0].status}
@@ -366,21 +381,50 @@ function BudgetModal({ campaign: c, currency, onClose }) {
   const { t } = useI18n();
   const { run, busy } = useAction();
   const [val, setVal] = useState({});
+  const [ack, setAck] = useState(false);
   useEffect(() => {
     if (!c) return;
+    setAck(false);
     if (c.budget_level === 'campaign') setVal({ [c.id]: c.daily_budget ?? '' });
     else setVal(Object.fromEntries(c.adsets.map((a) => [a.id, a.daily_budget ?? ''])));
   }, [c]);
   if (!c) return null;
+  const orig = (id) => (c.budget_level === 'campaign' ? c.daily_budget : c.adsets.find((a) => a.id === id)?.daily_budget);
+  const change = (id) => {
+    const o = Number(orig(id));
+    const v = Number(val[id]);
+    return o && v ? Math.round((100 * (v - o)) / o) : null;
+  };
+  const big = Object.keys(val).some((id) => Math.abs(change(id) ?? 0) > 20);
+  const learning = c.learning === 'LEARNING';
   const save = async () => {
     for (const [id, v] of Object.entries(val)) {
-      const orig = c.budget_level === 'campaign' ? c.daily_budget : c.adsets.find((a) => a.id === id)?.daily_budget;
-      if (v === '' || Number(v) === Number(orig)) continue;
+      if (v === '' || Number(v) === Number(orig(id))) continue;
       const r = await run('budget', () => api.post(`/ads/campaigns/${c.id}/budget`, { daily_budget: Number(v), adset_id: c.budget_level === 'adset' ? id : undefined }), { success: t(['عُدّلت الميزانية', 'Budget modifié']) });
       if (!r) return;
     }
     onClose(true);
   };
+  const row = (id, label) => (
+    <div key={id} className="space-y-1">
+      <Field label={label}>
+        <div className="flex gap-2">
+          <Input type="number" min="1" step="0.5" value={val[id] ?? ''} onChange={(e) => setVal({ ...val, [id]: e.target.value })} />
+          {orig(id) ? (
+            <Button size="sm" onClick={() => setVal({ ...val, [id]: Math.round(orig(id) * 1.2 * 100) / 100 })} title={t(['زيادة آمنة', 'Hausse sûre'])}>
+              +20%
+            </Button>
+          ) : null}
+        </div>
+      </Field>
+      {change(id) !== null && change(id) !== 0 && (
+        <div className={cx('text-xs', Math.abs(change(id)) > 20 ? 'text-bad' : 'text-good')}>
+          {change(id) > 0 ? '+' : ''}
+          {change(id)}% {t(['عن الميزانية الحالية', 'vs budget actuel'])} ({money(orig(id), currency)})
+        </div>
+      )}
+    </div>
+  );
   return (
     <Modal
       open
@@ -389,26 +433,29 @@ function BudgetModal({ campaign: c, currency, onClose }) {
       title={t(['الميزانية اليومية', 'Budget journalier'])}
       icon={CircleDollarSign}
       footer={
-        <Button variant="primary" loading={busy === 'budget'} onClick={save}>
+        <Button variant="primary" loading={busy === 'budget'} disabled={big && !ack} onClick={save}>
           {t('c.save')}
         </Button>
       }
     >
       <p className="mb-3 truncate text-sm font-medium">{c.name}</p>
-      {c.budget_level === 'campaign' ? (
-        <Field label={`${t(['الحملة (CBO)', 'Campagne (CBO)'])} · ${currency}`}>
-          <Input type="number" min="1" step="0.5" value={val[c.id] ?? ''} onChange={(e) => setVal({ [c.id]: e.target.value })} />
-        </Field>
-      ) : (
-        <div className="space-y-2">
-          {c.adsets.map((a) => (
-            <Field key={a.id} label={`${t(['مجموعة', 'Ensemble'])} ${a.id.slice(-6)} · ${a.effective_status} · ${currency}`}>
-              <Input type="number" min="1" step="0.5" value={val[a.id] ?? ''} onChange={(e) => setVal({ ...val, [a.id]: e.target.value })} />
-            </Field>
-          ))}
+      {learning && (
+        <p className="mb-3 rounded-lg border border-info/40 bg-info/5 p-2 text-xs leading-5">
+          {t(['المجموعة ما زالت في مرحلة التعلم: Meta تنصح بعدم التعديل حتى تنتهي (≈50 نتيجة خلال 7 أيام).', "L'ensemble est en apprentissage : Meta conseille de ne pas modifier avant la fin (≈ 50 résultats / 7 j)."])}
+        </p>
+      )}
+      <div className="space-y-3">{c.budget_level === 'campaign' ? row(c.id, `${t(['الحملة (CBO)', 'Campagne (CBO)'])} · ${currency}`) : c.adsets.map((a) => row(a.id, `${t(['مجموعة', 'Ensemble'])} ${a.id.slice(-6)} · ${a.effective_status} · ${currency}`))}</div>
+      {big && (
+        <div className="mt-3 space-y-2 rounded-lg border border-warn/40 bg-warn/5 p-3 text-xs leading-5">
+          <p>
+            {t(
+              ['تغيير بأكثر من 20% قد تعتبره Meta «تعديلاً جوهرياً» فتعيد المجموعة إلى مرحلة التعلم (ترتفع التكلفة وتتذبذب النتائج). الآمن: +20% كحد أقصى ثم الانتظار 3–4 أيام، أو نسخ المجموعة الرابحة بميزانية جديدة.', 'Un changement de plus de 20 % peut être une « modification importante » pour Meta et relancer l’apprentissage. Sûr : +20 % max puis attendre 3–4 jours, ou dupliquer l’ensemble gagnant.'],
+            )}
+          </p>
+          <Toggle checked={ack} onChange={setAck} label={t(['أفهم الخطر وأريد المتابعة', 'Je comprends le risque et je continue'])} />
         </div>
       )}
-      <p className="mt-3 text-xs text-muted">{t(['نصيحة: لا ترفع أكثر من 20–30% كل يومين حتى لا تعيد الخوارزمية التعلّم.', 'Conseil : pas plus de +20–30 % tous les 2 jours pour ne pas relancer l’apprentissage.'])}</p>
+      <p className="mt-3 text-[11px] text-muted">{t(['المرجع: Meta Business Help — «Significant edits and the learning phase».', 'Réf. : Meta Business Help — « Significant edits and the learning phase ».'])}</p>
     </Modal>
   );
 }
@@ -488,6 +535,11 @@ function CampaignEditor({ id, onClose, onChanged }) {
             </a>
           </div>
 
+          <p className="rounded-lg border border-info/40 bg-info/5 p-3 text-xs leading-5">
+            {t(
+              ['حسب Meta، هذه «تعديلات جوهرية» تعيد المجموعة إلى مرحلة التعلم: تغيير الجمهور، تغيير التصميم أو النص، إضافة إعلان جديد، تغيير استراتيجية المزايدة، أو الإيقاف 7 أيام فأكثر. تغيير الميزانية بنسبة كبيرة قد يعيدها أيضاً. عدّل بقرار واحد مدروس بدل تعديلات متتالية.', 'Selon Meta, ces « modifications importantes » relancent l’apprentissage : ciblage, créa/texte, nouvelle pub, stratégie d’enchère, pause ≥ 7 jours. Un gros changement de budget aussi. Faites une seule modification réfléchie plutôt que plusieurs.'],
+            )}
+          </p>
           <Card title={t(['الحملة', 'Campagne'])}>
             <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto] sm:items-end">
               <Field label={t('c.name')}>
@@ -503,7 +555,11 @@ function CampaignEditor({ id, onClose, onChanged }) {
           </Card>
 
           {sets.map((a, k) => (
-            <Card key={a.id} title={`${t(['المجموعة الإعلانية', 'Ensemble de pubs'])} · ${a.effective_status}`}>
+            <Card
+              key={a.id}
+              title={`${t(['المجموعة الإعلانية', 'Ensemble de pubs'])} · ${a.effective_status}`}
+              actions={a.learning?.status ? <Badge tone={LEARNING[a.learning.status]?.[2]}>{t(LEARNING[a.learning.status] || [a.learning.status, a.learning.status])}{a.learning.conversions !== null && a.learning.conversions !== undefined ? ` · ${a.learning.conversions}/50` : ''}</Badge> : null}
+            >
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label={t('c.name')} className="sm:col-span-3">
                   <Input value={a.name} onChange={(e) => setSets(sets.map((x, j) => (j === k ? { ...x, name: e.target.value } : x)))} />
@@ -659,6 +715,7 @@ function Decisions() {
               {d.params?.be ? ` · ${t(['حد التعادل', 'seuil'])} ${da(d.params.be)}` : ''}
               {d.params?.feedback ? ` · ${d.params.feedback}` : ''}
               {d.params?.link ? ` · ${d.params.link}` : ''}
+              {d.params?.budget_next ? ` · ${t(['الزيادة الآمنة التالية', 'prochaine hausse sûre'])}: ${money(d.params.budget_now, d.params.currency)} → ${money(d.params.budget_next, d.params.currency)}` : ''}
             </div>
           </div>
           {d.action === 'stop_test' && (

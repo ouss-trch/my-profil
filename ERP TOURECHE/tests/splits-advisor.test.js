@@ -130,3 +130,57 @@ test('ads: a product without any ad spend is never judged a winner', async () =>
   assert.equal(t.cost_per_delivered_da, null);
   assert.ok(!decisions(project.id, 30).some((d) => d.kind === 'scale_budget'));
 });
+
+test('split (shopify mode): config for the theme snippet + weight-based estimation without visitor tracking', async () => {
+  const t = splits.createTest(project.id, {
+    name: 'Same domain',
+    entry_path: 'https://shop.example/products/thermos-500/',
+    variants: [
+      { url: 'https://shop.example/products/thermos-500?view=angle-a', weight: 1 },
+      { url: 'https://shop.example/pages/thermos-gift', weight: 3 },
+    ],
+  });
+  assert.equal(t.mode, 'shopify');
+  assert.equal(t.entry_path, '/products/thermos-500');
+  assert.equal(splits.shopifyConfig(project.id).tests.find((x) => x.s === t.slug), undefined, 'draft tests are not published');
+  splits.updateTest(t.id, { status: 'running' });
+  const conf = splits.shopifyConfig(project.id).tests.find((x) => x.s === t.slug);
+  assert.deepEqual(conf.v, [
+    { l: 'A', u: '/products/thermos-500?view=angle-a', w: 1 },
+    { l: 'B', u: '/pages/thermos-gift', w: 3 },
+  ]);
+  // الطلبيات فقط (دون عدّ الزوار): B أخذت 75% من الزوار وجلبت 30 طلبية، A أخذت 25% وجلبت 30 → A أفضل لكل زائر
+  for (let i = 0; i < 30; i++) createOrder(project.id, { ref: `SD-A-${i}`, phone: '0550000001', wilaya: 16, items: [{ title: 'T', qty: 1, price: 1 }], utm_content: `${t.slug}-a` });
+  for (let i = 0; i < 30; i++) createOrder(project.id, { ref: `SD-B-${i}`, phone: '0550000002', wilaya: 16, items: [{ title: 'T', qty: 1, price: 1 }], utm_content: `${t.slug}-b` });
+  splits.updateTest(t.id, { goal: 'orders' });
+  const r = splits.results(t.id);
+  assert.equal(r.estimation, 'weights');
+  assert.equal(r.leader.label, 'A');
+  assert.equal(r.verdict, 'winner');
+  assert.equal(r.test.public_url, 'https://shop.example/products/thermos-500');
+  // اعتماد الفائز: الرابط يبقى يوجّه إليه بشكل دائم
+  splits.updateTest(t.id, { winner_variant_id: r.leader.id, status: 'ended' });
+  const ended = splits.shopifyConfig(project.id).tests.find((x) => x.s === t.slug);
+  assert.deepEqual(ended.v, [{ l: 'A', u: '/products/thermos-500?view=angle-a', w: 1 }]);
+  // سنيبت القالب: يقرأ metafield المتجر وكود JavaScript صالح
+  const snippet = splits.snippetLiquid();
+  assert.match(snippet, /shop\.metafields\.erp_toureche\.splits\.value/);
+  const js = snippet.slice(snippet.indexOf('<script>') + 8, snippet.indexOf('</script>')).replace('{{ erp_ab | json }}', JSON.stringify({ v: 1, b: null, tests: [] }));
+  assert.doesNotThrow(() => new Function(js));
+});
+
+test('split: visit beacon is counted for humans and flagged for bots', () => {
+  const t = splits.createTest(project.id, { name: 'Beacon', variants: [{ url: 'https://shop.example/a' }, { url: 'https://shop.example/b' }] });
+  assert.equal(splits.recordHit(t.slug, { v: 'A', vid: '0123456789abcdef' }, 'Mozilla/5.0 (iPhone)'), false, 'not running → ignored');
+  splits.updateTest(t.id, { status: 'running' });
+  assert.equal(splits.recordHit(t.slug, { v: 'A', vid: '0123456789abcdef', ad: 1 }, 'Mozilla/5.0 (iPhone)'), true);
+  assert.equal(splits.recordHit(t.slug, { v: 'B', vid: 'fedcba9876543210' }, 'facebookexternalhit/1.1'), true);
+  assert.equal(splits.recordHit(t.slug, { v: 'Z' }, 'Mozilla/5.0'), false, 'unknown variant');
+  const r = splits.results(t.id);
+  const a = r.variants.find((v) => v.label === 'A');
+  const b = r.variants.find((v) => v.label === 'B');
+  assert.equal(a.visitors, 1);
+  assert.equal(a.from_ad, 1);
+  assert.equal(b.visitors, 0);
+  assert.equal(b.bots, 1);
+});

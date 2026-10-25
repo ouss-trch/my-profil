@@ -13,7 +13,7 @@ import { ordersRouter, customersRouter, carriersRouter } from './routes/orders.j
 import { productsRouter } from './routes/products.js';
 import { adsRouter } from './routes/ads.js';
 import { dashboardRouter, aiRouter, tasksRouter, contactsRouter, financeRouter } from './routes/misc.js';
-import { advisorRouter, splitsRouter, goHandler } from './routes/insights.js';
+import { advisorRouter, splitsRouter, goHandler, hitHandler } from './routes/insights.js';
 
 export function createApp() {
   const app = express();
@@ -63,6 +63,7 @@ export function createApp() {
   app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.0.0' }));
   // رابط اختبار صفحات الهبوط (عام — يوضع في الإعلانات)
   app.get('/go/:slug', rateLimit({ windowMs: 60e3, limit: 600, standardHeaders: 'draft-8', legacyHeaders: false }), goHandler);
+  app.post('/api/hooks/split/:slug/hit', rateLimit({ windowMs: 60e3, limit: 1200, standardHeaders: 'draft-8', legacyHeaders: false }), express.text({ type: '*/*', limit: '2kb' }), hitHandler);
   app.use('/api/auth', authRouter);
   app.use('/api/hooks', hooksRouter);
   app.use('/api', requireAuth);

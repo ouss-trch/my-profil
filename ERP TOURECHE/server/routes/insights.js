@@ -68,6 +68,27 @@ export const splitsRouter = Router();
 const pid = (req) => projectScope(req, { allowAll: false }).id;
 
 splitsRouter.get('/', (req, res) => res.json(splits.listTests(projectScope(req).ids)));
+
+// ——— وضع Shopify (نفس دومين المتجر) ———
+splitsRouter.get('/shopify/status', async (req, res) => res.json(await splits.shopifyStatus(pid(req))));
+splitsRouter.post('/shopify/sync', requireRole('admin', 'manager'), async (req, res) => res.json(await splits.syncShopify(pid(req))));
+
+/** تثبيت السنيبت على القالب المنشور: إن رفضت Shopify (يتطلب استثناءً) نُرجع الكود للتثبيت اليدوي */
+splitsRouter.post('/shopify/install', requireRole('admin'), requireSensitive, async (req, res) => {
+  try {
+    const out = await splits.installShopify(pid(req));
+    audit(req, 'split_snippet_installed', { projectId: pid(req), details: out });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.json({ ok: false, manual: true, error: e.message || e.code, snippet: splits.snippetLiquid(), render_line: splits.RENDER_LINE });
+  }
+});
+
+splitsRouter.post('/shopify/uninstall', requireRole('admin'), requireSensitive, async (req, res) => {
+  const out = await splits.uninstallShopify(pid(req));
+  audit(req, 'split_snippet_uninstalled', { projectId: pid(req) });
+  res.json(out);
+});
 splitsRouter.get('/:id', (req, res) => res.json(splits.results(Number(req.params.id))));
 
 splitsRouter.post('/', requireRole('admin', 'manager'), (req, res) => {
@@ -87,6 +108,21 @@ splitsRouter.delete('/:id', requireRole('admin', 'manager'), requireSensitive, (
   audit(req, 'split_deleted', { entity: 'split', entityId: req.params.id });
   res.json({ ok: true });
 });
+
+/** نقرة من سنيبت المتجر (sendBeacon نص خام) — عام، محدود المعدل */
+export function hitHandler(req, res) {
+  let body = {};
+  try {
+    body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+  } catch {
+    body = {};
+  }
+  splits.recordHit(req.params.slug, body, req.headers['user-agent'] || '');
+  // يُستدعى من دومين المتجر: نسمح بالاستجابة عبر الأصول حتى لا يظهر خطأ في متصفح الزائر
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.set('Access-Control-Allow-Origin', '*');
+  res.status(204).end();
+}
 
 /** الرابط العام الذي يوضع في الإعلان: ‎/go/:slug‎ (بدون تسجيل دخول) */
 export function goHandler(req, res) {

@@ -29,6 +29,8 @@ coreRouter.get('/meta', (_req, res) => {
     transitions: MANUAL,
     carriers: Object.fromEntries(Object.entries(CARRIERS).map(([k, c]) => [k, c.name])),
     ai_configured: ai.aiConfigured(),
+    // سعر الصرف الفعلي (السوق الموازي) لتحويل إنفاق الإعلانات إلى الدينار
+    fx: { usd: getSetting('fx_usd_dza') || 250, eur: getSetting('fx_eur_dza') || 270 },
   });
 });
 

@@ -307,7 +307,7 @@ export const adsWithStatus = (cfg, accountId) =>
   });
 
 export const adsetsOfAccount = (cfg, accountId) =>
-  paged(cfg, `${actId(accountId)}/adsets`, { fields: 'id,campaign_id,status,effective_status,daily_budget,lifetime_budget', limit: 200 });
+  paged(cfg, `${actId(accountId)}/adsets`, { fields: 'id,campaign_id,status,effective_status,daily_budget,lifetime_budget,learning_stage_info', limit: 200 });
 
 /** صحة الحساب الإعلاني وأفضل الممارسات (مثل لوحة «أمان الحساب» في النسخة السابقة) */
 export async function accountHealth(cfg, accountId) {
@@ -383,7 +383,7 @@ export async function createCreative(cfg, accountId, o) {
 /** الحملة كاملة للتعديل: الحملة + المجموعات + الإعلانات مع نص التصميم */
 export async function campaignTree(cfg, campaignId) {
   const campaign = await graph(cfg, campaignId, { params: { fields: 'id,name,status,effective_status,daily_budget,lifetime_budget,objective,account_id' } });
-  const adsetsList = await paged(cfg, `${campaignId}/adsets`, { fields: 'id,name,status,effective_status,end_time,targeting,daily_budget', limit: 50 });
+  const adsetsList = await paged(cfg, `${campaignId}/adsets`, { fields: 'id,name,status,effective_status,end_time,targeting,daily_budget,learning_stage_info', limit: 50 });
   const ads = await paged(cfg, `${campaignId}/ads`, {
     fields: 'id,name,adset_id,status,effective_status,ad_review_feedback,creative{id,name,object_story_spec,object_story_id,source_instagram_media_id,thumbnail_url,image_url}',
     limit: 50,
@@ -405,6 +405,7 @@ export async function campaignTree(cfg, campaignId) {
         countries: t.geo_locations?.countries || [],
         platform: pp.length === 1 ? pp[0] : 'both',
         daily_budget: a.daily_budget ? Number(a.daily_budget) / 100 : null,
+        learning: a.learning_stage_info ? { status: a.learning_stage_info.status, conversions: a.learning_stage_info.conversions ?? null, last_sig_edit_ts: a.learning_stage_info.last_sig_edit_ts ?? null } : null,
         advantage_audience: t.targeting_automation?.advantage_audience ?? null,
       };
     }),

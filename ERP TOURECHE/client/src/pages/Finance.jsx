@@ -8,6 +8,7 @@ import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Stat, useAction } from '../components/ui.jsx';
 import { BarList, BarsChart } from '../components/charts.jsx';
+import FxEditor from '../components/FxEditor.jsx';
 
 const CATS = [
   ['سلعة / مخزون', 'Marchandise / stock'],
@@ -37,6 +38,7 @@ export default function Finance() {
         subtitle={`${from} → ${to}`}
         actions={
           <>
+            <FxEditor onSaved={() => reload(true)} />
             <Segmented
               size="sm"
               value={range}

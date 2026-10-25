@@ -371,6 +371,8 @@ const MIGRATIONS = [
     name TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','running','paused','ended')),
+    mode TEXT NOT NULL DEFAULT 'shopify' CHECK (mode IN ('shopify','redirect')),
+    entry_path TEXT,
     sticky INTEGER NOT NULL DEFAULT 1,
     goal TEXT NOT NULL DEFAULT 'delivered' CHECK (goal IN ('orders','confirmed','delivered')),
     fallback_url TEXT,

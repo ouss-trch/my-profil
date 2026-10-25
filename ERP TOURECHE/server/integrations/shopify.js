@@ -381,3 +381,46 @@ export async function searchCategories(cfg, search) {
   const d = await gql(cfg, 'query($q: String!) { taxonomy { categories(first: 10, search: $q) { nodes { id name fullName } } } }', { q: search });
   return d.taxonomy?.categories?.nodes || [];
 }
+
+// ——— اختبار الصفحات داخل المتجر نفسه (نفس الدومين) ———
+// الإعدادات في metafield على مستوى المتجر (لا تحتاج استثناءً من Shopify)، والكود سنيبت واحد في القالب.
+export const SPLIT_NAMESPACE = 'erp_toureche';
+export const SPLIT_KEY = 'splits';
+
+export async function shopGid(cfg) {
+  return (await gql(cfg, '{ shop { id } }')).shop.id;
+}
+
+export async function setShopJsonMetafield(cfg, namespace, key, value) {
+  const ownerId = await shopGid(cfg);
+  const d = await gql(
+    cfg,
+    `mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { metafields { id } userErrors { field message } } }`,
+    { m: [{ ownerId, namespace, key, type: 'json', value: JSON.stringify(value) }] },
+  );
+  userErrors(d.metafieldsSet);
+  return d.metafieldsSet.metafields?.[0]?.id || null;
+}
+
+export async function mainTheme(cfg) {
+  const d = await gql(cfg, '{ themes(first: 1, roles: [MAIN]) { nodes { id name } } }');
+  return d.themes.nodes[0] || null;
+}
+
+/** قراءة ملفات القالب (layout/theme.liquid، قوالب المنتج البديلة…) */
+export async function themeFiles(cfg, themeId, filenames) {
+  const q = `query($id: ID!, $f: [String!]) { theme(id: $id) { files(first: 100, filenames: $f) { nodes { filename body { ... on OnlineStoreThemeFileBodyText { content } } } } } }`;
+  const d = await gql(cfg, q, { id: themeId, f: filenames });
+  return (d.theme?.files?.nodes || []).map((n) => ({ filename: n.filename, content: n.body?.content ?? null }));
+}
+
+/** كتابة ملفات القالب — قد ترفضها Shopify إن لم يكن للتطبيق استثناء (عندها التثبيت يدوي بنسخ/لصق) */
+export async function upsertThemeFiles(cfg, themeId, files) {
+  const d = await gql(
+    cfg,
+    `mutation($id: ID!, $files: [OnlineStoreThemeFilesUpsertFileInput!]!) { themeFilesUpsert(themeId: $id, files: $files) { upsertedThemeFiles { filename } userErrors { field message } } }`,
+    { id: themeId, files: files.map((f) => ({ filename: f.filename, body: { type: 'TEXT', value: f.content } })) },
+  );
+  userErrors(d.themeFilesUpsert);
+  return d.themeFilesUpsert.upsertedThemeFiles.map((f) => f.filename);
+}

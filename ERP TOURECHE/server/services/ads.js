@@ -235,7 +235,19 @@ export function decisions(projectId, days = 7) {
     const running = t.campaigns.filter((c) => c.effective_status === 'ACTIVE');
     if (t.verdict === 'losing' && running.length)
       push({ kind: 'stop_test', severity: 'critical', product_id: t.product_id, title: t.title, params: { spend_da: t.spend_da, cpd: t.cost_per_delivered_da, be: t.break_even?.da }, action: 'stop_test' });
-    if (t.verdict === 'winning' && running.length) push({ kind: 'scale_budget', severity: 'high', product_id: t.product_id, title: t.title, campaign_ids: running.map((c) => c.campaign_id), params: { cpd: t.cost_per_delivered_da, be: t.break_even?.da }, action: 'scale_budget' });
+    if (t.verdict === 'winning' && running.length) {
+      // اقتراح الزيادة التالية: +20% فقط (قاعدة آمنة حتى لا تعود المجموعة لمرحلة التعلم)
+      const c = running.find((x) => x.daily_budget) || running[0];
+      push({
+        kind: 'scale_budget',
+        severity: 'high',
+        product_id: t.product_id,
+        title: t.title,
+        campaign_ids: running.map((x) => x.campaign_id),
+        params: { cpd: t.cost_per_delivered_da, be: t.break_even?.da, ...(c?.daily_budget ? { budget_now: c.daily_budget, budget_next: round(c.daily_budget * 1.2, 2), currency: c.currency } : {}) },
+        action: 'scale_budget',
+      });
+    }
     if (t.verdict === 'thin') push({ kind: 'thin_margin', severity: 'medium', product_id: t.product_id, title: t.title, params: { cpd: t.cost_per_delivered_da, be: t.break_even?.da }, action: 'analyze' });
     for (const c of t.campaigns)
       if (c.issues.length) push({ kind: 'ad_rejected', severity: 'high', product_id: t.product_id, campaign_id: c.campaign_id, title: c.name, params: { feedback: c.issues[0]?.feedback }, action: 'edit_in_ads_manager' });
@@ -606,7 +618,12 @@ export async function accountCampaigns(projectId, accountId, { days = 7, include
         budget_level: abo ? 'adset' : 'campaign',
         daily_budget: daily ? round(daily, 2) : null,
         lifetime_budget: c.lifetime_budget ? Number(c.lifetime_budget) / 100 : null,
-        adsets: sets.map((a) => ({ id: a.id, status: a.status, effective_status: a.effective_status, daily_budget: a.daily_budget ? Number(a.daily_budget) / 100 : null })),
+        adsets: sets.map((a) => ({ id: a.id, status: a.status, effective_status: a.effective_status, daily_budget: a.daily_budget ? Number(a.daily_budget) / 100 : null, learning: a.learning_stage_info?.status || null })),
+        // مرحلة التعلم في Meta: LEARNING (يتعلم) · SUCCESS (خرج من التعلم) · FAIL (تعلم محدود)
+        learning: (() => {
+          const st = sets.filter((a) => a.effective_status === 'ACTIVE').map((a) => a.learning_stage_info?.status).filter(Boolean);
+          return st.includes('FAIL') ? 'FAIL' : st.includes('LEARNING') ? 'LEARNING' : st.includes('SUCCESS') ? 'SUCCESS' : null;
+        })(),
         ads_count: cAds.length,
         thumbnail: cAds.map((a) => a.creative?.thumbnail_url || a.creative?.image_url).find(Boolean) || null,
         link: cAds.map((a) => a.creative?.object_story_spec?.link_data?.link || a.creative?.link_url).find(Boolean) || null,

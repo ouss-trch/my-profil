@@ -28,11 +28,98 @@ function HowItWorks() {
         <div className="text-sub">
           <b className="text-ink">{t(['كيف يعمل؟', 'Comment ça marche ?'])}</b>{' '}
           {t(
-            ['تضع رابطاً واحداً في الإعلان (مثل ‎/go/thermos‎). كل زائر جديد يُوجَّه إلى الصفحة A أو B أو C حسب النسبة التي تحددها، ويبقى على نفس الصفحة إن عاد. كل صفحة تُضاف لها علامة utm_content حتى تُنسب كل طلبية للصفحة التي جلبتها، ثم يقارن الـ ERP الزوار ← الطلبيات ← التأكيد ← التسليم ويحسب احتمال أن تكون كل صفحة هي الأفضل فعلاً.', 'Un seul lien dans la pub (ex. /go/thermos). Chaque nouveau visiteur est envoyé vers la page A, B ou C selon vos poids et reste sur la même page s’il revient. Chaque page reçoit un utm_content pour attribuer chaque commande, puis l’ERP compare visiteurs → commandes → confirmations → livraisons et calcule la probabilité que chaque page soit vraiment la meilleure.'],
+            ['تضع في الإعلان رابط المنتج العادي على متجرك (مثل souqnna.com/products/thermos). كل زائر جديد يُعرض عليه شكل مختلف للصفحة — A أو B أو C (قالب بزاوية تسويقية مختلفة أو صفحة هبوط) حسب النسبة التي تحددها، على نفس الدومين، ويبقى على نفس النسخة إن عاد. كل نسخة تحمل utm_content فتُنسب كل طلبية للصفحة التي جلبتها، ثم يقارن الـ ERP الطلبيات ← التأكيد ← التسليم ويحسب احتمال أن تكون كل صفحة هي الأفضل.', 'Dans la pub, mettez le lien produit normal de votre boutique (ex. souqnna.com/products/thermos). Chaque nouveau visiteur voit une version différente — A, B ou C (template avec un autre angle ou landing page) selon vos poids, sur le même domaine, et garde la même version s’il revient. Chaque version porte un utm_content pour attribuer les commandes ; l’ERP compare commandes → confirmations → livraisons et calcule la probabilité que chaque page soit la meilleure.'],
           )}
-          <span className="mt-1 block text-xs">{t(['شرط مهم (سياسة Meta): كل الصفحات تعرض نفس المنتج ونفس العرض؛ اختبر التصميم والصور والنص فقط.', 'Important (politique Meta) : toutes les pages montrent le même produit et la même offre ; testez design, visuels et texte.'])}</span>
+          <span className="mt-1 block text-xs">
+            {t(['يعمل داخل Shopify 24/7 دون الحاجة لتشغيل جهازك. شرط سياسة Meta: كل النسخ تعرض نفس المنتج ونفس العرض؛ غيّر التصميم والصور والزاوية فقط.', 'Fonctionne dans Shopify 24/7, sans votre ordinateur. Politique Meta : même produit et même offre partout ; changez seulement design, visuels et angle.'])}
+          </span>
         </div>
       </div>
+    </Card>
+  );
+}
+
+/** حالة الربط مع Shopify: السنيبت في القالب + مزامنة الإعدادات */
+function ShopifyPanel() {
+  const { t } = useI18n();
+  const { isAll } = useApp();
+  const { data, error, loading, reload } = useApi('/splits/shopify/status', { skip: isAll });
+  const { run, busy } = useAction();
+  const [manual, setManual] = useState(null);
+  if (isAll) return null;
+  if (loading && !data) return <Loading />;
+  if (error) return <ErrorBox error={error} onRetry={reload} />;
+  if (!data.configured)
+    return (
+      <Card>
+        <p className="text-sm text-sub">{t(['اربط Shopify في الإعدادات ← التكاملات لتفعيل الاختبار على نفس دومين المتجر.', 'Connectez Shopify (Paramètres → Intégrations) pour tester sur le domaine de la boutique.'])}</p>
+      </Card>
+    );
+  const install = async () => {
+    const r = await run('install', () => api.post('/splits/shopify/install', {}), { success: false });
+    if (!r) return;
+    if (r.ok) {
+      reload(true);
+    } else setManual(r);
+  };
+  return (
+    <Card
+      title={t(['الربط مع القالب (نفس الدومين)', 'Intégration au thème (même domaine)'])}
+      actions={
+        <>
+          <Button size="sm" loading={busy === 'sync'} onClick={() => run('sync', () => api.post('/splits/shopify/sync', {}), { success: t(['أُرسلت الإعدادات إلى المتجر', 'Réglages envoyés à la boutique']) }).then(() => reload(true))}>
+            {t(['مزامنة الآن', 'Synchroniser'])}
+          </Button>
+          {!data.installed && (
+            <Button size="sm" variant="primary" loading={busy === 'install'} onClick={install}>
+              {t(['تثبيت على القالب', 'Installer sur le thème'])}
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setManual({ snippet: data.snippet, render_line: data.render_line })}>
+            {t(['التثبيت اليدوي', 'Installation manuelle'])}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {data.theme && <Badge>{data.theme.name}</Badge>}
+        {data.installed ? (
+          <Badge tone="good">{t(['السنيبت مثبت ويعمل', 'Snippet installé'])}</Badge>
+        ) : data.theme_error ? (
+          <Badge tone="warn">{t(['تعذّر قراءة القالب — استعمل التثبيت اليدوي', 'Thème illisible — installation manuelle'])}</Badge>
+        ) : (
+          <Badge tone="warn">{t(['غير مثبت بعد', 'Pas encore installé'])}</Badge>
+        )}
+        {data.sync?.at && (data.sync.error ? <Badge tone="bad" title={data.sync.error}>{t(['فشلت آخر مزامنة', 'Dernière synchro en échec'])}</Badge> : <Badge tone="good">{t(['آخر مزامنة', 'Synchro'])} · {data.sync.tests}</Badge>)}
+        <span className="text-xs text-muted">{data.beacon ? t(['عدّ الزوار مفعّل', 'Comptage des visiteurs actif']) : t(['عدّ الزوار غير مفعّل: الحكم بالطلبيات مقارنة بنِسب التوزيع (دقيق إحصائياً)', 'Visiteurs non comptés : jugement sur les commandes rapportées aux poids (statistiquement valide)'])}</span>
+      </div>
+      <Modal open={Boolean(manual)} onClose={() => setManual(null)} size="lg" title={t(['التثبيت اليدوي (مرة واحدة، دقيقتان)', 'Installation manuelle (une fois, 2 min)'])}>
+        {manual && (
+          <div className="space-y-3 text-sm">
+            {manual.error && <ErrorBox error={{ code: `${t(['التثبيت التلقائي غير مسموح من Shopify لهذا الرمز', 'Installation auto refusée par Shopify'])}: ${manual.error}` }} />}
+            <ol className="list-decimal space-y-2 ps-5 leading-7">
+              <li>{t(['Shopify ← المتجر الإلكتروني ← القوالب ← … ← تعديل الكود.', 'Shopify → Boutique en ligne → Thèmes → … → Modifier le code.'])}</li>
+              <li>
+                {t(['في مجلد Snippets أنشئ ملفاً باسم', 'Dans Snippets, créez le fichier'])} <code className="ltr rounded bg-raised px-1">erp-split.liquid</code> {t(['والصق فيه الكود التالي:', 'et collez :'])}
+              </li>
+            </ol>
+            <div className="flex justify-end">
+              <CopyButton text={manual.snippet} />
+            </div>
+            <pre className="ltr max-h-56 overflow-auto rounded-lg bg-raised p-3 text-[11px] leading-5">{manual.snippet}</pre>
+            <ol start={3} className="list-decimal space-y-2 ps-5 leading-7">
+              <li>
+                {t(['افتح layout/theme.liquid وضع هذا السطر مباشرة بعد الوسم', 'Ouvrez layout/theme.liquid et ajoutez juste après'])} <code className="ltr rounded bg-raised px-1">&lt;head&gt;</code>:
+              </li>
+            </ol>
+            <div className="flex items-center gap-2">
+              <code className="ltr flex-1 rounded-lg bg-raised px-3 py-2">{manual.render_line}</code>
+              <CopyButton text={manual.render_line} />
+            </div>
+            <p className="text-xs text-muted">{t(['بعدها كل التغييرات (الصفحات، النسب، التشغيل، الإيقاف) تتم من هنا تلقائياً دون لمس القالب مجدداً.', 'Ensuite tout (pages, poids, démarrage, arrêt) se fait d’ici sans retoucher le thème.'])}</p>
+          </div>
+        )}
+      </Modal>
     </Card>
   );
 }
@@ -56,6 +143,7 @@ function SplitList() {
         }
       />
       <HowItWorks />
+      <ShopifyPanel />
       {loading && !data ? (
         <Loading />
       ) : error ? (
@@ -112,8 +200,8 @@ function SplitForm({ open, onClose, initial }) {
     if (open)
       setF(
         initial
-          ? { name: initial.name, goal: initial.goal, sticky: initial.sticky, variants: initial.variants.map((v) => ({ name: v.name || '', url: v.url, weight: v.weight, active: v.active })) }
-          : { name: '', product_id: '', goal: 'delivered', sticky: true, variants: [{ name: '', url: '', weight: 50, active: true }, { name: '', url: '', weight: 50, active: true }] },
+          ? { name: initial.name, goal: initial.goal, sticky: initial.sticky, entry_path: initial.entry_path || '', mode: initial.mode, variants: initial.variants.map((v) => ({ name: v.name || '', url: v.url, weight: v.weight, active: v.active })) }
+          : { name: '', product_id: '', mode: 'shopify', entry_path: '', goal: 'delivered', sticky: true, variants: [{ name: '', url: '', weight: 50, active: true }, { name: '', url: '', weight: 50, active: true }] },
       );
   }, [open, initial]);
   if (!f) return null;
@@ -147,6 +235,23 @@ function SplitForm({ open, onClose, initial }) {
               <Select value={f.product_id} onChange={(e) => setF({ ...f, product_id: e.target.value })} placeholder={t('c.optional')} options={(products.data || []).map((p) => ({ value: p.id, label: p.title }))} />
             </Field>
           )}
+          {!initial && (
+            <Field label={t(['أين يتم التبديل؟', 'Où se fait la rotation ?'])} className="sm:col-span-2">
+              <Select
+                value={f.mode}
+                onChange={(e) => setF({ ...f, mode: e.target.value })}
+                options={[
+                  { value: 'shopify', label: t(['داخل متجرك على نفس الدومين (موصى به، يعمل 24/7)', 'Dans votre boutique, même domaine (recommandé, 24/7)']) },
+                  { value: 'redirect', label: t(['رابط ‎/go/…‎ من الـ ERP (يتطلب أن يكون الـ ERP متاحاً من الإنترنت)', 'Lien /go/… de l’ERP (ERP accessible depuis Internet)']) },
+                ]}
+              />
+            </Field>
+          )}
+          {f.mode === 'shopify' && (
+            <Field label={t(['رابط الدخول (الذي تضعه في الإعلان)', "Lien d'entrée (celui de la pub)"])} className="sm:col-span-2" hint={t(['مثال: /products/thermos — كل من يفتحه يُعرض عليه A أو B أو C', 'Ex. /products/thermos — chaque visiteur voit A, B ou C'])}>
+              <Input className="ltr" value={f.entry_path} onChange={(e) => setF({ ...f, entry_path: e.target.value })} placeholder="/products/thermos" />
+            </Field>
+          )}
           <Field label={t(['الحكم على أساس', 'Juger sur'])}>
             <Select value={f.goal} onChange={(e) => setF({ ...f, goal: e.target.value })} options={Object.entries(GOALS).map(([k, v]) => ({ value: k, label: t(v) }))} />
           </Field>
@@ -156,13 +261,18 @@ function SplitForm({ open, onClose, initial }) {
         </div>
         <div className="space-y-2">
           <div className="label">{t(['الصفحات (2 إلى 6)', 'Pages (2 à 6)'])}</div>
+          {f.mode === 'shopify' && (
+            <p className="text-xs leading-5 text-muted">
+              {t(['كل نسخة إما نفس المنتج بقالب مختلف (أنشئ القالب في محرر Shopify ثم استعمل ?view=اسم-القالب) أو صفحة هبوط على متجرك. مثال: /products/thermos?view=angle-gift · /pages/thermos-lp', 'Chaque version : même produit avec un autre template (créé dans l’éditeur Shopify, puis ?view=nom) ou une landing page de votre boutique. Ex. /products/thermos?view=angle-gift · /pages/thermos-lp'])}
+            </p>
+          )}
           {f.variants.map((v, k) => (
             <div key={k} className="grid gap-2 rounded-lg border border-line p-2 sm:grid-cols-[2rem_1fr_2fr_6rem_auto] sm:items-center">
               <span className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: SERIES[k % 4] }}>
                 {'ABCDEF'[k]}
               </span>
               <Input value={v.name} onChange={(e) => setV(k, { name: e.target.value })} placeholder={t(['اسم (اختياري)', 'Nom (facultatif)'])} />
-              <Input className="ltr" value={v.url} onChange={(e) => setV(k, { url: e.target.value })} placeholder="https://souqnna.com/products/…" />
+              <Input className="ltr" value={v.url} onChange={(e) => setV(k, { url: e.target.value })} placeholder={f.mode === 'shopify' ? 'https://souqnna.com/products/thermos?view=angle-a' : 'https://souqnna.com/products/…'} />
               <div className="flex items-center gap-1">
                 <Input type="number" min="0" max="100" value={v.weight} onChange={(e) => setV(k, { weight: e.target.value })} />
                 <span className="text-xs text-muted">{total ? `${Math.round((100 * Number(v.weight || 0)) / total)}%` : ''}</span>
@@ -229,7 +339,9 @@ function SplitDetail({ id }) {
       </div>
 
       <Card title={t(['الرابط الذي تضعه في الإعلان', 'Le lien à mettre dans la pub'])}>
-        {s.public_url ? (
+        {s.mode === 'shopify' && !s.public_url ? (
+          <p className="text-sm text-warn">{t(['حدد دومين المتجر في الإعدادات ← تكاملات المشروع ← «دومين المتجر».', 'Renseignez le domaine de la boutique dans Paramètres → Intégrations.'])}</p>
+        ) : s.public_url ? (
           <div className="flex flex-wrap items-center gap-2">
             <code className="ltr flex-1 rounded-lg bg-raised px-3 py-2 text-sm">{s.public_url}</code>
             <CopyButton text={s.public_url} size="md" />
@@ -262,7 +374,12 @@ function SplitDetail({ id }) {
             {t(['المتصدر:', 'En tête :'])} <b className="text-ink">{data.leader.label}</b> · {t(['احتمال أن يكون الأفضل', 'probabilité d’être le meilleur'])} <b className="text-ink">{data.leader.p_best}%</b>
           </span>
         )}
-        {data.verdict === 'collecting' && data.visitors_needed_per_variant ? (
+        {data.estimation === 'weights' && (
+          <Badge tone="info" title={t(['التوزيع عشوائي بأوزان معروفة، فعدد زوار كل صفحة ≈ نسبة وزنها؛ المقارنة تتم بالطلبيات لكل وحدة وزن.', 'Répartition aléatoire à poids connus : on compare les commandes par unité de poids.'])}>
+            {t(['التقدير بنسب التوزيع', 'Estimation par les poids'])}
+          </Badge>
+        )}
+        {data.verdict === 'collecting' && data.estimation !== 'weights' && data.visitors_needed_per_variant ? (
           <span className="text-xs text-muted">{t(['يحتاج تقريباً {n} زائراً إضافياً لكل صفحة', '≈ {n} visiteurs de plus par page'], { n: n0(data.visitors_needed_per_variant) })}</span>
         ) : null}
       </div>

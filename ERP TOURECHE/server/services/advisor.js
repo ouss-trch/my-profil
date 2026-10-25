@@ -682,6 +682,8 @@ const PARAM_LABELS = {
   link: tx('الرابط الحالي', 'Lien actuel'),
   score: tx('تقييم SEO', 'Score SEO'),
   budget: tx('ميزانية الاختبار', 'Budget du test'),
+  budget_now: tx('الميزانية اليومية الحالية', 'Budget journalier actuel'),
+  budget_next: tx('الزيادة الآمنة التالية (+20%)', 'Prochaine hausse sûre (+20 %)'),
 };
 const MONEY_PARAMS = new Set(['spend_da', 'cpd', 'be', 'budget']);
 
@@ -708,7 +710,10 @@ function adsRules(projectIds, push) {
     const advice = {
       fx_not_set: tx('حدد سعر الصرف الفعلي (السوق الموازي) في الإعدادات حتى تكون الأرباح صحيحة.', 'Saisissez le taux réel (marché parallèle) dans les paramètres.'),
       stop_test: tx('تكلفة الطلبية المسلّمة أعلى من حد التعادل: أوقف الحملة وجرّب زاوية أو منتجاً آخر.', 'Coût par livrée au-dessus du seuil : coupez et testez un autre angle/produit.'),
-      scale_budget: tx('ارفع الميزانية 20–30% كل يومين ما دامت التكلفة تحت حد التعادل.', 'Augmentez de 20–30 % tous les 2 jours tant que le coût reste sous le seuil.'),
+      scale_budget: tx(
+        'حسب Meta: تغيير الميزانية الكبير قد يعيد المجموعة إلى مرحلة التعلم. ارفع 20% كحد أقصى في كل مرة، ثم انتظر 3–4 أيام (وبعد خروج المجموعة من التعلم ≈50 نتيجة في 7 أيام) قبل الزيادة التالية. للتوسع الأسرع: انسخ المجموعة الرابحة بميزانية جديدة بدل القفزة الكبيرة.',
+        'Selon Meta, un gros changement de budget peut relancer l’apprentissage. Augmentez de 20 % maximum à la fois, puis attendez 3–4 jours (et la sortie d’apprentissage ≈ 50 résultats/7 j). Pour aller plus vite : dupliquez l’ensemble gagnant plutôt qu’un saut brutal.',
+      ),
       thin_margin: tx('حسّن نسبة التأكيد والتسليم أو ارفع السعر قبل التوسع.', 'Améliorez confirmation/livraison ou le prix avant de scaler.'),
       ad_rejected: tx('عدّل النص أو الصورة من محرر الحملة داخل الـ ERP.', "Modifiez texte ou image depuis l'éditeur de campagne."),
       wrong_link: tx('صحّح الرابط في قسم الإعلان.', 'Corrigez le lien dans la section Publicité.'),
@@ -726,8 +731,11 @@ function adsRules(projectIds, push) {
         title: d.title ? tx(`${titles[d.kind]?.ar || d.kind}: ${d.title}`, `${titles[d.kind]?.fr || d.kind} : ${d.title}`) : titles[d.kind] || tx(d.kind, d.kind),
         insight: advice[d.kind] || tx('', ''),
         evidence: Object.entries(d.params || {})
-          .filter(([, v]) => v !== null && v !== undefined && v !== '')
-          .map(([k, v]) => ({ label: PARAM_LABELS[k] || tx(k, k), value: typeof v === 'number' ? (MONEY_PARAMS.has(k) ? dz(v) : fmt(v)) : String(v) })),
+          .filter(([k, v]) => v !== null && v !== undefined && v !== '' && k !== 'currency')
+          .map(([k, v]) => ({
+            label: PARAM_LABELS[k] || tx(k, k),
+            value: k.startsWith('budget_') ? `\u2066${v} ${d.params.currency || ''}\u2069` : typeof v === 'number' ? (MONEY_PARAMS.has(k) ? dz(v) : fmt(v)) : String(v),
+          })),
         action: { to: d.action === 'open_settings' ? '/settings?tab=general' : d.product_id ? `/ads?product=${d.product_id}` : '/ads?tab=decisions', label: tx('فتح', 'Ouvrir') },
         project_id: pid,
       });
