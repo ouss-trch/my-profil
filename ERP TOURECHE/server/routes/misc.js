@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireRole, requireSensitive } from '../lib/auth.js';
 import { audit } from '../lib/audit.js';
-import { HttpError, addDays, dzDay, nowIso, v, normalizePhone } from '../lib/util.js';
+import { HttpError, addDays, dzDay, nowIso, v } from '../lib/util.js';
 import { projectScope, inList } from '../services/projects.js';
 import * as analytics from '../services/analytics.js';
 import * as assistant from '../services/assistant.js';
+import * as contacts from '../services/contacts.js';
 
 export const dashboardRouter = Router();
 
@@ -114,41 +115,32 @@ tasksRouter.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ——— جهات الاتصال (موردون، موزعون، شركاء…) ———
+// ——— الموردون والشركاء (مربوطون بالمخزون والطرود العالقة) ———
 export const contactsRouter = Router();
 
 contactsRouter.get('/', (req, res) => {
   const scope = projectScope(req);
-  const like = `%${req.query.q || ''}%`;
-  res.json(
-    db
-      .prepare(`SELECT * FROM contacts WHERE (project_id IS NULL OR project_id IN (${inList(scope.ids)})) AND (name LIKE ? OR COALESCE(phone,'') LIKE ? OR COALESCE(company,'') LIKE ?) ${req.query.kind ? 'AND kind = ?' : ''} ORDER BY name`)
-      .all(...scope.ids, like, like, like, ...(req.query.kind ? [req.query.kind] : [])),
-  );
-});
-
-const contactInput = (b) => ({
-  name: v.str(b.name, { max: 120 }),
-  kind: v.oneOf(b.kind || 'other', ['supplier', 'livreur', 'carrier', 'partner', 'customer', 'other'], { name: 'kind' }),
-  company: v.str(b.company, { max: 120 }),
-  phone: b.phone ? normalizePhone(b.phone) || v.str(b.phone, { max: 30 }) : null,
-  email: v.str(b.email, { max: 120 }),
-  notes: v.str(b.notes, { max: 4000 }),
-  project_id: b.project_id ? Number(b.project_id) : null,
+  res.json(contacts.listContacts(scope.ids, { q: String(req.query.q || ''), kind: req.query.kind || undefined, carrier: req.query.carrier || undefined, wilaya: req.query.wilaya || undefined }));
 });
 
 contactsRouter.post('/', (req, res) => {
-  const c = contactInput(req.body);
-  if (!c.name) throw new HttpError(400, 'name_required');
-  const info = db.prepare('INSERT INTO contacts (project_id, name, kind, company, phone, email, notes) VALUES (@project_id, @name, @kind, @company, @phone, @email, @notes)').run(c);
+  const c = contacts.contactInput(req.body);
+  const info = db
+    .prepare('INSERT INTO contacts (project_id, name, kind, company, phone, email, notes, carrier, wilaya_code, role, lead_time_days) VALUES (@project_id, @name, @kind, @company, @phone, @email, @notes, @carrier, @wilaya_code, @role, @lead_time_days)')
+    .run(c);
+  audit(req, 'contact_created', { entity: 'contact', entityId: info.lastInsertRowid, details: { name: c.name, kind: c.kind } });
   res.json(db.prepare('SELECT * FROM contacts WHERE id = ?').get(info.lastInsertRowid));
 });
 
 contactsRouter.patch('/:id', (req, res) => {
   const cur = db.prepare('SELECT * FROM contacts WHERE id = ?').get(Number(req.params.id));
   if (!cur) throw new HttpError(404, 'contact_not_found');
-  const c = { ...cur, ...Object.fromEntries(Object.entries(contactInput({ ...cur, ...req.body })).filter(([k]) => req.body[k] !== undefined)) };
-  db.prepare('UPDATE contacts SET project_id = @project_id, name = @name, kind = @kind, company = @company, phone = @phone, email = @email, notes = @notes WHERE id = @id').run(c);
+  const c = { id: cur.id, ...contacts.contactInput({ ...cur, ...req.body }) };
+  db.prepare(
+    'UPDATE contacts SET project_id = @project_id, name = @name, kind = @kind, company = @company, phone = @phone, email = @email, notes = @notes, carrier = @carrier, wilaya_code = @wilaya_code, role = @role, lead_time_days = @lead_time_days WHERE id = @id',
+  ).run(c);
+  if (c.kind !== 'supplier') db.prepare('UPDATE products SET supplier_id = NULL WHERE supplier_id = ?').run(cur.id);
+  else if (c.name !== cur.name) db.prepare('UPDATE products SET supplier = ? WHERE supplier_id = ?').run(c.name, cur.id);
   res.json(db.prepare('SELECT * FROM contacts WHERE id = ?').get(cur.id));
 });
 

@@ -32,3 +32,7 @@ export function ago(iso, lang = 'ar') {
 
 export const todayDz = () => new Date(Date.now() + 3600e3).toISOString().slice(0, 10);
 export const addDays = (day, n) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
+
+// روابط الهاتف: واتساب للأرقام النقالة الجزائرية فقط (05/06/07)
+export const isMobileDz = (p) => /^0[567]\d{8}$/.test(String(p || ''));
+export const waLink = (phone, text) => (isMobileDz(phone) ? `https://wa.me/213${String(phone).slice(1)}${text ? `?text=${encodeURIComponent(text)}` : ''}` : null);

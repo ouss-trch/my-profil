@@ -9,6 +9,7 @@ import * as ai from '../integrations/ai.js';
 import * as meta from '../integrations/meta.js';
 import * as n8n from '../integrations/n8n.js';
 import { analyzeSeo } from './seo.js';
+import { assertSupplier } from './contacts.js';
 import { getProject, inList } from './projects.js';
 
 const JSON_FIELDS = ['tags', 'collections', 'options', 'variants', 'images', 'specs', 'angles'];
@@ -81,6 +82,7 @@ const FIELDS = {
   decision_note: 'text',
   supplier: 'str',
   supplier_url: 'str',
+  supplier_id: 'int',
   packaging_cost: 'num',
   category_id: 'str',
   category_name: 'str',
@@ -102,6 +104,8 @@ function clean(input) {
   if (out.stage && !['idea', 'draft', 'ready', 'published', 'archived'].includes(out.stage)) throw badRequest('stage_invalid');
   if (out.test_stage && !TEST_STAGES.includes(out.test_stage)) throw badRequest('test_stage_invalid');
   if (out.supplier_url && !/^https?:\/\//i.test(out.supplier_url)) throw badRequest('supplier_url_invalid');
+  if (out.supplier_id) out.supplier = assertSupplier(out.supplier_id).name;
+  else if (out.supplier_id === null && input.supplier === undefined) out.supplier = null;
   for (const k of ['price', 'compare_at_price', 'cost_price']) if (out[k] !== undefined && out[k] !== null && !(out[k] >= 0)) throw badRequest(`${k}_invalid`);
   return out;
 }

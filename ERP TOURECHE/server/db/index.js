@@ -90,6 +90,7 @@ const MIGRATIONS = [
     decision_note TEXT,
     supplier TEXT,
     supplier_url TEXT,
+    supplier_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
     packaging_cost REAL,
     category_id TEXT,
     category_name TEXT,
@@ -159,6 +160,7 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX idx_orders_ref ON orders(project_id, ref) WHERE ref IS NOT NULL;
   CREATE UNIQUE INDEX idx_orders_external ON orders(project_id, external_id) WHERE external_id IS NOT NULL;
   CREATE INDEX idx_orders_tracking ON orders(carrier, tracking);
+  CREATE INDEX idx_orders_carrier_wilaya ON orders(carrier, wilaya_code, status);
 
   CREATE TABLE order_events (
     id INTEGER PRIMARY KEY,
@@ -252,11 +254,15 @@ const MIGRATIONS = [
     id INTEGER PRIMARY KEY,
     project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    kind TEXT NOT NULL DEFAULT 'other' CHECK (kind IN ('supplier','livreur','carrier','partner','customer','other')),
+    kind TEXT NOT NULL DEFAULT 'supplier' CHECK (kind IN ('supplier','delivery','service','wholesale','other')),
     company TEXT,
     phone TEXT,
     email TEXT,
     notes TEXT,
+    carrier TEXT,
+    wilaya_code INTEGER,
+    role TEXT,
+    lead_time_days INTEGER,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   );
 

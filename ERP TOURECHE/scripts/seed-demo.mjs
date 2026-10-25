@@ -4,6 +4,7 @@ const { db } = await import(`${root}/server/db/index.js`);
 const { createProduct } = await import(`${root}/server/services/products.js`);
 const { createOrder, changeStatus } = await import(`${root}/server/services/orders.js`);
 const { createTest, updateTest } = await import(`${root}/server/services/splits.js`);
+const { contactInput } = await import(`${root}/server/services/contacts.js`);
 const project = db.prepare('SELECT * FROM projects ORDER BY id LIMIT 1').get();
 const pid = project.id;
 db.prepare("UPDATE products SET stage = stage").run();
@@ -63,4 +64,19 @@ for (let i = 0; i < 420; i++) st.run(t.id, t.variants[0].id, `a${i}`.padEnd(16, 
 for (let i = 0; i < 400; i++) st.run(t.id, t.variants[1].id, `b${i}`.padEnd(16, '0'), iso(i % 10));
 const sp = db.prepare("INSERT INTO ad_spend (project_id, account_id, campaign_id, date, campaign_name, spend, currency, impressions, clicks, purchases, purchase_value, updated_at) VALUES (?, '1021341893008834', 'c1', ?, 'Thermos FB+IG', ?, 'EUR', ?, ?, ?, 0, ?)");
 for (let d = 20; d >= 0; d--) sp.run(pid, new Date(Date.now() + 3600e3 - d * 86400e3).toISOString().slice(0, 10), 4 + Math.random() * 3, 3000, 60, 3, new Date().toISOString());
+// الموردون ومكاتب التوصيل (بيانات توضيحية)
+const addContact = (c) =>
+  db
+    .prepare('INSERT INTO contacts (project_id, name, kind, company, phone, email, notes, carrier, wilaya_code, role, lead_time_days) VALUES (@project_id, @name, @kind, @company, @phone, @email, @notes, @carrier, @wilaya_code, @role, @lead_time_days)')
+    .run(contactInput(c)).lastInsertRowid;
+const supA = addContact({ name: 'مؤسسة النور للأواني', kind: 'supplier', company: 'El Eulma', phone: '0661000101', lead_time_days: 3, notes: 'الدفع نقداً عند الاستلام · أقل كمية 50' });
+const supB = addContact({ name: 'Bazar Kids Import', kind: 'supplier', company: 'Alger · Hamiz', phone: '0770000202', lead_time_days: 6 });
+db.prepare('UPDATE products SET supplier_id = ?, supplier = ? WHERE id IN (?, ?)').run(supA, 'مؤسسة النور للأواني', products[0].id, products[1].id);
+db.prepare('UPDATE products SET supplier_id = ?, supplier = ? WHERE id = ?').run(supB, 'Bazar Kids Import', products[2].id);
+addContact({ name: 'Yalidine Sétif (Stop desk)', kind: 'delivery', carrier: 'yalidine', wilaya_code: 19, phone: '0560000303' });
+addContact({ name: 'Yalidine Oran', kind: 'delivery', carrier: 'yalidine', wilaya_code: 31, phone: '0560000404' });
+addContact({ name: 'Karim · livreur ZR', kind: 'delivery', carrier: 'zr', wilaya_code: 16, role: 'livreur', phone: '0550000505' });
+addContact({ name: 'NOEST · chargé de compte', kind: 'delivery', carrier: 'noest', role: 'manager', phone: '0550000606' });
+addContact({ name: 'مطبعة الفجر', kind: 'service', company: 'طباعة العلب والملصقات', phone: '0661000707' });
+addContact({ name: 'Librairie El Ilm', kind: 'wholesale', company: 'Blida', phone: '0770000808', notes: 'سعر الجملة −25% ابتداءً من 20 قطعة' });
 console.log('seeded', n, 'orders');

@@ -58,7 +58,7 @@ const SEO_LABELS = {
   collection: ['داخل مجموعة', 'Dans une collection'],
   price_logic: ['السعر قبل التخفيض أكبر', 'Prix barré cohérent'],
 };
-const EDIT_KEYS = ['title', 'handle', 'stage', 'product_type', 'vendor', 'description_html', 'seo_title', 'seo_description', 'focus_keyword', 'price', 'compare_at_price', 'cost_price', 'packaging_cost', 'low_stock', 'sku', 'notes', 'audience', 'tags', 'collections', 'images', 'specs', 'angles', 'test_stage', 'test_budget_da', 'decision_note', 'supplier', 'supplier_url', 'category_id', 'category_name'];
+const EDIT_KEYS = ['title', 'handle', 'stage', 'product_type', 'vendor', 'description_html', 'seo_title', 'seo_description', 'focus_keyword', 'price', 'compare_at_price', 'cost_price', 'packaging_cost', 'low_stock', 'sku', 'notes', 'audience', 'tags', 'collections', 'images', 'specs', 'angles', 'test_stage', 'test_budget_da', 'decision_note', 'supplier', 'supplier_url', 'supplier_id', 'category_id', 'category_name'];
 
 export default function ProductEditor() {
   const { id } = useParams();
@@ -159,6 +159,7 @@ function ProductTab({ p, f, set, reload }) {
   const [stockDelta, setStockDelta] = useState('');
   const [stockReason, setStockReason] = useState('');
   const collections = useApi('/products/collections', { deps: [p.project_id] });
+  const suppliers = useApi(`/contacts${qs({ kind: 'supplier' })}`);
   const [catQ, setCatQ] = useState('');
   const dCat = useDebounced(catQ, 350);
   const cats = useApi(dCat.length >= 2 ? `/products/categories${qs({ q: dCat })}` : null, { skip: dCat.length < 2 });
@@ -390,8 +391,19 @@ function ProductTab({ p, f, set, reload }) {
 
         <Card title={t(['المورد', 'Fournisseur'])}>
           <div className="space-y-3">
-            <Input value={f.supplier || ''} onChange={(e) => set({ supplier: e.target.value })} placeholder={t('c.name')} />
-            <Input className="ltr" value={f.supplier_url || ''} onChange={(e) => set({ supplier_url: e.target.value })} placeholder="https://" />
+            <Select
+              value={f.supplier_id || ''}
+              onChange={(e) => set({ supplier_id: e.target.value ? Number(e.target.value) : null })}
+              placeholder={f.supplier && !f.supplier_id ? f.supplier : t(['اختر المورد', 'Choisir le fournisseur'])}
+              options={(suppliers.data?.rows || []).map((c) => ({ value: c.id, label: c.company ? `${c.name} · ${c.company}` : c.name }))}
+            />
+            <p className="text-xs text-muted">
+              {t(['المورد المربوط يُستعمل لتنبيهات إعادة الطلب والكمية المقترحة.', 'Le fournisseur lié sert aux alertes de réassort et à la quantité suggérée.'])}{' '}
+              <Link className="link" to="/contacts?kind=supplier">
+                {t(['إدارة الموردين', 'Gérer les fournisseurs'])}
+              </Link>
+            </p>
+            <Input className="ltr" value={f.supplier_url || ''} onChange={(e) => set({ supplier_url: e.target.value })} placeholder={t(['رابط المنتج عند المورد (اختياري)', 'Lien produit chez le fournisseur (facultatif)'])} />
           </div>
         </Card>
       </div>

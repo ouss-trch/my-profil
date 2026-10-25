@@ -12,6 +12,7 @@ import { stats, recommendCarrier, toDa } from './analytics.js';
 import { decisions } from './ads.js';
 import { tariff } from './shipments.js';
 import { splitInsights } from './splits.js';
+import { suppliersById, restockPlan } from './contacts.js';
 
 /**
  * «المستشار»: يحلّل بيانات المشروع ويُخرج ملاحظات وتقييمات واستنتاجات واقتراحات قابلة للتنفيذ.
@@ -19,6 +20,7 @@ import { splitInsights } from './splits.js';
  * يعمل بالقواعد (دون ذكاء اصطناعي) ليكون متاحاً دائماً؛ والمستشار الذكي يبني فوقه تقريراً أعمق.
  */
 const tx = (ar, fr) => ({ ar, fr });
+const joinTx = (...parts) => tx(parts.filter(Boolean).map((p) => p.ar).join(' '), parts.filter(Boolean).map((p) => p.fr).join(' '));
 const pct = (a, b) => (b ? round((100 * a) / b) : null);
 // أرقام بفاصل ضيق غير قابل للكسر، والمبالغ معزولة اتجاهياً حتى لا تنقلب داخل النص العربي
 const fmt = (n) => Math.round(n).toLocaleString('fr-FR').replace(/[\u00a0\u202f ]/g, '\u202f');
@@ -400,11 +402,14 @@ function productRules(projectIds, push) {
   const noCost = [];
   const weakSeo = [];
   const lowMargin = [];
+  const suppliers = suppliersById();
   for (const p of products) {
     const perDay = (qty14[p.id] || 0) / 14;
     if (p.stock !== null && perDay > 0) {
       const days = p.stock / perDay;
-      if (days < 7) outSoon.push({ p, days, perDay, ads: activeAds.has(p.id) });
+      const sup = suppliers[p.supplier_id] || null;
+      // التنبيه يسبق مدة توريد المورد بـ 3 أيام على الأقل
+      if (days < Math.max(7, (sup?.lead_time_days ?? 0) + 3)) outSoon.push({ p, days, perDay, ads: activeAds.has(p.id), sup, plan: restockPlan(p, perDay, sup?.lead_time_days) });
     }
     if (p.stock > 0 && p.shopify_id && !orders30[p.id] && Date.parse(p.created_at) < Date.now() - 30 * 86400e3) dead.push(p);
     if (orders30[p.id] && !p.cost_price) noCost.push(p);
@@ -419,7 +424,7 @@ function productRules(projectIds, push) {
       key: `stock.out_soon:${x.p.id}`,
       area: 'stock',
       type: 'alert',
-      severity: x.days < 2 ? 'critical' : x.days < 4 ? 'high' : 'medium',
+      severity: x.days < 2 || (x.sup?.lead_time_days ?? -1) >= x.days ? 'critical' : x.days < 4 || (x.sup?.lead_time_days ?? -1) + 2 >= x.days ? 'high' : 'medium',
       title: tx(`«${x.p.title}» ينفد خلال ${Math.max(0, round(x.days, 1))} يوم`, `« ${x.p.title} » en rupture dans ${Math.max(0, round(x.days, 1))} j`),
       insight: x.ads
         ? tx('الإعلان ما زال يعمل: نفاد المخزون يعني دفع ثمن طلبيات لن تُلبّى.', 'La pub tourne encore : une rupture = payer des commandes impossibles à servir.')
@@ -427,11 +432,22 @@ function productRules(projectIds, push) {
       evidence: [
         { label: tx('المخزون', 'Stock'), value: String(x.p.stock) },
         { label: tx('البيع اليومي', 'Ventes / jour'), value: String(round(x.perDay, 1)) },
+        ...(x.sup
+          ? [
+              { label: tx('المورد', 'Fournisseur'), value: x.sup.name },
+              ...(x.sup.lead_time_days !== null ? [{ label: tx('مدة التوريد', 'Délai fournisseur'), value: tx(`${x.sup.lead_time_days} يوم`, `${x.sup.lead_time_days} j`) }] : []),
+              ...(x.plan.suggested_qty ? [{ label: tx('الكمية المقترحة', 'Quantité suggérée'), value: String(x.plan.suggested_qty) }] : []),
+            ]
+          : []),
       ],
-      advice: x.ads
-        ? tx('اطلب كمية جديدة الآن أو خفّض ميزانية الإعلان حتى يصل المخزون.', 'Commandez maintenant ou baissez le budget pub jusqu’au réassort.')
-        : tx('اطلب كمية جديدة من المورد.', 'Passez une commande fournisseur.'),
-      action: { to: `/products/${x.p.id}`, label: tx('المنتج', 'Produit') },
+      advice: joinTx(
+        x.sup?.lead_time_days !== null && x.sup?.lead_time_days !== undefined && x.sup.lead_time_days >= x.days
+          ? tx(`المورد يحتاج ${x.sup.lead_time_days} يوم والمخزون يكفي ${Math.max(0, round(x.days, 1))}: اطلب اليوم.`, `Le fournisseur livre en ${x.sup.lead_time_days} j, le stock tient ${Math.max(0, round(x.days, 1))} j : commandez aujourd’hui.`)
+          : tx('اطلب كمية جديدة من المورد.', 'Passez une commande fournisseur.'),
+        x.ads ? tx('الإعلان ما زال يعمل: خفّض الميزانية إن لم يصل المخزون قبل النفاد.', 'La pub tourne : baissez le budget si le réassort n’arrive pas avant la rupture.') : null,
+        x.sup ? null : tx('اربط المنتج بمورده ليقترح الـ ERP الكمية ويجهّز رسالة الطلب.', 'Liez le produit à son fournisseur : l’ERP proposera la quantité et préparera le message.'),
+      ),
+      action: x.sup ? { to: '/contacts?kind=supplier', label: tx('اطلب من المورد', 'Commander') } : { to: `/products/${x.p.id}`, label: tx('اربط مورداً', 'Lier un fournisseur') },
     });
   if (dead.length)
     push({

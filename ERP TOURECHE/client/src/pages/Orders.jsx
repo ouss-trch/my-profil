@@ -24,10 +24,11 @@ import {
 import { useI18n } from '../i18n/index.jsx';
 import { useApi, useDebounced } from '../lib/hooks.js';
 import { api, getApiProject, qs } from '../lib/api.js';
-import { ago, da, dateTime, n0 } from '../lib/format.js';
+import { ago, da, dateTime, n0, waLink } from '../lib/format.js';
 import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import { CARRIER_NAMES, StatusBadge, useStatusLabel } from '../components/status.jsx';
+import { DeliveryContacts } from './Contacts.jsx';
 import { Badge, Button, Card, Drawer, Empty, ErrorBox, Field, Input, Loading, Modal, Pagination, Select, Tabs, Textarea, Toggle, cx, useAction, useToast } from '../components/ui.jsx';
 
 export const TABS = {
@@ -48,7 +49,6 @@ const CANCEL_REASONS = [
   ['التوصيل غالٍ', 'Livraison trop chère'],
 ];
 
-const waLink = (phone) => (phone ? `https://wa.me/213${String(phone).replace(/^0/, '')}` : null);
 
 export function itemsText(items) {
   return (items || []).map((i) => `${i.title}${i.variant ? ` (${i.variant})` : ''} × ${i.qty}`).join('، ');
@@ -62,8 +62,8 @@ export default function Orders() {
   const status = params.get('status');
   const [q, setQ] = useState('');
   const dq = useDebounced(q, 300);
-  const [wilaya, setWilaya] = useState('');
-  const [carrier, setCarrier] = useState('');
+  const [wilaya, setWilaya] = useState(params.get('wilaya') || '');
+  const [carrier, setCarrier] = useState(params.get('carrier') || '');
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [openId, setOpenId] = useState(params.get('open') ? Number(params.get('open')) : null);
@@ -863,6 +863,7 @@ export function OrderDrawer({ id, onClose, onChanged }) {
                     {o.carrier_status_raw && <Badge>{o.carrier_status_raw}</Badge>}
                     {o.delivery_attempts > 0 && <Badge tone="warn">{t(['محاولات التسليم', 'Tentatives'])}: {o.delivery_attempts}</Badge>}
                   </div>
+                  {['at_office', 'attempt_failed', 'out_for_delivery', 'returning'].includes(o.status) && <DeliveryContacts order={o} />}
                   {['delivered', 'returned', 'attempt_failed', 'out_for_delivery', 'at_office'].includes(o.status) && (
                     <div className="flex flex-wrap items-center gap-4 rounded-lg bg-raised px-3 py-2">
                       <span className="text-xs text-sub">{t(['تقييم الموزع (يُستعمل في اختيار الشركة الأفضل):', 'Évaluer le livreur (utilisé pour le meilleur transporteur) :'])}</span>

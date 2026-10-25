@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bot,
   Compass,
-  Contact,
+  Handshake,
   History,
   Languages,
   LayoutDashboard,
@@ -55,7 +55,10 @@ export const NAV = [
   },
   {
     group: 'nav.g.catalog',
-    items: [{ to: '/products', key: 'nav.products', icon: Package }],
+    items: [
+      { to: '/products', key: 'nav.products', icon: Package },
+      { to: '/contacts', key: 'nav.contacts', icon: Handshake },
+    ],
   },
   {
     group: 'nav.g.marketing',
@@ -69,7 +72,6 @@ export const NAV = [
     items: [
       { to: '/finance', key: 'nav.finance', icon: Wallet },
       { to: '/tasks', key: 'nav.tasks', icon: ListChecks },
-      { to: '/contacts', key: 'nav.contacts', icon: Contact },
       { to: '/activity', key: 'nav.activity', icon: History, admin: true },
       { to: '/settings', key: 'nav.settings', icon: Settings },
     ],
