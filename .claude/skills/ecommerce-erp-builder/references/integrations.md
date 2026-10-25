@@ -10,7 +10,14 @@ General rules for every adapter:
 ## Shopify (Admin GraphQL)
 
 - **Endpoint:** `https://{shop}.myshopify.com/admin/api/{version}/graphql.json` with the header `X-Shopify-Access-Token`. The version is a setting (`shopify_api_version`).
-- **Getting a token:** historically from admin → Settings → Apps → Develop apps (a custom app and a `shpat_…` token). Shopify has been moving custom-app creation to the Dev Dashboard, so check the current path in Shopify's docs before writing instructions for the user.
+- **Getting a token:**
+  - New apps can no longer be created from the store admin; they are made in the **Dev Dashboard** (confirmed in Shopify's docs).
+  - The owner gives you a **Client ID + Client secret (`shpss_…`)** for an app installed on their own store.
+  - The ERP exchanges them for a token with the **client credentials grant**: `POST https://{shop}.myshopify.com/admin/oauth/access_token` (form body `grant_type=client_credentials, client_id, client_secret`). The token returned lasts `expires_in` 86399 s (24 h); cache it and renew it before it expires.
+  - This only works when the app and the store are in the same Dev Dashboard organization (otherwise you get `shop_not_permitted`).
+  - The shop must be the **`xxxx.myshopify.com`** domain, never the public domain.
+  - Legacy `shpat_` tokens still work for existing admin apps.
+  - If the owner pastes a secret in chat: never write it to files or commits, and tell them to put it in ERP settings and rotate it in the Dev Dashboard.
 - **Scopes:** `read/write_products`, `read/write_orders`, `read/write_inventory`, `read/write_themes`, `read/write_metafields`. Optionally add `read_customer_events` for `customerJourneySummary`, which gives the visit's landing page and UTMs.
 - **Rate limits:** the GraphQL API uses a cost-based leaky bucket. Read `extensions.cost.throttleStatus` and slow down before you hit the limit. Use bulk operations for full historical syncs.
 - **COD orders:** the financial status is usually pending, and the gateway is the manual "Cash on Delivery". Import them into the ERP's `new` status. Upsert by Shopify id and backfill UTM and landing data.
@@ -23,6 +30,11 @@ General rules for every adapter:
   - `themeFilesUpsert` may be refused for apps without a Shopify exemption.
   - Always ship a manual fallback: show the snippet and the one render line to paste after `<head>` in `layout/theme.liquid`.
   - Back up `theme.liquid` before every automatic edit.
+- **Order numbers:** a Shopify order's ERP number is its Shopify number (`#1037` becomes `1037`).
+  - The carrier label carries the same number (`orderNumber(o)`).
+  - An order first seen in the sheet keeps its ERP ref but ships with its Shopify number.
+  - The order drawer links to `https://{shop}.myshopify.com/admin/orders/{id}`.
+- **Pages:** `pages(first:100){ id title handle isPublished templateSuffix }` needs `read_online_store_pages` (or `read_content`).
 - **Alternate product templates:** `product.<suffix>.json` is served with `?view=<suffix>`. This is the safe way to show different marketing angles on the same product URL.
 
 ## Meta Marketing API

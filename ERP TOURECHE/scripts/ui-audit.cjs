@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const [, , base, out] = process.argv;
-const ROUTES = ['/', '/dashboard', '/advisor', '/assistant', '/orders', '/orders?tab=shipping', '/leads', '/customers', '/carriers', '/products', '/products/1', '/ads', '/splits', '/splits/1', '/finance', '/tasks', '/contacts', '/contacts?kind=delivery', '/activity', '/settings'];
+const ROUTES = ['/', '/dashboard', '/advisor', '/assistant', '/orders', '/orders?tab=shipping', '/leads', '/customers', '/carriers', '/products', '/products/1', '/ads', '/splits', '/splits/1', '/finance', '/tasks', '/contacts', '/contacts?kind=delivery', '/store-pages', '/activity', '/settings'];
 const probe = () => {
   const parse = (c) => {
     const m = c.match(/rgba?\(([^)]+)\)/);

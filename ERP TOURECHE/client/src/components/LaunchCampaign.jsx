@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/index.jsx';
 import { api } from '../lib/api.js';
 import { da, money, n0 } from '../lib/format.js';
 import { Badge, Button, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, Toggle, cx, useAction } from './ui.jsx';
+import PageSuggest from './PageSuggest.jsx';
 
 const CTAS = ['SHOP_NOW', 'ORDER_NOW', 'BUY_NOW', 'LEARN_MORE', 'GET_OFFER', 'SEND_MESSAGE'];
 const ACCOUNT_STATUS = { 1: ['نشط', 'Actif', 'good'], 2: ['معطّل', 'Désactivé', 'bad'], 3: ['غير مسدد', 'Impayé', 'bad'], 7: ['قيد المراجعة', 'En revue', 'warn'], 9: ['فترة سماح', 'Grâce', 'warn'], 101: ['مغلق', 'Fermé', 'bad'] };
@@ -391,9 +392,10 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
                       <Select value={f.cta} onChange={(e) => set({ cta: e.target.value })} options={CTAS.map((c) => ({ value: c, label: c }))} />
                     </Field>
                     <Field label={t(['رابط الوجهة', 'Lien de destination'])} hint={!ctx.published ? t(['المنتج غير منشور: انشره من محرر المنتج أو ضع رابط صفحة هبوط / اختبار A/B', 'Produit non publié : publiez-le ou utilisez une landing / test A/B']) : t(['يمكنك وضع رابط اختبار A/B ‎/go/…‎', 'Vous pouvez mettre un lien de test A/B /go/…'])}>
-                      <Input className="ltr" value={f.link} onChange={(e) => set({ link: e.target.value })} />
+                      <Input className="ltr" list="pinned-urls-launch" value={f.link} onChange={(e) => set({ link: e.target.value })} />
                     </Field>
                   </div>
+                  <PageSuggest id="pinned-urls-launch" />
                 </div>
               )}
             </Section>

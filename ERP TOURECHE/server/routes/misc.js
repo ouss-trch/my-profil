@@ -7,6 +7,7 @@ import { projectScope, inList } from '../services/projects.js';
 import * as analytics from '../services/analytics.js';
 import * as assistant from '../services/assistant.js';
 import * as contacts from '../services/contacts.js';
+import * as pages from '../services/pages.js';
 
 export const dashboardRouter = Router();
 
@@ -182,5 +183,35 @@ financeRouter.delete('/expenses/:id', requireRole('admin', 'manager'), requireSe
   if (!e) throw new HttpError(404, 'expense_not_found');
   db.prepare('DELETE FROM expenses WHERE id = ?').run(e.id);
   audit(req, 'expense_deleted', { entity: 'expense', entityId: e.id, projectId: e.project_id, details: { amount: e.amount, category: e.category } });
+  res.json({ ok: true });
+});
+
+// ——— صفحات المتجر (صفحات Shopify، صفحات المنتجات، روابط هبوط) مع التثبيت والأداء ———
+export const pagesRouter = Router();
+
+pagesRouter.get('/', (req, res) => {
+  const scope = projectScope(req);
+  res.json({ rows: pages.listPages(scope.ids, { pinnedOnly: req.query.pinned === '1' }), base: scope.all ? null : pages.storeBase(scope.id) });
+});
+
+pagesRouter.post('/sync', async (req, res) => {
+  const scope = projectScope(req);
+  const out = [];
+  for (const id of scope.ids) out.push({ project_id: id, ...(await pages.syncPages(id)) });
+  res.json({ results: out });
+});
+
+pagesRouter.post('/', (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const ids = pages.addPages(scope.id, { urls: req.body.urls ?? req.body.url, title: v.str(req.body.title, { max: 200 }), product_id: req.body.product_id ? Number(req.body.product_id) : null, pinned: req.body.pinned !== false });
+  audit(req, 'pages_added', { projectId: scope.id, details: { count: ids.length } });
+  res.json({ ids });
+});
+
+pagesRouter.patch('/:id', (req, res) => res.json(pages.updatePage(Number(req.params.id), req.body)));
+
+pagesRouter.delete('/:id', requireSensitive, (req, res) => {
+  const cur = pages.deletePage(Number(req.params.id));
+  audit(req, 'page_deleted', { projectId: cur.project_id, details: { url: cur.url } });
   res.json({ ok: true });
 });

@@ -14,6 +14,7 @@ import { sendSnapshot } from './snapshot.js';
 import { aiReport } from './advisor.js';
 import { aiConfigured } from '../integrations/ai.js';
 import { backup } from './backup.js';
+import { syncPages } from './pages.js';
 
 /**
  * المهام الدورية (تعمل ما دام الجهاز مشغلاً):
@@ -43,6 +44,7 @@ export async function hourly() {
   for (const p of listProjects()) {
     const cfg = projectConfig(p.id);
     if (shopify.isConfigured(cfg)) await quiet(runJob('products', p.id, 'منتجات Shopify', () => syncFromShopify(p.id)));
+    if (shopify.isConfigured(cfg)) await quiet(runJob('pages', p.id, 'صفحات المتجر', () => syncPages(p.id)));
     if (meta.isConfigured(cfg))
       await quiet(
         runJob('ads_campaigns', p.id, 'حملات Meta', async () => {

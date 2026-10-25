@@ -73,7 +73,7 @@ Rules that prevent the classic bugs:
   - Shipping group: `shipped, in_transit, at_office, out_for_delivery, attempt_failed, returning`.
   - Final group: `delivered, returned`.
   - `MANUAL` lists the transitions a person may make. Carrier updates may override it, but `SHIPPING_RANK` keeps them from moving an order backwards.
-- **Migrations:** edit `MIGRATIONS[0]` only until the first real install. After that, append new migrations; never edit old ones.
+- **Migrations:** edit `MIGRATIONS[0]` only until the first real install. Code pushed to GitHub counts as installed. After that, append new migrations (JS functions are allowed, for conditional changes); never edit old ones.
 
 ## Settings registry
 

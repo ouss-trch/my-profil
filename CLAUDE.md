@@ -20,6 +20,7 @@ The main project here is **ERP TOURECHE** (`ERP TOURECHE/`). It is the owner's E
   - Campaigns are created PAUSED.
   - Never guess a budget, and never activate or spend without the owner's explicit yes.
 - **Judging products and ads:** by cost per *delivered* order against the break-even, never by pixel purchases.
+- **Database:** the ERP is already installed, so **never edit `MIGRATIONS[0]`**. Add a new migration at the end of the list (`server/db/index.js`) and test it on a database built from the previous schema.
 
 ## Commands (inside `ERP TOURECHE/`)
 

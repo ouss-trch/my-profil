@@ -12,7 +12,7 @@ import { coreRouter, hooksRouter } from './routes/core.js';
 import { ordersRouter, customersRouter, carriersRouter } from './routes/orders.js';
 import { productsRouter } from './routes/products.js';
 import { adsRouter } from './routes/ads.js';
-import { dashboardRouter, aiRouter, tasksRouter, contactsRouter, financeRouter } from './routes/misc.js';
+import { dashboardRouter, aiRouter, tasksRouter, contactsRouter, financeRouter, pagesRouter } from './routes/misc.js';
 import { advisorRouter, splitsRouter, goHandler, hitHandler } from './routes/insights.js';
 
 export function createApp() {
@@ -78,6 +78,7 @@ export function createApp() {
   app.use('/api/ai', aiRouter);
   app.use('/api/tasks', tasksRouter);
   app.use('/api/contacts', contactsRouter);
+  app.use('/api/pages', pagesRouter);
   app.use('/api/finance', financeRouter);
   app.use('/api/advisor', advisorRouter);
   app.use('/api/splits', splitsRouter);

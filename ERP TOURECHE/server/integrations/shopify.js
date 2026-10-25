@@ -207,6 +207,19 @@ export async function allProducts(cfg) {
   return out;
 }
 
+/** صفحات المتجر (من نحن، الأسئلة الشائعة، صفحات الهبوط…) — الصلاحية: read_online_store_pages */
+export async function listPages(cfg) {
+  const out = [];
+  let after = null;
+  for (let page = 0; page < 20; page++) {
+    const d = await gql(cfg, `query($after: String) { pages(first: 100, after: $after) { nodes { id title handle isPublished templateSuffix } pageInfo { hasNextPage endCursor } } }`, { after });
+    out.push(...d.pages.nodes);
+    if (!d.pages.pageInfo.hasNextPage) break;
+    after = d.pages.pageInfo.endCursor;
+  }
+  return out;
+}
+
 export async function getProduct(cfg, gid) {
   const d = await gql(cfg, `query($id: ID!) { product(id: $id) { ${PRODUCT_FIELDS} } }`, { id: gid });
   return d.product;

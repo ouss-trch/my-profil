@@ -1,6 +1,44 @@
 import Database from 'better-sqlite3';
 import { config } from '../config.js';
 
+// جداول تُعرَّف مرة وتُستعمل في الإنشاء الأول وفي ترقية القواعد القديمة
+const CONTACTS_SQL = `
+  CREATE TABLE contacts (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'supplier' CHECK (kind IN ('supplier','delivery','service','wholesale','other')),
+    company TEXT,
+    phone TEXT,
+    email TEXT,
+    notes TEXT,
+    carrier TEXT,
+    wilaya_code INTEGER,
+    role TEXT,
+    lead_time_days INTEGER,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );`;
+
+const STORE_PAGES_SQL = `
+  CREATE TABLE IF NOT EXISTS store_pages (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('page','product','url')),
+    url TEXT NOT NULL,
+    path TEXT NOT NULL,
+    title TEXT,
+    shopify_id TEXT,
+    template_suffix TEXT,
+    published INTEGER NOT NULL DEFAULT 1,
+    gone INTEGER NOT NULL DEFAULT 0,
+    product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    synced_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    UNIQUE (project_id, url)
+  );`;
+
 // كل تعديل على البنية يُضاف كهجرة جديدة في آخر القائمة (لا تُعدَّل الهجرات القديمة)
 const MIGRATIONS = [
   `
@@ -250,21 +288,7 @@ const MIGRATIONS = [
   );
   CREATE INDEX idx_tasks_status ON tasks(status, due_at);
 
-  CREATE TABLE contacts (
-    id INTEGER PRIMARY KEY,
-    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    kind TEXT NOT NULL DEFAULT 'supplier' CHECK (kind IN ('supplier','delivery','service','wholesale','other')),
-    company TEXT,
-    phone TEXT,
-    email TEXT,
-    notes TEXT,
-    carrier TEXT,
-    wilaya_code INTEGER,
-    role TEXT,
-    lead_time_days INTEGER,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-  );
+${CONTACTS_SQL}
 
   CREATE TABLE campaign_products (
     campaign_id TEXT PRIMARY KEY,
@@ -369,6 +393,9 @@ const MIGRATIONS = [
     PRIMARY KEY (job, project_id)
   );
 
+  -- صفحات المتجر: صفحات Shopify وصفحات المنتجات (مزامنة) + روابط هبوط تُضاف يدوياً؛ المثبّتة تظهر أولاً وفي اختيارات الإعلانات واختبارات A/B
+${STORE_PAGES_SQL}
+
   -- اختبار صفحات الهبوط A/B: رابط واحد في الإعلان يوزّع الزوار على عدة صفحات حسب الوزن
   CREATE TABLE split_tests (
     id INTEGER PRIMARY KEY,
@@ -451,6 +478,22 @@ const MIGRATIONS = [
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   );
   `,
+
+  // 1 — ترقية قاعدة أُنشئت بنسخة سابقة (قبل الموردين وصفحات المتجر). لا يغيّر شيئاً في قاعدة جديدة.
+  (db) => {
+    const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'contacts'").get()?.sql || '';
+    if (sql.includes("'livreur'")) {
+      // تغيير قيود الأنواع يتطلب إعادة بناء الجدول (لا جدول يشير إليه في النسخة القديمة)
+      db.exec('ALTER TABLE contacts RENAME TO contacts_old');
+      db.exec(CONTACTS_SQL);
+      db.exec(`INSERT INTO contacts (id, project_id, name, kind, company, phone, email, notes, created_at)
+        SELECT id, project_id, name, CASE kind WHEN 'supplier' THEN 'supplier' WHEN 'partner' THEN 'service' ELSE 'other' END, company, phone, email, notes, created_at FROM contacts_old`);
+      db.exec('DROP TABLE contacts_old');
+    }
+    if (!db.prepare('PRAGMA table_info(products)').all().some((c) => c.name === 'supplier_id')) db.exec('ALTER TABLE products ADD COLUMN supplier_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_orders_carrier_wilaya ON orders(carrier, wilaya_code, status)');
+    db.exec(STORE_PAGES_SQL);
+  },
 ];
 
 export function openDb(file = config.dbFile) {
@@ -469,7 +512,9 @@ function migrate(db) {
   if (!row) db.prepare('INSERT INTO schema_version (version) VALUES (0)').run();
   for (; version < MIGRATIONS.length; version++) {
     db.transaction(() => {
-      db.exec(MIGRATIONS[version]);
+      const m = MIGRATIONS[version];
+      if (typeof m === 'function') m(db);
+      else db.exec(m);
       db.prepare('UPDATE schema_version SET version = ?').run(version + 1);
     })();
   }

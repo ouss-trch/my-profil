@@ -10,6 +10,7 @@ import {
   ListChecks,
   Lock,
   Megaphone,
+  Pin,
   Menu,
   Moon,
   Package,
@@ -57,6 +58,7 @@ export const NAV = [
     group: 'nav.g.catalog',
     items: [
       { to: '/products', key: 'nav.products', icon: Package },
+      { to: '/store-pages', key: 'nav.pages', icon: Pin },
       { to: '/contacts', key: 'nav.contacts', icon: Handshake },
     ],
   },

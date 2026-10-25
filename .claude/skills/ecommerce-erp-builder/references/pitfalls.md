@@ -28,6 +28,10 @@
 | A test hangs forever, with no output | Node's recursive `mkdirSync` loops on some paths (e.g. under `/proc`) | Don't create cloud paths recursively: if the parent folder doesn't exist, report `mirror_unreachable`. This also avoids a fake local "backup" while Google Drive isn't installed |
 | A later test run hangs or behaves oddly | A stuck background `node --test` process from an earlier run still holds the DB | List with `ps` and kill by PID before rerunning |
 | A third-party skill's engine blocked from running | Session policy blocks executing downloaded binaries | Vendor only the skill files (with LICENSE) and apply its checklists with your own Playwright audit (`scripts/ui-audit.cjs`) |
+| Users who already installed get "no such table/column" | `MIGRATIONS[0]` was edited after the code was on GitHub | From the first push on, add a new migration. Use a JS migration for conditional changes: rebuild a table to change a CHECK, `ADD COLUMN` only if missing, `CREATE ... IF NOT EXISTS`. Test it on a DB built from the old schema (`git show <first-push>:server/db/index.js`) |
+| NOEST reference changed (1037 → 10370) | `padEnd(5,'0')` added without any documented requirement | Send the number exactly as it is; never alter identifiers on a guess |
+| A synced row was deleted, or manual rows were flagged "gone" | Sync stale-detection with an empty `NOT IN (NULL)` list, and manual rows not told apart from synced ones | Mark synced rows (`synced_at`) and only those can go stale; handle the empty list |
+| React shows a stray "0" | `{count && <X/>}` with a numeric 0 | Use `Boolean(x) &&` or a ternary |
 | "Contacts" page nobody uses | A generic address book with no link to any workflow | Tie each kind to a job: suppliers ↔ products and reorder; carrier desks ↔ stuck parcels in the order drawer. Otherwise remove the page |
 
 ## Verification checklist (run before every delivery)

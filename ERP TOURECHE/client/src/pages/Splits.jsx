@@ -9,6 +9,7 @@ import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import { Badge, Bar, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Select, Toggle, cx, useAction } from '../components/ui.jsx';
 import { SERIES } from '../components/charts.jsx';
+import PageSuggest from '../components/PageSuggest.jsx';
 
 const STATUS = { draft: ['مسودة', 'Brouillon', 'neutral'], running: ['يعمل', 'En cours', 'good'], paused: ['متوقف', 'En pause', 'warn'], ended: ['منتهٍ', 'Terminé', 'neutral'] };
 const GOALS = { orders: ['الطلبيات', 'Commandes'], confirmed: ['الطلبيات المؤكدة', 'Commandes confirmées'], delivered: ['الطلبيات المسلّمة (الأدق)', 'Commandes livrées (le plus juste)'] };
@@ -249,7 +250,7 @@ function SplitForm({ open, onClose, initial }) {
           )}
           {f.mode === 'shopify' && (
             <Field label={t(['رابط الدخول (الذي تضعه في الإعلان)', "Lien d'entrée (celui de la pub)"])} className="sm:col-span-2" hint={t(['مثال: /products/thermos — كل من يفتحه يُعرض عليه A أو B أو C', 'Ex. /products/thermos — chaque visiteur voit A, B ou C'])}>
-              <Input className="ltr" value={f.entry_path} onChange={(e) => setF({ ...f, entry_path: e.target.value })} placeholder="/products/thermos" />
+              <Input className="ltr" list="pinned-paths" value={f.entry_path} onChange={(e) => setF({ ...f, entry_path: e.target.value })} placeholder="/products/thermos" />
             </Field>
           )}
           <Field label={t(['الحكم على أساس', 'Juger sur'])}>
@@ -266,13 +267,15 @@ function SplitForm({ open, onClose, initial }) {
               {t(['كل نسخة إما نفس المنتج بقالب مختلف (أنشئ القالب في محرر Shopify ثم استعمل ?view=اسم-القالب) أو صفحة هبوط على متجرك. مثال: /products/thermos?view=angle-gift · /pages/thermos-lp', 'Chaque version : même produit avec un autre template (créé dans l’éditeur Shopify, puis ?view=nom) ou une landing page de votre boutique. Ex. /products/thermos?view=angle-gift · /pages/thermos-lp'])}
             </p>
           )}
+          <PageSuggest id="pinned-paths" field="path" />
+          <PageSuggest id="pinned-urls" />
           {f.variants.map((v, k) => (
             <div key={k} className="grid gap-2 rounded-lg border border-line p-2 sm:grid-cols-[2rem_1fr_2fr_6rem_auto] sm:items-center">
               <span className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: SERIES[k % 4] }}>
                 {'ABCDEF'[k]}
               </span>
               <Input value={v.name} onChange={(e) => setV(k, { name: e.target.value })} placeholder={t(['اسم (اختياري)', 'Nom (facultatif)'])} />
-              <Input className="ltr" value={v.url} onChange={(e) => setV(k, { url: e.target.value })} placeholder={f.mode === 'shopify' ? 'https://souqnna.com/products/thermos?view=angle-a' : 'https://souqnna.com/products/…'} />
+              <Input className="ltr" list="pinned-urls" value={v.url} onChange={(e) => setV(k, { url: e.target.value })} placeholder={f.mode === 'shopify' ? 'https://souqnna.com/products/thermos?view=angle-a' : 'https://souqnna.com/products/…'} />
               <div className="flex items-center gap-1">
                 <Input type="number" min="0" max="100" value={v.weight} onChange={(e) => setV(k, { weight: e.target.value })} />
                 <span className="text-xs text-muted">{total ? `${Math.round((100 * Number(v.weight || 0)) / total)}%` : ''}</span>
