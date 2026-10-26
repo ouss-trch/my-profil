@@ -12,6 +12,19 @@
 | **n8n Skills** | [czlonkowski/n8n-skills](https://github.com/czlonkowski/n8n-skills) | توافق عقود البيانات مع سير n8n الحالية (الأحداث، المنتجات، التقرير الصباحي، جسر Sheets) |
 | **Trail of Bits Skills** (مراجعة الأمان) | [trailofbits/skills](https://github.com/trailofbits/skills) | تشفير الأسرار، كلمة مرور العمليات الحساسة، CSP، فحص Origin، حدود المعدل، عدم رفع أي سر إلى git |
 
+## مهارات التحسين والمراجعة (منسوخة في `.claude/skills/` مع رخصها)
+
+اختيرت بعد بحث على GitHub لتحسين الـ ERP دون تغيير سلوكه: مراجعة، أمان، أداء، اختبار، وتحويل.
+
+| المهارة | المصدر · الرخصة | ما طُبّق منها هنا |
+|---|---|---|
+| `sentry-security-review` · `find-bugs` · `skill-scanner` | [getsentry/skills](https://github.com/getsentry/skills) · Apache-2.0 | مراجعة أمان قبل فتح الـ ERP على الإنترنت: رمز الإعداد الأول، IP الزائر خلف Traefik، مسارات الصور، تنقية HTML المولّد؛ وفحص المهارات المنسوخة نفسها |
+| `sharp-edges` · `supply-chain-risk-auditor` | [trailofbits/skills](https://github.com/trailofbits/skills) · CC-BY-SA-4.0 | إعدادات آمنة افتراضياً (`ERP_TRUST_PROXY`)، وتدقيق المكتبات: ترقية multer و express-rate-limit وتثبيت ip-address على نسخ عمرها أسبوعان على الأقل |
+| `react-best-practices` · `web-design-guidelines` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) · MIT | مراجعة أداء React والواجهة (الحقول، الوصولية، RTL) |
+| `webapp-testing` | [anthropics/skills](https://github.com/anthropics/skills) · Apache-2.0 | اختبار الصفحات بمتصفح حقيقي (Playwright) |
+| `systematic-debugging` · `verification-before-completion` | [obra/superpowers](https://github.com/obra/superpowers) · MIT | السبب الجذري قبل الإصلاح، ولا إعلان «يعمل» قبل تشغيل الاختبار |
+| `cro` · `ab-testing` · `offers` · `conversion-tracking` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) · MIT | صفحات الهبوط واختبارات A/B، العروض، وتتبّع التحويل (Pixel / CAPI) |
+
 التثبيت في Claude Code: `bash scripts/install-skills.sh` — مهارتا المشروع و Impeccable موجودتان مسبقاً في `.claude/skills/` بجذر المستودع.
 
 ## مهارة المشروع: `ecommerce-erp-builder`
