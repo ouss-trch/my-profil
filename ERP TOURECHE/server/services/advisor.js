@@ -14,6 +14,7 @@ import { tariff } from './shipments.js';
 import { splitInsights } from './splits.js';
 import { suppliersById, restockPlan } from './contacts.js';
 import { backupStatus } from './backup.js';
+import { summary as collectionsSummary } from './collections.js';
 
 /**
  * «المستشار»: يحلّل بيانات المشروع ويُخرج ملاحظات وتقييمات واستنتاجات واقتراحات قابلة للتنفيذ.
@@ -846,6 +847,48 @@ function setupRules(projectIds, push) {
     });
 }
 
+// التحصيل: مال الطلبيات المسلّمة الذي ما زال عند شركة التوصيل
+function collectionRules(projectIds, push) {
+  for (const pid of projectIds) {
+    const c = collectionsSummary([pid]);
+    const name = (k) => CARRIERS[k]?.name || k;
+    if (!c.started) {
+      const owed = c.carriers.reduce((a, x) => a + x.delivered_count, 0);
+      if (owed >= 10)
+        push({
+          key: `setup.collections:${pid}`,
+          area: 'finance',
+          type: 'observation',
+          severity: 'low',
+          title: tx('ابدأ تتبّع التحصيل من شركات التوصيل', 'Commencez le suivi des encaissements transporteurs'),
+          insight: tx('الـ ERP يعرف ما سُلّم، لكنه لا يعرف ما دفعته لك الشركات فعلاً. طلبية مسلّمة لم تُدفع = مال ضائع لا يراه أحد.', 'L’ERP sait ce qui est livré, pas ce que les transporteurs ont réellement versé.'),
+          advice: tx('في «التحصيل»: سجّل رصيداً افتتاحياً لما استلمته حتى اليوم، ثم سجّل كل دفعة جديدة بلصق أرقام التتبع من كشف الشركة.', 'Dans « Encaissements » : solde d’ouverture, puis chaque versement en collant les numéros de suivi du relevé.'),
+          action: { to: '/collections', label: tx('التحصيل', 'Encaissements') },
+          project_id: pid,
+        });
+      continue;
+    }
+    for (const x of c.carriers.filter((k) => k.started && k.late_count > 0))
+      push({
+        key: `finance.collect:${pid}:${x.carrier}`,
+        area: 'finance',
+        type: 'alert',
+        severity: x.late_net >= 50000 ? 'high' : 'medium',
+        impact_da: x.late_net,
+        title: tx(`${name(x.carrier)} لم تدفع ${dz(x.late_net)} بعد`, `${name(x.carrier)} n’a pas encore versé ${dz(x.late_net)}`),
+        insight: tx(`${x.late_count} طلبية مسلّمة منذ أكثر من ${c.wait_days} يوماً لم تدخل أي دفعة.`, `${x.late_count} commandes livrées depuis plus de ${c.wait_days} jours sans versement.`),
+        evidence: [
+          { label: tx('أقدم طلبية', 'Plus ancienne'), value: tx(`${x.oldest_days} يوماً`, `${x.oldest_days} jours`) },
+          { label: tx('آخر دفعة مسجلة', 'Dernier versement'), value: x.last_payout || '—' },
+          { label: tx('كل ما عندها (صافي)', 'Total chez eux (net)'), value: dz(x.net) },
+        ],
+        advice: tx('اطلب كشف الدفع من الشركة، وإن كانت دُفعت فسجّل الدفعة بلصق أرقام التتبع؛ وإلا طالب بها مع قائمة الأرقام.', 'Demandez le relevé ; si c’est versé, enregistrez-le en collant les suivis, sinon réclamez avec la liste.'),
+        action: { to: `/collections?carrier=${x.carrier}`, label: tx('التحصيل', 'Encaissements') },
+        project_id: pid,
+      });
+  }
+}
+
 // ————————————————————————————————————————————————
 // التقييم العام (0–100) لكل مجال
 // ————————————————————————————————————————————————
@@ -889,7 +932,7 @@ export function analyze(projectIds) {
       errors.push({ rule: fn.name, error: e.message });
     }
   };
-  [confirmationRules, deliveryRules, carrierRules, productRules, customerRules, financeAndTimingRules, adsRules, splitRules, setupRules].forEach(safe);
+  [confirmationRules, deliveryRules, carrierRules, productRules, customerRules, financeAndTimingRules, collectionRules, adsRules, splitRules, setupRules].forEach(safe);
 
   const states = db
     .prepare(`SELECT * FROM insight_states WHERE project_id IN (0, ${inList(projectIds)})`)

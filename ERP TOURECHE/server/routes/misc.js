@@ -8,6 +8,7 @@ import * as analytics from '../services/analytics.js';
 import * as assistant from '../services/assistant.js';
 import * as contacts from '../services/contacts.js';
 import * as pages from '../services/pages.js';
+import * as collections from '../services/collections.js';
 
 export const dashboardRouter = Router();
 
@@ -183,6 +184,44 @@ financeRouter.delete('/expenses/:id', requireRole('admin', 'manager'), requireSe
   if (!e) throw new HttpError(404, 'expense_not_found');
   db.prepare('DELETE FROM expenses WHERE id = ?').run(e.id);
   audit(req, 'expense_deleted', { entity: 'expense', entityId: e.id, projectId: e.project_id, details: { amount: e.amount, category: e.category } });
+  res.json({ ok: true });
+});
+
+// ——— التحصيل: ما قبضته شركات التوصيل ولم تدفعه بعد، ودفعاتها ———
+export const collectionsRouter = Router();
+
+collectionsRouter.get('/', (req, res) => res.json(collections.summary(projectScope(req).ids)));
+
+collectionsRouter.get('/open', (req, res) => res.json(collections.openOrders(projectScope(req).ids, { carrier: v.str(req.query.carrier, { max: 20 }) })));
+
+collectionsRouter.post('/match', (req, res) => res.json(collections.matchStatement(projectScope(req).ids, { carrier: v.str(req.body.carrier, { max: 20 }), text: v.str(req.body.text, { max: 100000 }) })));
+
+collectionsRouter.post('/', requireRole('admin', 'manager'), (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const out = collections.recordPayout(scope.id, req.body, { userId: req.user.id });
+  audit(req, 'payout_recorded', { entity: 'payout', entityId: out.id, projectId: scope.id, details: { carrier: req.body.carrier, amount: out.amount, expected: out.expected, orders: out.orders_count } });
+  res.json(out);
+});
+
+// تسوية كل التاريخ القديم دفعة واحدة: عملية مالية جماعية → كلمة المرور الحساسة
+collectionsRouter.post('/opening', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const out = collections.openingBalance(scope.id, { before: req.body.before, carrier: req.body.carrier || null }, { userId: req.user.id });
+  audit(req, 'payout_opening', { entity: 'payout', projectId: scope.id, details: { before: req.body.before, carriers: out } });
+  res.json({ results: out });
+});
+
+collectionsRouter.get('/:id/orders', (req, res) => {
+  const p = db.prepare('SELECT * FROM carrier_payouts WHERE id = ?').get(Number(req.params.id));
+  if (!p || !projectScope(req).ids.includes(p.project_id)) throw new HttpError(404, 'payout_not_found');
+  res.json(collections.payoutOrders(p.id));
+});
+
+collectionsRouter.delete('/:id', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
+  const p = db.prepare('SELECT * FROM carrier_payouts WHERE id = ?').get(Number(req.params.id));
+  if (!p || !projectScope(req).ids.includes(p.project_id)) throw new HttpError(404, 'payout_not_found');
+  collections.deletePayout(p.id);
+  audit(req, 'payout_deleted', { entity: 'payout', entityId: p.id, projectId: p.project_id, details: { carrier: p.carrier, kind: p.kind, amount: p.amount, orders: p.orders_count } });
   res.json({ ok: true });
 });
 

@@ -25,6 +25,7 @@ const pages = {
   Tasks: lazy(() => import('./pages/Tasks.jsx')),
   Contacts: lazy(() => import('./pages/Contacts.jsx')),
   StorePages: lazy(() => import('./pages/StorePages.jsx')),
+  Collections: lazy(() => import('./pages/Collections.jsx')),
   Activity: lazy(() => import('./pages/Activity.jsx')),
   Settings: lazy(() => import('./pages/Settings.jsx')),
 };
@@ -52,6 +53,7 @@ function Gate() {
           <Route path="splits" element={<P.Splits />} />
           <Route path="splits/:id" element={<P.Splits />} />
           <Route path="finance" element={<P.Finance />} />
+          <Route path="collections" element={<P.Collections />} />
           <Route path="tasks" element={<P.Tasks />} />
           <Route path="contacts" element={<P.Contacts />} />
           <Route path="store-pages" element={<P.StorePages />} />

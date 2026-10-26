@@ -79,4 +79,10 @@ addContact({ name: 'Karim · livreur ZR', kind: 'delivery', carrier: 'zr', wilay
 addContact({ name: 'NOEST · chargé de compte', kind: 'delivery', carrier: 'noest', role: 'manager', phone: '0550000606' });
 addContact({ name: 'مطبعة الفجر', kind: 'service', company: 'طباعة العلب والملصقات', phone: '0661000707' });
 addContact({ name: 'Librairie El Ilm', kind: 'wholesale', company: 'Blida', phone: '0770000808', notes: 'سعر الجملة −25% ابتداءً من 20 قطعة' });
+// التحصيل: أرقام تتبع، رصيد افتتاحي قبل 25 يوماً، ودفعة Yalidine حديثة بفرق صغير
+const { openingBalance, recordPayout, openOrders } = await import(`${root}/server/services/collections.js`);
+db.prepare("UPDATE orders SET tracking = upper(substr(carrier, 1, 3)) || '-' || printf('%06d', id * 7919 % 1000000) WHERE carrier IS NOT NULL AND tracking IS NULL").run();
+openingBalance(pid, { before: new Date(Date.now() + 3600e3 - 25 * 86400e3).toISOString().slice(0, 10) });
+const paid = openOrders([pid], { carrier: 'yalidine' }).filter((o) => o.days >= 9 && o.days <= 16);
+if (paid.length) recordPayout(pid, { carrier: 'yalidine', order_ids: paid.map((o) => o.id), amount: paid.reduce((a, o) => a + o.net, 0) - 400, reference: 'YAL-V-2026-118' });
 console.log('seeded', n, 'orders');

@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bot,
   Compass,
+  HandCoins,
   Handshake,
   History,
   Languages,
@@ -73,6 +74,7 @@ export const NAV = [
     group: 'nav.g.admin',
     items: [
       { to: '/finance', key: 'nav.finance', icon: Wallet },
+      { to: '/collections', key: 'nav.collections', icon: HandCoins },
       { to: '/tasks', key: 'nav.tasks', icon: ListChecks },
       { to: '/activity', key: 'nav.activity', icon: History, admin: true },
       { to: '/settings', key: 'nav.settings', icon: Settings },

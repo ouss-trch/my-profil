@@ -494,6 +494,27 @@ ${STORE_PAGES_SQL}
     db.exec('CREATE INDEX IF NOT EXISTS idx_orders_carrier_wilaya ON orders(carrier, wilaya_code, status)');
     db.exec(STORE_PAGES_SQL);
   },
+
+  // 2 — التحصيل: دفعات شركات التوصيل، وكل طلبية مسلّمة أو مرتجعة تُربط بالدفعة التي سوّتها
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS carrier_payouts (
+      id INTEGER PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      carrier TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'payout' CHECK (kind IN ('payout','opening')),
+      received_on TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      expected REAL NOT NULL DEFAULT 0,
+      orders_count INTEGER NOT NULL DEFAULT 0,
+      reference TEXT,
+      note TEXT,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_payouts_project ON carrier_payouts(project_id, received_on)');
+    if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'payout_id')) db.exec('ALTER TABLE orders ADD COLUMN payout_id INTEGER REFERENCES carrier_payouts(id) ON DELETE SET NULL');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_orders_payout ON orders(project_id, carrier, payout_id)');
+  },
 ];
 
 export function openDb(file = config.dbFile) {
