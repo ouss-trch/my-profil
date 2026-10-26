@@ -12,9 +12,10 @@ import * as meta from '../integrations/meta.js';
 import * as n8n from '../integrations/n8n.js';
 import * as ai from '../integrations/ai.js';
 import { CARRIERS } from '../integrations/carriers/index.js';
-import { listProjects, createProject, updateProject, deleteProject, getProject } from '../services/projects.js';
+import { listProjects, createProject, updateProject, deleteProject, getProject, projectScope } from '../services/projects.js';
 import { createOrder } from '../services/orders.js';
-import { jobStates, syncShopifyOrders, syncSheet } from '../services/sync.js';
+import { jobStates } from '../services/sync.js';
+import * as fullsync from '../services/fullsync.js';
 import { recentFailures } from '../services/effects.js';
 import { backup, backupStatus } from '../services/backup.js';
 import { makeSnapshot, sendSnapshot } from '../services/snapshot.js';
@@ -144,24 +145,9 @@ coreRouter.get('/audit', requireRole('admin'), (req, res) => {
 
 coreRouter.get('/system/jobs', (_req, res) => res.json({ jobs: jobStates(), effects: recentFailures(), backup: backupStatus() }));
 
-coreRouter.post('/system/sync', async (req, res) => {
-  const ids = req.body.project_id ? [Number(req.body.project_id)] : listProjects().map((p) => p.id);
-  const out = {};
-  for (const id of ids) {
-    out[id] = {};
-    for (const [name, fn] of [
-      ['shopify', syncShopifyOrders],
-      ['sheet', syncSheet],
-    ]) {
-      try {
-        out[id][name] = await fn(id);
-      } catch (e) {
-        out[id][name] = { error: e.message };
-      }
-    }
-  }
-  res.json(out);
-});
+// المزامنة الكاملة (زر الشريط العلوي): تبدأ في الخلفية، والواجهة تقرأ تقدّمها
+coreRouter.post('/system/sync', (req, res) => res.json(fullsync.start(projectScope(req).ids, { userId: req.user.id })));
+coreRouter.get('/system/sync', (_req, res) => res.json(fullsync.status()));
 
 coreRouter.post('/system/backup', requireRole('admin'), async (req, res) => {
   const out = await backup({ force: true });

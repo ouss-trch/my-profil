@@ -18,18 +18,23 @@ import { syncPages } from './pages.js';
 import { retryShopify as retryReturns } from './returns.js';
 
 /**
- * المهام الدورية (تعمل ما دام الجهاز مشغلاً):
+ * المهام الدورية (تعمل ما دام الجهاز مشغلاً).
+ * جلب البيانات من الخارج (Shopify، الجدول، التتبع، Meta، الأسعار) لا يعمل إلا إذا فُعّلت «المزامنة التلقائية»؛
+ * وإلا فبزر المزامنة في الشريط العلوي. ما يحمي البيانات يبقى تلقائياً دائماً: النسخ الاحتياطي، والمرتجعات المعلّقة نحو Shopify.
  *  كل 5 دقائق  : طلبيات Shopify + جدول Google + المرتجعات المنتظرة لمخزون Shopify
  *  كل 30 دقيقة : تتبع الطرود عند شركات التوصيل + إنفاق الإعلانات اليوم
  *  كل ساعة     : المنتجات، الحملات، تنبيهات المخزون، لقطة التقرير الصباحي لـ n8n
  *  يومياً 03:00 : نسخة احتياطية، أسعار شركات التوصيل، إنفاق 30 يوماً (+ تقرير المستشار الذكي كل سبت)
  */
 const quiet = (p) => p.catch(() => {});
+const auto = () => Boolean(getSetting('auto_sync'));
 
 export async function every5min() {
   for (const p of listProjects()) {
-    await quiet(syncShopifyOrders(p.id));
-    await quiet(syncSheet(p.id));
+    if (auto()) {
+      await quiet(syncShopifyOrders(p.id));
+      await quiet(syncSheet(p.id));
+    }
     // المرتجعات التي لم تصل بعد إلى مخزون Shopify (انقطاع، إعادة تشغيل…)
     await quiet(retryReturns(p.id));
   }
@@ -38,8 +43,8 @@ export async function every5min() {
 export async function every30min() {
   for (const p of listProjects()) {
     const cfg = projectConfig(p.id);
-    if (Object.values(CARRIERS).some((c) => c.isConfigured(cfg))) await quiet(runJob('tracking', p.id, 'تتبع الطرود', () => syncTracking(p.id)));
-    if (meta.isConfigured(cfg)) await quiet(runJob('ads_spend', p.id, 'Meta Ads', () => syncSpend(p.id, 2)));
+    if (auto() && Object.values(CARRIERS).some((c) => c.isConfigured(cfg))) await quiet(runJob('tracking', p.id, 'تتبع الطرود', () => syncTracking(p.id)));
+    if (auto() && meta.isConfigured(cfg)) await quiet(runJob('ads_spend', p.id, 'Meta Ads', () => syncSpend(p.id, 2)));
     if (shopify.isConfigured(cfg)) await quiet(retryReturns(p.id, { includeFailed: true }));
   }
 }
@@ -47,9 +52,9 @@ export async function every30min() {
 export async function hourly() {
   for (const p of listProjects()) {
     const cfg = projectConfig(p.id);
-    if (shopify.isConfigured(cfg)) await quiet(runJob('products', p.id, 'منتجات Shopify', () => syncFromShopify(p.id)));
-    if (shopify.isConfigured(cfg)) await quiet(runJob('pages', p.id, 'صفحات المتجر', () => syncPages(p.id)));
-    if (meta.isConfigured(cfg))
+    if (auto() && shopify.isConfigured(cfg)) await quiet(runJob('products', p.id, 'منتجات Shopify', () => syncFromShopify(p.id)));
+    if (auto() && shopify.isConfigured(cfg)) await quiet(runJob('pages', p.id, 'صفحات المتجر', () => syncPages(p.id)));
+    if (auto() && meta.isConfigured(cfg))
       await quiet(
         runJob('ads_campaigns', p.id, 'حملات Meta', async () => {
           const r = await syncCampaigns(p.id);
@@ -66,8 +71,8 @@ export async function daily() {
   await quiet(Promise.resolve(backup()));
   for (const p of listProjects()) {
     const cfg = projectConfig(p.id);
-    if (Object.values(CARRIERS).some((c) => c.isConfigured(cfg))) await quiet(runJob('tariffs', p.id, 'أسعار التوصيل', () => refreshTariffs(p.id)));
-    if (meta.isConfigured(cfg)) await quiet(runJob('ads_backfill', p.id, 'Meta Ads (30 يوماً)', () => syncSpend(p.id, 30)));
+    if (auto() && Object.values(CARRIERS).some((c) => c.isConfigured(cfg))) await quiet(runJob('tariffs', p.id, 'أسعار التوصيل', () => refreshTariffs(p.id)));
+    if (auto() && meta.isConfigured(cfg)) await quiet(runJob('ads_backfill', p.id, 'Meta Ads (30 يوماً)', () => syncSpend(p.id, 30)));
   }
   // تقرير المستشار الذكي الأسبوعي (كل سبت) لكل المشاريع معاً
   if (aiConfigured() && new Date(Date.now() + 3600e3).getUTCDay() === 6) await quiet(runJob('advisor_weekly', 0, 'تقرير المستشار', () => aiReport(listProjects().map((p) => p.id))));

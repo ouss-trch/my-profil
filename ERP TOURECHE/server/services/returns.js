@@ -223,8 +223,9 @@ export async function syncShopify(id) {
 export async function retryShopify(projectId, { includeFailed = false } = {}) {
   const states = includeFailed ? ['pending', 'failed'] : ['pending'];
   const rows = db.prepare(`SELECT id FROM order_returns WHERE project_id = ? AND shopify_state IN (${inList(states)}) AND shopify_attempts < 20 ORDER BY id LIMIT 50`).all(projectId, ...states);
-  for (const { id } of rows) await syncShopify(id);
-  return { tried: rows.length };
+  let done = 0;
+  for (const { id } of rows) if ((await syncShopify(id))?.shopify_state === 'done') done++;
+  return { tried: rows.length, done, failed: rows.length - done };
 }
 
 export function retryNow(id) {

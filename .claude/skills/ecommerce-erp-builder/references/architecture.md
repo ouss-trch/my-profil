@@ -116,7 +116,13 @@ All settings live in one typed registry (`lib/settings.js`): key, scope (global/
   - `npm run restore -- <file>` checks integrity, saves the current DB first, then restores.
   - The Advisor warns while backups exist only on the computer. Code on GitHub plus data in the cloud folder means a lost computer is not a lost ERP.
 
-## Scheduler (`services/scheduler.js`)
+## Scheduler (`services/scheduler.js`) and full sync (`services/fullsync.js`)
+
+- **Owner's choice for ERP TOURECHE:** the `auto_sync` setting is off. Nothing is pulled in the background; the top-bar button starts one full sync on the server.
+  - Order: products → orders → Sheets → pages → tracking → tariffs (when older than a day) → returns to Shopify → Meta campaigns → 7 days of spend.
+  - The client polls `GET /system/sync` for per-step status. A second press joins the run already in progress.
+- **Always automatic, whatever the setting:** backups and the retry of pending returns to Shopify.
+- **When `auto_sync` is on:**
 
 - Shopify order sync: every few minutes.
 - Carrier tracking poll: batched, within each carrier's quota.

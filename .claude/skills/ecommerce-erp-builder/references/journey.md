@@ -18,7 +18,7 @@ Read this first when you continue ERP TOURECHE in a new conversation, or when yo
 |---|---|
 | Modules | Today, Dashboard, Advisor, AI assistant, Orders (confirmation + shipping + returns to stock), Abandoned carts, Customers, Carriers, Products + editor (SEO, AI copy, images), Store pages, Suppliers & partners, Ads (BM explorer, PAUSED launch), A/B pages, Finance, **Collections**, Tasks, Activity, Settings |
 | Integrations | Shopify (Dev Dashboard client credentials), Meta Marketing API, Yalidine / NOEST / ZR, n8n (in and out hooks), Anthropic, image providers |
-| Quality bar | 42 `node:test` tests; UI audit on 24 routes × 3 modes with 0 contrast, 0 unnamed buttons, 0 unlabelled fields, 0 overflow |
+| Quality bar | 45 `node:test` tests; UI audit on 24 routes × 3 modes with 0 contrast, 0 unnamed buttons, 0 unlabelled fields, 0 overflow |
 | Hosting | **Live 24/7 at https://erp.leadsauto.cloud** (since 26 Oct 2026): Hostinger VPS KVM 2, container `erp-toureche` next to the n8n stack (Traefik + Postgres + Redis + n8n), DNS `erp` A → `72.61.84.209`, clone in `/opt/erp`, managed with `erp update` / `erp status` / `erp backup`. Admin account created through the setup token |
 | Data safety | Nightly backup (14 kept), optional cloud-folder mirror (30 kept), `npm run restore` and `deploy/erp.sh restore` |
 | Schema | `MIGRATIONS` 0 → 3. Never edit 0; append. Every migration is tested on a DB built by the previous code |
@@ -48,6 +48,7 @@ Read this first when you continue ERP TOURECHE in a new conversation, or when yo
 | 11 | Security review (`2862dee`) | Setup token, client IP behind Traefik, upload path checks, safer sanitizer, HSTS, dependency upgrades | Review before going public, not after |
 | 12 | Collections (`605946a`) | Carrier payouts reconciled by pasting the statement's tracking numbers; opening balance; Advisor alert after 14 days | The biggest COD leak is money that was delivered but never paid back |
 | 13 | Returns back to stock | A returned parcel goes back to Shopify's available stock (idempotent) and to the ERP copy; damaged or missing units are written off at cost; the real return cost flows into Finance, break-even and per-product ad results | Stock goes back where it was deducted, and never twice
+| 14 | Manual full sync | On the owner's request, background pulls (Shopify, Sheets, tracking, Meta, tariffs) run only when `auto_sync` is on (off by default). The top-bar button runs one ordered full sync on the server with live per-step progress. Backups and pending returns to Shopify stay automatic | Let the owner decide when data moves; keep only data-protecting jobs automatic
 
 ## 4. The mistakes that cost the most, and the rule that prevents each
 

@@ -88,6 +88,18 @@ const PROJECT_GROUPS = [
 
 const GLOBAL_GROUPS = [
   {
+    key: 'sync',
+    title: ['المزامنة', 'Synchronisation'],
+    fields: [
+      {
+        k: 'auto_sync',
+        label: ['مزامنة تلقائية في الخلفية (Shopify كل 5 دقائق، التتبع وMeta كل 30 دقيقة)', 'Synchro automatique en arrière-plan (Shopify 5 min, suivi et Meta 30 min)'],
+        type: 'bool',
+        hint: ['متوقفة: تتم المزامنة الكاملة بزر المزامنة في الشريط العلوي. النسخ الاحتياطي وإرسال المرتجعات إلى Shopify يبقيان تلقائيين.', 'Désactivée : synchro complète avec le bouton de la barre du haut. Sauvegardes et retours vers Shopify restent automatiques.'],
+      },
+    ],
+  },
+  {
     key: 'ai',
     title: ['الذكاء الاصطناعي (Claude)', 'Intelligence artificielle (Claude)'],
     test: 'ai',

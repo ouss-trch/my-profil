@@ -16,7 +16,6 @@ import {
   Moon,
   Package,
   Plus,
-  RefreshCw,
   Search,
   Settings,
   ShoppingBag,
@@ -30,10 +29,11 @@ import {
   X,
 } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
+import SyncButton from './SyncButton.jsx';
 import { useApp } from './ProjectContext.jsx';
 import { api, qs } from '../lib/api.js';
 import { useDebounced, useLocalStorage } from '../lib/hooks.js';
-import { Button, Field, IconButton, Input, Modal, Select, Textarea, cx, useAction, useToast } from './ui.jsx';
+import { Button, Field, IconButton, Input, Modal, Select, Textarea, cx, useAction } from './ui.jsx';
 import { da } from '../lib/format.js';
 
 export const NAV = [
@@ -309,13 +309,11 @@ function ProjectSwitcher() {
 export default function Layout() {
   const { t, lang, setLang } = useI18n();
   const { auth, refreshAuth } = useApp();
-  const toast = useToast();
   const location = useLocation();
   const [menu, setMenu] = useState(false);
   const [palette, setPalette] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
   const [theme, setTheme] = useLocalStorage('erp.theme.v', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-  const [syncing, setSyncing] = useState(false);
   const [counts, setCounts] = useState({});
 
   useEffect(() => {
@@ -354,19 +352,6 @@ export default function Layout() {
     };
   }, [location.pathname]);
 
-  const syncNow = async () => {
-    setSyncing(true);
-    try {
-      await api.post('/system/sync', {});
-      toast.ok(t(['تمت المزامنة', 'Synchronisé']));
-      window.dispatchEvent(new Event('erp:refresh'));
-    } catch (e) {
-      toast.error(e.code === 'project_required' ? t('err.project_required') : e.code || 'error');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const lock = async () => {
     await api.post('/auth/logout', {}).catch(() => {});
     await refreshAuth();
@@ -389,7 +374,7 @@ export default function Layout() {
           <Button variant="primary" size="sm" icon={Plus} onClick={() => setTaskOpen(true)} className="hidden sm:inline-flex">
             {t('c.newTask')}
           </Button>
-          <IconButton icon={RefreshCw} label={t('c.sync')} onClick={syncNow} className={syncing ? 'animate-spin' : ''} />
+          <SyncButton />
           <IconButton icon={theme === 'dark' ? Sun : Moon} label={t('c.theme')} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
           <button type="button" onClick={() => setLang(lang === 'ar' ? 'fr' : 'ar')} className="btn btn-ghost h-9 shrink-0 px-2 text-xs font-semibold" title={t('c.language')}>
             <Languages className="h-4 w-4" />

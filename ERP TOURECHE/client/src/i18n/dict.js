@@ -128,6 +128,13 @@ export const DICT = {
   'sens.wrong': ['كلمة المرور غير صحيحة', 'Mot de passe incorrect'],
 
   // أخطاء الخادم
+  'err.network_unreachable': ['تعذّر الوصول إلى الخدمة (الشبكة أو الخدمة متوقفة)', 'Service injoignable (réseau ou service en panne)'],
+  'err.access_denied': ['صلاحية ناقصة في التطبيق المربوط: راجع الصلاحيات ثم أعد المحاولة', 'Autorisation manquante dans l’app connectée'],
+  'err.shopify_auth_failed': ['بيانات دخول Shopify خاطئة أو منتهية: راجع Client ID و Client secret', 'Identifiants Shopify invalides'],
+  'err.shop_not_configured': ['نطاق Shopify غير مضبوط في الإعدادات', 'Domaine Shopify non configuré'],
+  'err.throttled': ['الخدمة تطلب التمهل: أعد المزامنة بعد دقيقة', 'Service saturé : réessayez dans une minute'],
+  'err.returns_failed': ['{x} مرتجعات لم تصل إلى مخزون Shopify', '{x} retours non transmis au stock Shopify'],
+  'err.credentials_missing': ['بيانات الربط ناقصة في الإعدادات', 'Identifiants manquants dans les paramètres'],
   'err.network_error': ['تعذّر الاتصال بالخادم', 'Connexion au serveur impossible'],
   'err.unauthorized': ['انتهت الجلسة، سجّل الدخول من جديد', 'Session expirée, reconnectez-vous'],
   'err.invalid_credentials': ['اسم المستخدم أو كلمة المرور غير صحيحة', 'Identifiants incorrects'],

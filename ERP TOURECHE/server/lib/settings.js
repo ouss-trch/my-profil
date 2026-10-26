@@ -28,6 +28,8 @@ export const SETTINGS = {
   carrier_weights: { scope: 'global', type: 'json', def: { success: 0.45, speed: 0.25, contact: 0.15, cost: 0.15 } },
   carrier_window_days: { scope: 'global', type: 'number', def: 120 },
   report_hour: { scope: 'global', type: 'number', def: 7 },
+  // المزامنة التلقائية (كل 5 دقائق…): متوقفة افتراضياً — المزامنة بزر الشريط العلوي
+  auto_sync: { scope: 'global', type: 'bool', def: false },
   // ——— لكل مشروع ———
   brand_name: { scope: 'project', type: 'string', def: '' },
   store_domain: { scope: 'project', type: 'string', def: '' },
