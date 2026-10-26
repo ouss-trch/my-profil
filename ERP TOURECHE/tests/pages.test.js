@@ -61,3 +61,34 @@ test('pages: A/B tests show on the page they use; sync keeps pins and flags dele
     assert.equal(find((p) => p.id === other.id), undefined);
   }
 });
+
+test('pages: without read_online_store_pages, product pages still sync and the Shopify info pages already listed are kept', async () => {
+  const shop = createProject({ name: 'Scope Shop', domain: 'scope.example' });
+  const p = createProduct(shop.id, { title: 'Lamp', price: 3000, stage: 'published' });
+  db.prepare('UPDATE products SET handle = ? WHERE id = ?').run('lamp', p.id);
+  const { setSetting } = await import('../server/lib/settings.js');
+  setSetting('shopify_shop', 'scope-test', shop.id);
+  setSetting('shopify_access_token', 'shpat_test', shop.id);
+  let denied = false;
+  const prev = globalThis.fetch;
+  globalThis.fetch = async () => {
+    const body = denied
+      ? { errors: [{ message: 'Access denied for pages field. Required access: `read_online_store_pages` access scope.', extensions: { code: 'ACCESS_DENIED' } }] }
+      : { data: { pages: { nodes: [{ id: 'gid://shopify/Page/1', title: 'FAQ', handle: 'faq', isPublished: true }], pageInfo: { hasNextPage: false } } } };
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    assert.equal((await pages.syncPages(shop.id)).synced, 2);
+    denied = true;
+    const s = await pages.syncPages(shop.id);
+    assert.equal(s.shopify_pages, 'access_denied');
+    assert.equal(s.synced, 1, 'the product page');
+    assert.equal(s.removed, 0);
+    assert.deepEqual(pages.listPages([shop.id]).map((x) => x.path).sort(), ['/pages/faq', '/products/lamp']);
+    // خطأ آخر (شبكة، رمز مرفوض) يبقى خطأ ظاهراً
+    globalThis.fetch = async () => new Response('{}', { status: 401, headers: { 'content-type': 'application/json' } });
+    await assert.rejects(pages.syncPages(shop.id), /shopify_auth_failed/);
+  } finally {
+    globalThis.fetch = prev;
+  }
+});

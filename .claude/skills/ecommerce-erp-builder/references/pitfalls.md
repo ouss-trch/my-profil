@@ -48,7 +48,7 @@
 | Restocking would double-count | Returns that existed before the ledger may already have been restocked by hand | Never backfill automatically: list them once and let the owner pick "restock now" or "already restocked" (the latter records the movement without changing stock) |
 | A return restocked a product that was never deducted | A non-Shopify order (Sheets) never reduced Shopify stock | Restock only where the sale was deducted; mark the other lines `not_deducted` and still count the return cost |
 | First order sync fails with `Invalid timestamp for query filter created_at` | Shopify's search rejects relative dates such as `created_at:>-60d` | Send an absolute ISO date; tested against the live store |
-| Store pages still say "missing permission" after a new app version adds `read_online_store_pages` | The client-credentials token is cached for 24 h and carries the old scopes | On `ACCESS_DENIED`, drop the cached token and retry once; a scope that is really missing still fails after that single retry |
+| Store pages still say "missing permission" after a new app version adds `read_online_store_pages` | Releasing a version is not enough: each store must approve the new scope (Shopify asks when the app is opened from the store admin); the cached token also carries the old scopes | Tell the owner to open the app from Shopify admin → Apps and approve. On `ACCESS_DENIED` drop the cached token and retry once. The secondary info pages never block product pages: without the scope they are skipped and kept, not deleted |
 
 ## Verification checklist (run before every delivery)
 

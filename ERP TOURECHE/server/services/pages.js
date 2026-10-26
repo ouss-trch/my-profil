@@ -53,8 +53,16 @@ export async function syncPages(projectId) {
   if (!base) throw badRequest('store_domain_required');
   const cfg = projectConfig(projectId);
   const seen = [];
+  // صفحات المعلومات (من نحن، الأسئلة الشائعة…) ثانوية: إن نقصت صلاحية read_online_store_pages
+  // تُترك كما هي ولا تتوقف صفحات المنتجات، وهي التي تُنسب إليها الطلبيات واختبارات A/B
+  let shopifyPages = null;
   if (shopify.isConfigured(cfg)) {
-    for (const p of await shopify.listPages(cfg)) {
+    try {
+      shopifyPages = await shopify.listPages(cfg);
+    } catch (e) {
+      if (!/access_denied/.test(e.message)) throw e;
+    }
+    for (const p of shopifyPages || []) {
       const { u, path } = parse(`/pages/${p.handle}`, base);
       const url = canonical(u);
       upsertSynced(projectId, { kind: 'page', url, path, title: p.title, shopify_id: p.id, template_suffix: p.templateSuffix || null, published: p.isPublished ? 1 : 0 });
@@ -69,13 +77,14 @@ export async function syncPages(projectId) {
   }
   // المضافة يدوياً (synced_at فارغ) لا تُعدّ محذوفة أبداً
   const stale = db
-    .prepare(`SELECT id, pinned FROM store_pages WHERE project_id = ? AND synced_at IS NOT NULL ${seen.length ? `AND url NOT IN (${inList(seen)})` : ''}`)
+    .prepare(`SELECT id, pinned FROM store_pages WHERE project_id = ? AND synced_at IS NOT NULL ${shopifyPages ? '' : "AND kind != 'page'"} ${seen.length ? `AND url NOT IN (${inList(seen)})` : ''}`)
     .all(projectId, ...seen);
   for (const s of stale) {
     if (s.pinned) db.prepare('UPDATE store_pages SET gone = 1 WHERE id = ?').run(s.id);
     else db.prepare('DELETE FROM store_pages WHERE id = ?').run(s.id);
   }
-  return { synced: seen.length, removed: stale.filter((s) => !s.pinned).length, gone: stale.filter((s) => s.pinned).length };
+  const out = { synced: seen.length, removed: stale.filter((s) => !s.pinned).length, gone: stale.filter((s) => s.pinned).length };
+  return shopify.isConfigured(cfg) && !shopifyPages ? { ...out, shopify_pages: 'access_denied' } : out;
 }
 
 /** إضافة رابط أو عدة روابط (سطر لكل رابط) — تُثبَّت مباشرة */
