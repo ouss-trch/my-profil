@@ -158,15 +158,29 @@ function SettingInput({ def, value, onChange, id }) {
   if (def.type === 'bool') return <Toggle checked={Boolean(value)} onChange={onChange} label={t(def.label)} />;
   if (value && typeof value === 'object' && value.secret)
     return (
-      <Input
-        id={id}
-        type="password"
-        autoComplete="new-password"
-        className="ltr"
-        value={value.next ?? ''}
-        placeholder={value.set ? `${t(['محفوظ', 'Enregistré'])} ${value.hint} — ${t(['اكتب لاستبداله', 'saisir pour remplacer'])}` : t(['غير محدد', 'Non défini'])}
-        onChange={(e) => onChange({ ...value, next: e.target.value })}
-      />
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          type="password"
+          autoComplete="new-password"
+          className="ltr min-w-0 flex-1"
+          value={value.next ?? ''}
+          disabled={value.clear}
+          placeholder={
+            value.clear
+              ? t(['سيُمسح عند الحفظ', 'Sera effacé à l’enregistrement'])
+              : value.set
+                ? `${t(['محفوظ', 'Enregistré'])} ${value.hint} — ${t(['اكتب لاستبداله', 'saisir pour remplacer'])}`
+                : t(['غير محدد', 'Non défini'])
+          }
+          onChange={(e) => onChange({ ...value, next: e.target.value })}
+        />
+        {value.set && (
+          <Button variant="ghost" icon={value.clear ? null : Trash2} aria-pressed={Boolean(value.clear)} onClick={() => onChange({ ...value, next: '', clear: !value.clear })}>
+            {value.clear ? t(['تراجع', 'Annuler']) : t(['مسح', 'Effacer'])}
+          </Button>
+        )}
+      </div>
     );
   if (def.type === 'enum') return <Select id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value)} options={def.values.map((v) => ({ value: v, label: v || '—' }))} />;
   if (def.type === 'list') return <Input id={id} className="ltr" value={(value || []).join(', ')} onChange={(e) => onChange(e.target.value.split(/[,\s]+/).filter(Boolean).map((x) => x.replace(/^act_/, '')))} />;
@@ -191,7 +205,7 @@ function SettingInput({ def, value, onChange, id }) {
 }
 
 function SettingsForm({ groups, load, save, projectId }) {
-  const { t } = useI18n();
+  const { t, err } = useI18n();
   const { run, busy } = useAction();
   const { data, error, loading, reload } = useApi(load);
   const [vals, setVals] = useState(null);
@@ -204,7 +218,8 @@ function SettingsForm({ groups, load, save, projectId }) {
     const out = {};
     for (const [k, v] of Object.entries(vals)) {
       if (v && typeof v === 'object' && v.secret) {
-        if (v.next !== undefined && v.next !== '') out[k] = v.next;
+        if (v.clear) out[k] = null;
+        else if (v.next !== undefined && v.next !== '') out[k] = v.next;
       } else if (JSON.stringify(v) !== JSON.stringify(data[k])) out[k] = v === '' ? null : v;
     }
     return out;
@@ -251,11 +266,18 @@ function SettingsForm({ groups, load, save, projectId }) {
           </div>
           {Object.entries(tests)
             .filter(([s, r]) => (g.tests || [g.test]).includes(s) && r && !r.loading)
-            .map(([s, r]) => (
-              <pre key={s} className={cx('ltr mt-3 max-h-40 overflow-auto rounded-lg p-2 text-[11px]', r.ok ? 'bg-good/5 text-good' : 'bg-bad/5 text-bad')}>
-                {s}: {r.ok ? JSON.stringify(r.result, null, 1).slice(0, 800) : r.error}
-              </pre>
-            ))}
+            .map(([s, r]) =>
+              r.ok ? (
+                <pre key={s} className="ltr mt-3 max-h-40 overflow-auto rounded-lg bg-good/5 p-2 text-[11px] text-good">
+                  {s}: {JSON.stringify(r.result, null, 1).slice(0, 800)}
+                </pre>
+              ) : (
+                // «shopify: shopify: shopify_auth_failed» ← رسالة تقول ماذا تفعل؛ النص الأصلي في title
+                <p key={s} className="mt-3 rounded-lg bg-bad/5 p-2 text-xs text-bad" title={r.error}>
+                  {err({ code: String(r.error || '').replace(/^([a-z_]+:\s*)+/i, '') })}
+                </p>
+              ),
+            )}
         </Card>
       ))}
       <div className="sticky bottom-3 flex justify-end">

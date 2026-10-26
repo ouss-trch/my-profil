@@ -19,18 +19,33 @@ function shopDomain(cfg) {
   return s.includes('.') ? s : `${s}.myshopify.com`;
 }
 
+/**
+ * تطبيق Dev Dashboard (Client ID + Client secret) هو الطريقة المعتمدة، فيُستعمل أولاً إن وُجد؛
+ * رمز shpat_ القديم احتياطي فقط. (كان العكس: رمز قديم منتهٍ في الحقل يُفشل كل شيء ولا يُجرَّب التطبيق أبداً)
+ */
 async function accessToken(cfg) {
-  if (cfg.shopify_access_token) return cfg.shopify_access_token;
-  if (!cfg.shopify_client_id || !cfg.shopify_client_secret) throw new IntegrationError('shopify', 'config', 'credentials_missing');
+  if (!cfg.shopify_client_id || !cfg.shopify_client_secret) {
+    if (cfg.shopify_access_token) return cfg.shopify_access_token;
+    throw new IntegrationError('shopify', 'config', 'credentials_missing');
+  }
   const key = `${cfg.projectId}:${cfg.shopify_client_id}`;
   const cached = tokenCache.get(key);
   if (cached && cached.expires > Date.now() + 60e3) return cached.token;
-  const { data } = await request('shopify', `https://${shopDomain(cfg)}/admin/oauth/access_token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: cfg.shopify_client_id, client_secret: cfg.shopify_client_secret }).toString(),
-  });
-  if (!data?.access_token) throw new IntegrationError('shopify', 'auth', 'shopify_auth_failed');
+  let data;
+  try {
+    ({ data } = await request('shopify', `https://${shopDomain(cfg)}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: cfg.shopify_client_id, client_secret: cfg.shopify_client_secret }).toString(),
+    }));
+  } catch (e) {
+    // سبب الرفض بكلمات يفهمها صاحب المتجر: التطبيق والمتجر في مؤسستين مختلفتين، أو Client ID/secret خاطئ
+    const raw = JSON.stringify(e.details?.data ?? e.message ?? '');
+    if (/shop_not_permitted/i.test(raw)) throw new IntegrationError('shopify', 'auth', 'shop_not_permitted', e.details);
+    if (['auth', 'invalid', 'not_found'].includes(e.kind)) throw new IntegrationError('shopify', 'auth', 'shopify_client_invalid', e.details);
+    throw e;
+  }
+  if (!data?.access_token) throw new IntegrationError('shopify', 'auth', 'shopify_client_invalid');
   tokenCache.set(key, { token: data.access_token, expires: Date.now() + (Number(data.expires_in) || 86399) * 1000 });
   return data.access_token;
 }
