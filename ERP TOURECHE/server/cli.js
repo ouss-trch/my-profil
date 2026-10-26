@@ -29,26 +29,44 @@ async function resetPassword() {
   console.log(`✓ تم تغيير كلمة مرور ${a}`);
 }
 
-/** استرجاع قاعدة البيانات من نسخة احتياطية (جهاز جديد أو بعد عطل): يتحقق من النسخة ويحفظ القاعدة الحالية أولاً */
+/** استرجاع قاعدة البيانات من نسخة احتياطية (جهاز جديد أو بعد عطل): يتحقق من نسخة عاملة بجانب القاعدة، يحفظ القاعدة الحالية، ثم يستبدلها دفعة واحدة */
 export function restore(source, target = config.dbFile) {
   if (!source || !fs.existsSync(source)) throw new Error(`backup_not_found: ${source || ''}`);
-  const check = new Database(source, { readonly: true, fileMustExist: true });
+  // نعمل على نسخة في مجلد البيانات: الملف الأصلي لا يُلمس (قد يكون للقراءة فقط) وملفات WAL المؤقتة تُنشأ بجانبها
+  const work = path.join(path.dirname(target), `.restore-${Date.now()}.db`);
+  const clean = (f) => ['', '-wal', '-shm'].forEach((ext) => fs.rmSync(`${f}${ext}`, { force: true }));
+  fs.copyFileSync(source, work);
   let orders;
   try {
-    if (check.pragma('integrity_check', { simple: true }) !== 'ok') throw new Error('backup_corrupt');
-    if (!check.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'").get()) throw new Error('not_an_erp_backup');
-    orders = check.prepare('SELECT COUNT(*) AS n FROM orders').get().n;
-  } finally {
-    check.close();
+    const check = new Database(work, { fileMustExist: true });
+    try {
+      if (check.pragma('integrity_check', { simple: true }) !== 'ok') throw new Error('backup_corrupt');
+      if (!check.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'").get()) throw new Error('not_an_erp_backup');
+      orders = check.prepare('SELECT COUNT(*) AS n FROM orders').get().n;
+      check.pragma('wal_checkpoint(TRUNCATE)');
+    } finally {
+      check.close();
+    }
+  } catch (e) {
+    clean(work);
+    throw e;
   }
   let saved = null;
   if (fs.existsSync(target)) {
+    // كتابة ما في ملف WAL داخل القاعدة قبل حفظها حتى تكون النسخة المحفوظة كاملة؛ قاعدة تالفة (سبب الاسترجاع غالباً) تُحفظ كما هي
+    try {
+      const cur = new Database(target, { fileMustExist: true });
+      cur.pragma('wal_checkpoint(TRUNCATE)');
+      cur.close();
+    } catch {
+      /* تُنسخ كما هي */
+    }
     saved = path.join(config.backupsDir, `before-restore-${Date.now()}.db`);
     fs.copyFileSync(target, saved);
   }
   for (const ext of ['-wal', '-shm']) fs.rmSync(`${target}${ext}`, { force: true });
-  fs.copyFileSync(source, `${target}.part`);
-  fs.renameSync(`${target}.part`, target);
+  for (const ext of ['-wal', '-shm']) fs.rmSync(`${work}${ext}`, { force: true });
+  fs.renameSync(work, target);
   return { orders, saved };
 }
 

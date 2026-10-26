@@ -3,7 +3,7 @@
 نظام إدارة متاجر **الدفع عند الاستلام** في الجزائر: من الطلبية إلى التسليم، ومن المنتج إلى الإعلان، مع **مستشار** يحلل بياناتك ويقترح ما تفعله.
 Système de gestion pour boutiques **COD** en Algérie : de la commande à la livraison, du produit à la pub, avec un **Conseiller** qui analyse vos données.
 
-> يعمل على جهازك (macOS / Windows / Linux) وتفتحه من هاتفك عبر **Tailscale** كتطبيق.
+> يعمل 24/7 على **VPS** (Docker بجانب n8n، انظر أدناه) أو على جهازك (macOS / Windows / Linux)، وتفتحه من هاتفك كتطبيق.
 > Tourne sur votre ordinateur et s’ouvre sur le téléphone via **Tailscale**, comme une application.
 
 ---
@@ -57,6 +57,39 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 - **macOS:** إعدادات النظام ← البطارية ← منع السكون عند توصيل الشاحن؛ أو `caffeinate -dimsu &`.
 - **Windows:** خيارات الطاقة ← السكون: أبداً؛ وأضف `start.bat` إلى «برامج بدء التشغيل».
 - البديل: `npx pm2 start server/index.js --name erp && npx pm2 save`.
+
+---
+
+## التشغيل 24/7 على VPS (Hostinger) بجانب n8n
+
+الـ ERP يعمل في حاوية Docker مستقلة على نفس الخادم، خلف Traefik الموجود مع n8n، بدومين فرعي و HTTPS تلقائي. حاوية n8n لا تُلمس.
+
+1. **الدومين:** أضف سجل `A` باسم `erp` (مثلاً `erp.souqnna.com`) ← عنوان IP الخادم، من حيث تدير DNS الدومين. مع Cloudflare: اجعله «DNS only» حتى تصدر الشهادة.
+2. **على الخادم** (hPanel ← VPS ← Browser terminal، أو SSH):
+   ```bash
+   cd /opt && git clone -b claude/erp-toureche-system-fdir8x https://github.com/ouss-trch/my-profil.git erp
+   cd "/opt/erp/ERP TOURECHE" && bash deploy/install-vps.sh erp.souqnna.com
+   ```
+   السكربت يقرأ إعداد Traefik من حاوية n8n (الشبكة، المنافذ، الشهادة)، يتحقق من الدومين، يبني الـ ERP ويشغّله، ثم يتأكد أنه يعمل.
+3. افتح `https://erp.souqnna.com` ← حساب المدير + كلمة المرور الحساسة + أول مشروع. في الإعدادات ضع «الرابط العام لاختبارات الصفحات» = `https://erp.souqnna.com`.
+4. **نقل بياناتك من الحاسوب** (إن كان لديك): انسخ آخر ملف `toureche-YYYY-MM-DD.db` وملف `data/.secret-key` إلى الخادم ثم:
+   ```bash
+   bash deploy/erp.sh restore /root/toureche-2026-10-26.db
+   bash deploy/erp.sh import-key /root/.secret-key
+   ```
+5. **n8n ↔ ERP على نفس الخادم:** من n8n استعمل `http://erp-toureche:3600/api/hooks/<slug>/orders` (شبكة داخلية، أسرع ولا يمر عبر الإنترنت).
+
+| الأمر | ماذا يفعل |
+|---|---|
+| `bash deploy/erp.sh update` | جلب آخر نسخة من GitHub وإعادة البناء — البيانات لا تتأثر |
+| `bash deploy/erp.sh status` · `logs` | الحالة · آخر السجلات |
+| `bash deploy/erp.sh backup` | نسخة احتياطية الآن |
+| `bash deploy/erp.sh restore FILE.db` | استرجاع (يتحقق من الملف، يحفظ القاعدة الحالية، ويعيد تشغيل الـ ERP في كل الحالات) |
+| `bash deploy/erp.sh reset-password USER PASS` | كلمة مرور منسية |
+
+**النسخ خارج الخادم:** البيانات في volume `erp-toureche_erp_data`. لنسخة يومية في Google Drive: ثبّت `rclone` واربطه بـ Drive (`rclone config`)، أضف `ERP_BACKUP_MIRROR=/offsite` إلى `deploy/.env` ثم `bash deploy/erp.sh update`، وأضف إلى `crontab -e`:
+`30 3 * * * rclone copy "/opt/erp/ERP TOURECHE/deploy/offsite" gdrive:ERP-backups`
+وفعّل أيضاً النسخ الاحتياطي للـ VPS من hPanel.
 
 ---
 

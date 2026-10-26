@@ -2,10 +2,11 @@ import os from 'node:os';
 import { config } from './config.js';
 import { createApp } from './app.js';
 import { startScheduler } from './services/scheduler.js';
+import { db } from './db/index.js';
 
 const app = createApp();
 
-app.listen(config.port, config.host, () => {
+const server = app.listen(config.port, config.host, () => {
   const ips = Object.values(os.networkInterfaces())
     .flat()
     .filter((i) => i && i.family === 'IPv4' && !i.internal)
@@ -20,3 +21,14 @@ app.listen(config.port, config.host, () => {
   console.log('');
   startScheduler();
 });
+
+// إيقاف نظيف (docker stop / Ctrl+C): نغلق الاتصالات ثم قاعدة البيانات
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.once(sig, () => {
+    server.close(() => {
+      db.close();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}

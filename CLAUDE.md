@@ -4,7 +4,8 @@ The main project here is **ERP TOURECHE** (`ERP TOURECHE/`). It is the owner's E
 
 - Shopify stores (souqnna.com and others), Meta Ads, carriers (Yalidine · NOEST · ZR Express), n8n, AI.
 - Multi-project, Arabic/French, dark/light.
-- It runs on the owner's computer and opens on the phone through Tailscale.
+- It runs 24/7 on the owner's Hostinger VPS (KVM 2), in Docker next to n8n behind the same Traefik, on its own subdomain. See `ERP TOURECHE/deploy/` and the README section on the VPS. It can also run on a computer.
+- Deploy updates on the VPS with `bash deploy/erp.sh update`.
 - Full docs: `ERP TOURECHE/README.md`.
 
 ## Working rules (from the owner)
