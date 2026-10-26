@@ -14,6 +14,7 @@ Reference implementation: `ERP TOURECHE/`. Copy its modules, then adapt them.
 | Client | React 19, Vite, Tailwind 3, react-router 7, recharts, lucide-react | Lazy routes and manual chunks |
 | Font | IBM Plex Sans Arabic (bundled with `@fontsource`) | Works offline and on Tailscale |
 | Access | `tailscale serve --bg 3600` gives HTTPS on the tailnet; the client is a PWA | Opens as a phone app; no port forwarding |
+| 24/7 hosting | Docker image (`Dockerfile`, non-root, `/data` volume, healthcheck) behind the Traefik that already serves n8n | `deploy/install-vps.sh` reads network, entrypoints and certresolver from the n8n container |
 
 Scripts:
 
@@ -32,7 +33,8 @@ server/
   db/index.js       # MIGRATIONS array, schema_version
   lib/              # auth, crypto (AES-256-GCM), settings registry, statuses, wilayas, http (retry), audit, util
   integrations/     # shopify, meta, carriers/{yalidine,noest,zr}, n8n, ai, images
-  services/         # orders, shipments, analytics, ads, advisor, splits, products, seo, sync, scheduler, assistant
+  services/         # orders, shipments, analytics, ads, advisor, splits, products, seo, sync, scheduler, assistant,
+                    # contacts, pages, backup, collections
   routes/           # auth, core (meta, hooks), orders, products, ads, insights (advisor + splits), misc
 client/src/
   lib/              # api.js (project header, sensitive retry), format.js (bidi-safe numbers), hooks.js, demo.js
@@ -53,7 +55,8 @@ The schema has these tables:
 - orders, order_events, customer_flags
 - carrier_tariffs
 - ad_spend, ad_campaigns, campaign_products, creatives, ad_drafts
-- expenses, tasks, contacts
+- expenses, tasks, contacts (suppliers and carrier desks), store_pages
+- carrier_payouts, with `orders.payout_id` linking each delivered or returned order to the payout that settled it
 - audit_log, ai_conversations, ai_actions, job_state
 - split_tests, split_variants, split_clicks
 - insight_states, journal, advisor_reports
@@ -95,6 +98,12 @@ All settings live in one typed registry (`lib/settings.js`): key, scope (global/
   - The Origin host must equal the Host header, or appear in `ERP_ALLOWED_ORIGINS`.
   - Inbound hooks are exempt. They authenticate with `x-erp-key`, compared with `safeEqual`.
 - **CSP:** no inline scripts. Pre-paint code such as the theme script lives in `public/theme-init.js`.
+- **Public URL hardening** (VPS):
+  - **First-run setup token.** While no user exists, `/api/auth/setup` needs the token from `data/.setup-token`. The token is printed at startup and by `deploy/erp.sh setup-token`; a direct localhost visit is exempt.
+  - **Trusted proxies.** `ERP_TRUST_PROXY` takes an Express trust list. The Docker image uses `loopback, uniquelocal`, so rate limits and lockouts count the visitor and not Traefik.
+  - **HSTS** is on.
+  - **Local images.** Every local image read goes through `uploadPath()`, which refuses paths outside `uploads/`; remote image fetches are https only.
+- **Dependencies:** pin exact versions; never install a release younger than two weeks; run `npm audit --omit=dev` after each change.
 - **Logging and backups:**
   - An audit log records every write.
   - A nightly SQLite backup goes to `data/backups` and keeps 14 days.
@@ -155,6 +164,7 @@ Every job:
    - then launch campaigns as PAUSED;
    - budgets and edits behind the guards.
 6. **Finance:** delivered revenue − costs − ad spend at the editable FX rate, plus expenses.
+   - **Collections:** what each carrier collected and has not paid back, with payouts reconciled by tracking number. Without it, delivered money can silently disappear.
 7. **Advisor** with rules, then the AI report, then the journal.
 8. **A/B landing pages** on the same domain.
 9. **n8n:** inbound order hook, outbound events, Sheets bridge, morning report.

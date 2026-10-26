@@ -88,6 +88,12 @@ Every adapter exposes the same interface: `isConfigured, wilayas, communes, desk
 - **Map carrier statuses** onto the ERP status machine, with a table per carrier. Carrier statuses are free text in Arabic or French: match on normalized keywords and log anything unknown instead of guessing.
 - **Delivery type:** stop desk (office) or home delivery. A stop desk needs the carrier's desk or center id; home delivery needs a commune.
 - **Wilayas:** carriers still use 58 wilayas. The 2026 wilayas (59–69) ship as their parent (`shipAs`).
+- **Payouts (collections):**
+  - Carriers pay the COD cash back in batches, minus delivery fees and minus return fees for returned parcels.
+  - Each payout comes with a statement listing tracking numbers.
+  - The ERP reconciles by pasting that list: it extracts tokens that contain a digit and matches `orders.tracking`. Matched orders are flagged as open, already paid, not yet delivered in the ERP, or unknown.
+  - The expected amount is Σ(total − delivery fee) − Σ return fees. When a fee is unknown, the order is flagged rather than counted as 0.
+  - No carrier payout API is wired. Don't guess endpoints; add one only from the carrier's documentation.
 - **Scoring the best carrier per wilaya:**
   - Weights: delivery success 45%, speed 25%, driver contact quality 15%, price 15%. Store them in `carrier_weights` so they are editable.
   - Use local history when the sample is big enough, otherwise fall back to the carrier's estimate.

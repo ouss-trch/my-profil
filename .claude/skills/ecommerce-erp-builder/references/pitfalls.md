@@ -33,6 +33,16 @@
 | A synced row was deleted, or manual rows were flagged "gone" | Sync stale-detection with an empty `NOT IN (NULL)` list, and manual rows not told apart from synced ones | Mark synced rows (`synced_at`) and only those can go stale; handle the empty list |
 | React shows a stray "0" | `{count && <X/>}` with a numeric 0 | Use `Boolean(x) &&` or a ternary |
 | "Contacts" page nobody uses | A generic address book with no link to any workflow | Tie each kind to a job: suppliers ↔ products and reorder; carrier desks ↔ stuck parcels in the order drawer. Otherwise remove the page |
+| Anyone could create the admin on a fresh public install | `/api/auth/setup` was open while no user existed (a new subdomain shows up in certificate logs within minutes) | A setup token in `data/.setup-token` (0600), printed by the installer; localhost is exempt; deleted after setup; re-check the user count right before the insert |
+| One wrong-password streak locked out every user on the VPS | `trust proxy 'loopback'` behind Traefik in Docker made `req.ip` Traefik's private IP for everyone | `ERP_TRUST_PROXY="loopback, uniquelocal"` in the image; test with two different IPs (client 172.18.0.1 vs Traefik 172.18.0.2) |
+| `/uploads/../.secret-key` readable through a product image URL | Image URLs stored in the DB were joined to the uploads path without a containment check | One `uploadPath()` helper: `path.resolve` plus a check against `uploadsDir + sep`; remote fetches https only |
+| `npm audit` shows high advisories, and the fix is a 4-day-old release | A brand-new release is a supply-chain risk of its own | Pick the newest patched version at least two weeks old; pin transitive ones with `overrides`; note which advisory remains and why it doesn't apply |
+| A pasted carrier statement reports words ("RELEVE", "VERSEMENT") as unknown parcels | The token regex accepted any long word | Tracking tokens must contain a digit |
+| Expected payout higher than reality | Orders with no `shipping_cost` and no tariff counted a fee of 0 | Return `fee_known`; show "fees unknown for N orders" and fix the tariffs |
+| Arabic hint containing a shell command renders scrambled | Bidi reordering of Latin and punctuation runs inside RTL text | Put the command in `<code dir="ltr">`, or wrap it in `⁦…⁩` in strings |
+| The Docker build fails in the sandbox (apt mirror, node-gyp download) | The network policy blocks them; on the VPS they work | Test a runtime-only image built from prebuilt `node_modules` and `client/dist`; keep the real Dockerfile unchanged |
+| `install-vps.sh` exits silently | `set -o pipefail` plus `ip route` or `getent` returning nothing | Add `\|\| true` to probe commands and print what was found |
+| Restore fails: "attempt to write a readonly database" | Opening a WAL-mode backup from a `:ro` mount | Copy it next to the target first, check it (integrity, schema_version), then rename it into place; always restart the ERP |
 
 ## Verification checklist (run before every delivery)
 
@@ -82,7 +92,15 @@
    - saving is disabled;
    - Meta figures are illustrative until their token is connected.
 
-**Real installation:**
+**VPS installation (24/7, next to n8n):**
+
+1. Add a DNS `A` record for the subdomain (e.g. `erp`) pointing to the VPS IP. With Cloudflare, use "DNS only" until the certificate is issued.
+2. `git clone -b <branch> <repo> /opt/erp`, then `cd "/opt/erp/ERP TOURECHE"` and run `bash deploy/install-vps.sh erp.<domain>`.
+3. Open `https://erp.<domain>`. Enter the setup token the script printed, then create the admin, the sensitive password and the first project.
+4. Move data from the computer: `deploy/erp.sh restore <file.db>` and `deploy/erp.sh import-key <.secret-key>`.
+5. From n8n on the same server, call `http://erp-toureche:3600/api/hooks/<slug>/orders`.
+
+**Real installation (computer):**
 
 1. Install Node 22.
 2. Copy the folder to the computer.

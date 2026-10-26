@@ -37,7 +37,7 @@ node scripts/ui-audit.cjs http://localhost:3600 out.json   # contrast, names, la
 
 ## Skills in this repo (`.claude/skills/`)
 
-- **ecommerce-erp-builder**: how this ERP was built. It covers the question-first workflow, architecture, Shopify/Meta/carriers/n8n knowledge, pitfalls with their fixes, verification, and delivery. Use it for any new store project (e.g. «مكتبة ألواني»).
+- **ecommerce-erp-builder**: how this ERP was built. Start with `references/journey.md` (brief, current state, phases, lessons, reuse guide). It covers the question-first workflow, architecture, Shopify/Meta/carriers/n8n knowledge, pitfalls with their fixes, verification, and delivery. Use it for any new store project (e.g. «مكتبة ألواني»).
 - **impeccable**: frontend design and quality, by pbakaus (Apache-2.0). Use `audit`, `polish`, `harden` and `critique` on the UI. Its engine downloads a binary on first run; if that is blocked, apply its reference checklists (`reference/audit.md`, `craft-floor.md`, `operate.md`) and `scripts/ui-audit.cjs` instead.
 - **Review and improvement skills** (vendored with their licenses; sources in `ERP TOURECHE/SKILLS.md`):
   - security: `sentry-security-review`, `find-bugs`, `sharp-edges`, `supply-chain-risk-auditor`, `skill-scanner` (scan any new skill before adding it);

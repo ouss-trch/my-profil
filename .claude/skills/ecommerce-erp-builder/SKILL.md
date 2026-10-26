@@ -1,6 +1,6 @@
 ---
 name: ecommerce-erp-builder
-description: Build or extend a professional ERP/CRM for a cash-on-delivery (COD) e-commerce business in Algeria or the Maghreb, connected to Shopify, Meta Ads (Business Manager, pixel, campaigns), local carriers (Yalidine, NOEST, ZR Express), n8n and AI. Starts with a short batch of important questions, then builds about 80% of a working system, verifies it and delivers a phone-ready link. Use whenever the user wants an ERP, CRM, back-office, order or confirmation system, ads dashboard, carrier dashboard or landing-page A/B testing for an online store. Triggers include "ERP", "CRM", "نظام إدارة", "إدارة الطلبيات", "تأكيد الطلبيات", "الدفع عند الاستلام", "COD", "متجر شوبيفاي", "Yalidine", "ZR Express", "NOEST", "Meta ads", "Business Manager", "gestion de commandes", "boutique en ligne Algérie", and new store projects such as "مكتبة ألواني".
+description: Build or extend a professional ERP/CRM for a cash-on-delivery (COD) e-commerce business in Algeria or the Maghreb, connected to Shopify, Meta Ads (Business Manager, pixel, campaigns), local carriers (Yalidine, NOEST, ZR Express), n8n and AI. Starts with a short batch of important questions, then builds about 80% of a working system, verifies it and delivers a phone-ready link. Use whenever the user wants an ERP, CRM, back-office, order or confirmation system, ads dashboard, carrier dashboard or landing-page A/B testing for an online store. Triggers include "ERP", "CRM", "نظام إدارة", "إدارة الطلبيات", "تأكيد الطلبيات", "الدفع عند الاستلام", "COD", "متجر شوبيفاي", "Yalidine", "ZR Express", "NOEST", "Meta ads", "Business Manager", "gestion de commandes", "boutique en ligne Algérie", "التحصيل", "encaissements transporteur", "ERP على VPS", and new store projects such as "مكتبة ألواني".
 ---
 
 # E-commerce ERP builder (COD · Algeria)
@@ -9,6 +9,7 @@ The reference build is **ERP TOURECHE** in this repository (`ERP TOURECHE/`). Re
 
 | File | Read it when |
 |---|---|
+| `references/journey.md` | **First**, when continuing ERP TOURECHE or starting a similar ERP: the brief, current state, phases, lessons, reuse guide |
 | `references/architecture.md` | Setting up the stack, data model, security, multi-project, build order |
 | `references/integrations.md` | Touching Shopify, Meta Marketing API, Yalidine/NOEST/ZR, n8n or AI |
 | `references/growth.md` | KPIs, the Advisor, ad decisions, same-domain A/B pages, niche notes (e.g. مكتبة ألواني) |
@@ -90,6 +91,12 @@ Every module ships with:
 
 For UI quality, use the vendored **impeccable** skill (`audit`, `polish`, `harden`) or its checklists, plus `scripts/ui-audit.cjs` for measured results.
 
+Before anything goes on a public URL (a VPS, a funnel), run a security pass with the vendored `sentry-security-review`, `sharp-edges` and `supply-chain-risk-auditor` skills. Check at least:
+
+- the first-run setup is protected (setup token);
+- the client IP behind the proxy;
+- file paths built from stored data;
+- dependency advisories.
 
 Use the checklist in `references/pitfalls.md`:
 
@@ -108,9 +115,9 @@ Fix, re-run, then report the numbers.
    - Publish it as an Artifact: an index page without `<html>`/`<head>`, plus every file through `files` with `root`.
    - Give the user the link.
 2. **Real use.**
-   - `npm run setup && npm start` on the user's computer.
-   - `tailscale serve --bg 3600`.
-   - Open the Tailscale URL on the phone, then "Add to Home Screen".
+   - On the user's computer: `npm run setup && npm start`, then `tailscale serve --bg 3600`.
+   - Or 24/7 on a VPS that already runs n8n behind Traefik: DNS `A` record for a subdomain, then `bash deploy/install-vps.sh <subdomain>`. It prints the setup token.
+   - Open the URL on the phone, then "Add to Home Screen".
 3. **Code.** Commit on the assigned branch and push. If the push returns 403, give the user the GitHub connect link and the Claude GitHub App install step; the commits stay local until then.
 4. **Final message** in about 10 lines:
    - what was built;
@@ -139,6 +146,7 @@ Iterate on real data with the user: thresholds, wording, extra reports. Update t
 When a session discovers a new pitfall, API change or business rule:
 
 - add one line to the right reference file: what happened, the cause, the fix;
+- after a finished phase, add its row to `references/journey.md` (sections 2 and 3);
 - keep SKILL.md under 200 lines.
 
 To use the skill outside this repo, copy the folder to `~/.claude/skills/ecommerce-erp-builder/`. To use it in claude.ai, zip the folder and upload it under Settings → Capabilities → Skills.
