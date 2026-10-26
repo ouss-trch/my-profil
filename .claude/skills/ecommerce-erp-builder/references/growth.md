@@ -35,6 +35,11 @@ Campaign diagnosis, in order:
 4. CPM above 4: `expensive_audience`.
 5. Frequency rising while CTR falls: `audience_fatigue`.
 
+- **Break-even carries the real cost of returns:** each delivered order also pays for its share of returns, `(1 − delivery rate) / delivery rate × return cost`.
+  - Return cost = return fee + packaging + loss rate × unit cost.
+  - The loss rate is the share of returned units marked damaged or missing over 90 days, used once there are at least 10 units.
+- The per-product test shows returned orders, the return rate and the real return cost, so a product with a high return rate is judged on what it really costs.
+
 ## Advisor (`services/advisor.js`)
 
 **Rule areas:** confirmation, delivery, carriers, wilayas, products, stock, catalog, ads, customers, finance, timing, split tests, setup.

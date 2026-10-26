@@ -6,6 +6,7 @@ import { addDays, clamp, daysBetween, dzDay, dzDayStartIso, median, nowIso, roun
 import { CARRIERS } from '../integrations/carriers/index.js';
 import { inList } from './projects.js';
 import { tariff } from './shipments.js';
+import { returnCost as returnCostOf, returnsByOrder } from './returns.js';
 
 const q = (list) => list.map((s) => `'${s}'`).join(',');
 const CONFIRMED_EVER = q(['confirmed', ...SHIPPED_EVER]);
@@ -195,7 +196,11 @@ export function stats(projectIds, fromDay, toDay) {
   const revenue = deliveredC.reduce((s, o) => s + o.total, 0);
   const cogs = deliveredC.reduce((s, o) => s + (o.cogs || 0), 0);
   const shipCost = deliveredC.reduce((s, o) => s + (o.shipping_cost || 0), 0);
-  const returnCost = returnedC.reduce((s, o) => s + (tariff(o.project_id, o.carrier, o.wilaya_code, o.delivery_type)?.return_fee || 0), 0);
+  // كلفة المرتجع الحقيقية: سعر الإرجاع + التغليف الضائع + البضاعة التالفة أو المفقودة (من دفتر المرتجعات)
+  const retRows = returnsByOrder(returnedC.map((o) => o.id));
+  const retCosts = returnedC.map((o) => returnCostOf(o, retRows.get(o.id)));
+  const returnCost = retCosts.reduce((s, c) => s + c.total, 0);
+  const returnGoodsLost = retCosts.reduce((s, c) => s + c.goods, 0);
   const ads = adSpendDa(projectIds, fromDay, toDay);
   const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM expenses WHERE project_id IN (${P}) AND date >= ? AND date <= ?`).get(...projectIds, fromDay, toDay).s;
 
@@ -295,6 +300,7 @@ export function stats(projectIds, fromDay, toDay) {
       cogs: round(cogs),
       shipping_cost: round(shipCost),
       return_cost: round(returnCost),
+      return_goods_lost: round(returnGoodsLost),
       ad_spend_da: ads.spend_da,
       expenses: round(expenses),
       profit: round(profit),

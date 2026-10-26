@@ -8,7 +8,7 @@ import { uploadPath } from '../integrations/images.js';
 import { toDa } from './analytics.js';
 import { getProduct } from './products.js';
 import { inList } from './projects.js';
-import { tariff } from './shipments.js';
+import { lossRate, returnCost as returnCostOf, returnsByOrder } from './returns.js';
 
 /**
  * «الإعلانات والاختبارات»: من المنتج إلى الحملة إلى القرار — بأرقام الطلبيات الحقيقية (المؤكدة والمسلّمة) لا بأرقام البيكسل.
@@ -143,14 +143,26 @@ function avgReturnFee(projectId) {
   return r.f || 200;
 }
 
-/** أقصى تكلفة إعلان لكل طلبية مسلّمة قبل الخسارة */
+/**
+ * أقصى تكلفة إعلان لكل طلبية مسلّمة قبل الخسارة. كل مسلّمة «تحمل» مرتجعاتها:
+ * كلفة المرتجع = سعر الإرجاع + التغليف الضائع + نسبة البضاعة التي ترجع تالفة أو مفقودة × سعر التكلفة.
+ */
 export function breakEven(p, projectId) {
   if (!p.price) return null;
   const dr = deliveryRate(projectId);
   const margin = p.price - (p.cost_price || 0) - (p.packaging_cost || 0);
   const returnsPerDelivered = (1 - dr) / dr;
-  const value = margin - returnsPerDelivered * avgReturnFee(projectId);
-  return { da: round(Math.max(0, value)), usd: round(Math.max(0, value) / (getSetting('fx_usd_dza') || 250), 2), margin: round(margin), delivery_rate: round(dr * 100) };
+  const loss = lossRate(projectId);
+  const returnCost = avgReturnFee(projectId) + (p.packaging_cost || 0) + loss * (p.cost_price || 0);
+  const value = margin - returnsPerDelivered * returnCost;
+  return {
+    da: round(Math.max(0, value)),
+    usd: round(Math.max(0, value) / (getSetting('fx_usd_dza') || 250), 2),
+    margin: round(margin),
+    delivery_rate: round(dr * 100),
+    return_cost: round(returnCost),
+    loss_rate: round(loss * 100, 1),
+  };
 }
 
 function productOrders(projectId, productId, sinceIso) {
@@ -179,7 +191,8 @@ export function productTest(projectId, product, days = 7) {
   const revenue = delivered.reduce((s, o) => s + o.total, 0);
   const cogs = delivered.reduce((s, o) => s + (o.cogs || 0), 0) + delivered.length * (product.packaging_cost || 0);
   const shipCost = delivered.reduce((s, o) => s + (o.shipping_cost || 0), 0);
-  const returnCost = returned.reduce((s, o) => s + (tariff(projectId, o.carrier, o.wilaya_code, o.delivery_type)?.return_fee || avgReturnFee(projectId)), 0);
+  const retRows = returnsByOrder(returned.map((o) => o.id));
+  const returnCost = returned.reduce((s, o) => s + returnCostOf(o, retRows.get(o.id), { fallbackFee: avgReturnFee(projectId) }).total, 0);
   const be = breakEven(product, projectId);
   const cpd = expected >= 1 && spendDa > 0 ? round(spendDa / expected) : null;
   const killSpend = projectConfig(projectId).test_kill_spend_da || 3000;
@@ -205,6 +218,8 @@ export function productTest(projectId, product, days = 7) {
     confirmed,
     delivered: delivered.length,
     returned: returned.length,
+    return_rate: delivered.length + returned.length ? round((100 * returned.length) / (delivered.length + returned.length)) : null,
+    return_cost_da: round(returnCost),
     in_flight: inFlight,
     expected_delivered: expected,
     cost_per_delivered_da: cpd,

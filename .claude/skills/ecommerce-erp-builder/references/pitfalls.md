@@ -43,6 +43,9 @@
 | The Docker build fails in the sandbox (apt mirror, node-gyp download) | The network policy blocks them; on the VPS they work | Test a runtime-only image built from prebuilt `node_modules` and `client/dist`; keep the real Dockerfile unchanged |
 | `install-vps.sh` exits silently | `set -o pipefail` plus `ip route` or `getent` returning nothing | Add `\|\| true` to probe commands and print what was found |
 | Restore fails: "attempt to write a readonly database" | Opening a WAL-mode backup from a `:ro` mount | Copy it next to the target first, check it (integrity, schema_version), then rename it into place; always restart the ERP |
+| Stock in Shopify drifts lower after every returned parcel; cost of sales looks wrong | Returns were counted only as a return fee; goods never went back to stock | Returns ledger: restock on `returned` (the carrier's "back with the seller"), per-line damaged/missing, and reconciliation toward a target with an idempotency key |
+| Restocking would double-count | Returns that existed before the ledger may already have been restocked by hand | Never backfill automatically: list them once and let the owner pick "restock now" or "already restocked" (the latter records the movement without changing stock) |
+| A return restocked a product that was never deducted | A non-Shopify order (Sheets) never reduced Shopify stock | Restock only where the sale was deducted; mark the other lines `not_deducted` and still count the return cost |
 
 ## Verification checklist (run before every delivery)
 

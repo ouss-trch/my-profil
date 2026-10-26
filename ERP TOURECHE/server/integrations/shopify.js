@@ -187,6 +187,38 @@ export async function markOrderPaid(cfg, orderGid) {
   userErrors(d.orderMarkAsPaid);
 }
 
+// ——— المخزون: الطرود المرتجعة ———
+/** أين يعود المخزون: موقع الطلبية (إن سمحت صلاحيات fulfillment) وإلا الموقع الرئيسي؛ ولكل variant عنصر مخزونه وهل يُتتبَّع */
+export async function restockTargets(cfg, orderGid, variantIds) {
+  const d = await gql(cfg, 'query($ids: [ID!]!) { location { id } nodes(ids: $ids) { ... on ProductVariant { id inventoryItem { id tracked } } } }', { ids: variantIds });
+  let locationId = d.location?.id || null;
+  try {
+    const o = await gql(cfg, 'query($id: ID!) { order(id: $id) { fulfillmentOrders(first: 5) { nodes { assignedLocation { location { id } } } } } }', { id: orderGid });
+    locationId = o.order?.fulfillmentOrders?.nodes?.find((n) => n.assignedLocation?.location?.id)?.assignedLocation.location.id || locationId;
+  } catch {
+    /* صلاحيات fulfillment غير ممنوحة: الموقع الرئيسي */
+  }
+  const items = Object.fromEntries((d.nodes || []).filter(Boolean).map((n) => [n.id, { inventoryItemId: n.inventoryItem?.id || null, tracked: Boolean(n.inventoryItem?.tracked) }]));
+  return { locationId, items };
+}
+
+/**
+ * تعديل الكمية «المتاحة» بفارق (+ إرجاع، − تالف/مفقود/تصحيح). مفتاح @idempotent إلزامي منذ 2026-04:
+ * نفس المفتاح عند إعادة المحاولة لا يطبّق التعديل مرتين.
+ */
+export async function adjustAvailable(cfg, { locationId, changes, reason, reference, key }) {
+  const d = await gql(
+    cfg,
+    'mutation($input: InventoryAdjustQuantitiesInput!, $key: String!) { inventoryAdjustQuantities(input: $input) @idempotent(key: $key) { inventoryAdjustmentGroup { id } userErrors { field message } } }',
+    {
+      input: { name: 'available', reason, referenceDocumentUri: reference, changes: changes.map((c) => ({ inventoryItemId: c.inventoryItemId, locationId, delta: c.delta, changeFromQuantity: null })) },
+      key,
+    },
+  );
+  userErrors(d.inventoryAdjustQuantities);
+  return d.inventoryAdjustQuantities.inventoryAdjustmentGroup?.id || null;
+}
+
 // ——— المنتجات ———
 const PRODUCT_FIELDS = `id title handle status productType vendor tags descriptionHtml onlineStoreUrl updatedAt totalInventory
   seo { title description }

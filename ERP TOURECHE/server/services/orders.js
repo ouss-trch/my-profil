@@ -5,6 +5,7 @@ import { HttpError, normalizePhone, nowIso, randomId, round, badRequest, dzDaySt
 import { projectConfig } from '../lib/settings.js';
 import { inList } from './projects.js';
 import { enqueue } from './effects.js';
+import { onReturned, onUnreturned, returnView } from './returns.js';
 import * as n8n from '../integrations/n8n.js';
 import * as shopify from '../integrations/shopify.js';
 import * as meta from '../integrations/meta.js';
@@ -29,6 +30,7 @@ export function getOrder(id) {
   o.customer = customerSummary(o.phone, o.id);
   o.number = orderNumber(o);
   o.shopify_admin_url = shopify.adminOrderUrl(projectConfig(o.project_id), o.external_id);
+  o.return = returnView(o.id);
   return o;
 }
 
@@ -285,6 +287,9 @@ export function changeStatus(orderId, to, opts = {}) {
     });
   })();
 
+  // المخزون يعود عند وصول الطرد المرتجع إلى البائع، ويُسحب إن صُحّحت الحالة بعدها
+  if (to === 'returned' && from !== 'returned') onReturned(orderId, { userId: opts.userId });
+  else if (from === 'returned' && to !== 'returned') onUnreturned(orderId, { userId: opts.userId });
   if (from !== to || to === 'no_answer') afterStatusChange({ ...o, ...sets }, from, to, opts);
   return getOrder(orderId);
 }

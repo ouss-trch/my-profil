@@ -9,6 +9,8 @@ import { projectScope, getProject } from '../services/projects.js';
 import * as orders from '../services/orders.js';
 import * as shipments from '../services/shipments.js';
 import * as analytics from '../services/analytics.js';
+import * as returns from '../services/returns.js';
+import { db } from '../db/index.js';
 import { runJob } from '../services/sync.js';
 
 export const ordersRouter = Router();
@@ -235,3 +237,36 @@ carriersRouter.get('/:carrier/desks', async (req, res) => {
 });
 
 export { getProject };
+
+// ——— المرتجعات: ما عاد إلى المخزون (Shopify والـ ERP) وما تلف أو ضاع ———
+export const returnsRouter = Router();
+
+returnsRouter.get('/summary', (req, res) => res.json(returns.summary(projectScope(req).ids)));
+
+returnsRouter.get('/legacy', (req, res) => res.json(returns.legacyReturns(projectScope(req).ids)));
+
+// مرتجعات سبقت الدفتر: إعادتها الآن أو تسجيلها كمُعادة يدوياً — تغيير مخزون جماعي ⇒ كلمة المرور الحساسة
+returnsRouter.post('/legacy', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
+  const scope = projectScope(req);
+  const out = returns.processLegacy(scope.ids, req.body.order_ids, { alreadyRestocked: req.body.already_restocked === true, userId: req.user.id });
+  audit(req, 'returns_legacy', { details: { ...out, already_restocked: req.body.already_restocked === true } });
+  res.json(out);
+});
+
+const scopedReturn = (req) => {
+  const r = db.prepare('SELECT * FROM order_returns WHERE id = ?').get(Number(req.params.id));
+  if (!r || !projectScope(req).ids.includes(r.project_id)) throw new HttpError(404, 'return_not_found');
+  return r;
+};
+
+returnsRouter.patch('/:id', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
+  const r = scopedReturn(req);
+  const out = returns.updateReturn(r.id, { items: req.body.items, note: req.body.note }, { userId: req.user.id });
+  audit(req, 'return_updated', { entity: 'order', entityId: r.order_id, projectId: r.project_id, details: { items: (req.body.items || []).map((i) => ({ idx: i.idx, back: i.back, loss: i.loss })) } });
+  res.json(out);
+});
+
+returnsRouter.post('/:id/retry', requireRole('admin', 'manager'), async (req, res) => {
+  const r = scopedReturn(req);
+  res.json(await returns.retryNow(r.id));
+});

@@ -15,10 +15,11 @@ import { aiReport } from './advisor.js';
 import { aiConfigured } from '../integrations/ai.js';
 import { backup } from './backup.js';
 import { syncPages } from './pages.js';
+import { retryShopify as retryReturns } from './returns.js';
 
 /**
  * المهام الدورية (تعمل ما دام الجهاز مشغلاً):
- *  كل 5 دقائق  : طلبيات Shopify + جدول Google
+ *  كل 5 دقائق  : طلبيات Shopify + جدول Google + المرتجعات المنتظرة لمخزون Shopify
  *  كل 30 دقيقة : تتبع الطرود عند شركات التوصيل + إنفاق الإعلانات اليوم
  *  كل ساعة     : المنتجات، الحملات، تنبيهات المخزون، لقطة التقرير الصباحي لـ n8n
  *  يومياً 03:00 : نسخة احتياطية، أسعار شركات التوصيل، إنفاق 30 يوماً (+ تقرير المستشار الذكي كل سبت)
@@ -29,6 +30,8 @@ export async function every5min() {
   for (const p of listProjects()) {
     await quiet(syncShopifyOrders(p.id));
     await quiet(syncSheet(p.id));
+    // المرتجعات التي لم تصل بعد إلى مخزون Shopify (انقطاع، إعادة تشغيل…)
+    await quiet(retryReturns(p.id));
   }
 }
 
@@ -37,6 +40,7 @@ export async function every30min() {
     const cfg = projectConfig(p.id);
     if (Object.values(CARRIERS).some((c) => c.isConfigured(cfg))) await quiet(runJob('tracking', p.id, 'تتبع الطرود', () => syncTracking(p.id)));
     if (meta.isConfigured(cfg)) await quiet(runJob('ads_spend', p.id, 'Meta Ads', () => syncSpend(p.id, 2)));
+    if (shopify.isConfigured(cfg)) await quiet(retryReturns(p.id, { includeFailed: true }));
   }
 }
 

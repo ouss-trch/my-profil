@@ -35,6 +35,12 @@ General rules for every adapter:
   - An order first seen in the sheet keeps its ERP ref but ships with its Shopify number.
   - The order drawer links to `https://{shop}.myshopify.com/admin/orders/{id}`.
 - **Pages:** `pages(first:100){ id title handle isPublished templateSuffix }` needs `read_online_store_pages` (or `read_content`).
+- **Returned parcels back to stock** (`inventoryAdjustQuantities`):
+  - Use `name: "available"`, `reason: "restock"` (or `damaged` / `shrinkage` / `correction` for negative corrections), `referenceDocumentUri` = the order GID, and `changeFromQuantity: null`, which opts out of compare-and-swap.
+  - Since API **2026-04** the `@idempotent(key: …)` directive is **required**. Derive a stable key from (return, reason, from→to quantities): a retry after a timeout cannot apply twice.
+  - Restock to the order's fulfillment location. If the app lacks fulfillment-order scopes, fall back to the primary location (`location { id }` with no id).
+  - Skip variants whose `inventoryItem.tracked` is false.
+  - Rule: **stock goes back where it was deducted.** Only Shopify orders were deducted by Shopify; restocking a non-Shopify order would inflate stock.
 - **Alternate product templates:** `product.<suffix>.json` is served with `?view=<suffix>`. This is the safe way to show different marketing angles on the same product URL.
 
 ## Meta Marketing API

@@ -515,6 +515,31 @@ ${STORE_PAGES_SQL}
     if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'payout_id')) db.exec('ALTER TABLE orders ADD COLUMN payout_id INTEGER REFERENCES carrier_payouts(id) ON DELETE SET NULL');
     db.exec('CREATE INDEX IF NOT EXISTS idx_orders_payout ON orders(project_id, carrier, payout_id)');
   },
+
+  // 3 — المرتجعات: كل طلبية مرتجعة وما عاد منها إلى المخزون (Shopify والـ ERP) وما تلف أو ضاع
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS order_returns (
+      id INTEGER PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+      state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','reversed')),
+      items TEXT NOT NULL DEFAULT '[]',
+      goods_lost REAL NOT NULL DEFAULT 0,
+      packaging_lost REAL NOT NULL DEFAULT 0,
+      return_fee REAL,
+      shopify_state TEXT CHECK (shopify_state IN ('pending','done','failed','skipped')),
+      shopify_applied TEXT NOT NULL DEFAULT '{}',
+      shopify_error TEXT,
+      shopify_attempts INTEGER NOT NULL DEFAULT 0,
+      shopify_synced_at TEXT,
+      note TEXT,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_returns_project ON order_returns(project_id, shopify_state)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_stock_order ON stock_movements(order_id, product_id)');
+  },
 ];
 
 export function openDb(file = config.dbFile) {

@@ -798,6 +798,7 @@ function TestsTab() {
                   <th className="text-end">{t('c.orders')}</th>
                   <th className="text-end">{t(['مؤكدة', 'Conf.'])}</th>
                   <th className="text-end">{t(['مسلّمة', 'Livr.'])}</th>
+                  <th className="text-end">{t(['مرتجعة', 'Retours'])}</th>
                   <th className="text-end">{t(['تكلفة المسلّمة', 'Coût/livrée'])}</th>
                   <th className="text-end">{t(['حد التعادل', 'Seuil'])}</th>
                   <th className="text-end">{t(['الربح', 'Profit'])}</th>
@@ -824,8 +825,17 @@ function TestsTab() {
                       {n0(r.delivered)}
                       {r.in_flight > 0 && <div className="text-[11px] text-muted">+{r.in_flight}</div>}
                     </td>
+                    <td className="num text-end" title={r.return_cost_da ? `${t(['كلفة المرتجعات', 'Coût des retours'])}: ${da(r.return_cost_da)}` : undefined}>
+                      {n0(r.returned)}
+                      {r.return_rate !== null && r.return_rate !== undefined && <div className={cx('text-[11px]', r.return_rate > 30 ? 'text-bad' : 'text-muted')}>{r.return_rate}%</div>}
+                    </td>
                     <td className={cx('num text-end', r.break_even && r.cost_per_delivered_da > r.break_even.da && 'text-bad')}>{da(r.cost_per_delivered_da)}</td>
-                    <td className="num text-end text-sub">{da(r.break_even?.da)}</td>
+                    <td
+                      className="num text-end text-sub"
+                      title={r.break_even ? t([`كل مسلّمة تحمل مرتجعاتها: ${da(r.break_even.return_cost)} للمرتجع (إرجاع + تغليف + ${r.break_even.loss_rate}% بضاعة ضائعة)`, `Chaque livrée porte ses retours : ${da(r.break_even.return_cost)} par retour`]) : undefined}
+                    >
+                      {da(r.break_even?.da)}
+                    </td>
                     <td className={cx('num text-end', r.profit_da < 0 ? 'text-bad' : 'text-good')}>{da(r.profit_da)}</td>
                     <td>
                       <Badge tone={VERDICT[r.verdict]?.[2]}>{t(VERDICT[r.verdict] || [r.verdict, r.verdict])}</Badge>

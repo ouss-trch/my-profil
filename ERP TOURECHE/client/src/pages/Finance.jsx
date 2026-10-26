@@ -82,7 +82,8 @@ export default function Finance() {
                   { key: 'cogs', label: t(['تكلفة المنتجات', 'Coût produits']), value: f.cogs },
                   { key: 'ads', label: t(['الإعلانات', 'Publicité']), value: f.ad_spend_da },
                   { key: 'ship', label: t(['التوصيل', 'Livraison']), value: f.shipping_cost },
-                  { key: 'ret', label: t(['المرتجعات', 'Retours']), value: f.return_cost },
+                  { key: 'ret', label: t(['المرتجعات (إرجاع وتغليف)', 'Retours (frais et emballage)']), value: f.return_cost - (f.return_goods_lost || 0) },
+                  { key: 'lost', label: t(['بضاعة مرتجعة تالفة أو مفقودة', 'Retours endommagés ou manquants']), value: f.return_goods_lost || 0 },
                   { key: 'exp', label: t(['مصاريف أخرى', 'Autres']), value: f.expenses },
                 ].sort((a, b) => b.value - a.value)}
               />

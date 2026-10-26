@@ -15,6 +15,7 @@ import { splitInsights } from './splits.js';
 import { suppliersById, restockPlan } from './contacts.js';
 import { backupStatus } from './backup.js';
 import { summary as collectionsSummary } from './collections.js';
+import { summary as returnsSummary } from './returns.js';
 
 /**
  * «المستشار»: يحلّل بيانات المشروع ويُخرج ملاحظات وتقييمات واستنتاجات واقتراحات قابلة للتنفيذ.
@@ -889,6 +890,38 @@ function collectionRules(projectIds, push) {
   }
 }
 
+// المرتجعات: ما لم يعد إلى مخزون Shopify، والقديمة التي سبقت دفتر المرتجعات
+function returnRules(projectIds, push) {
+  for (const pid of projectIds) {
+    const s = returnsSummary([pid]);
+    if (s.failed > 0)
+      push({
+        key: `stock.returns_shopify:${pid}`,
+        area: 'stock',
+        type: 'alert',
+        severity: 'high',
+        title: tx(`${s.failed} مرتجعات لم تعد إلى مخزون Shopify`, `${s.failed} retours non remis en stock dans Shopify`),
+        insight: tx('مخزون Shopify أقل من الموجود فعلاً: قد يظهر منتج متوفر كأنه نفد، وتتوقف مبيعاته وإعلاناته.', 'Le stock Shopify est sous-estimé : un produit disponible peut apparaître épuisé.'),
+        evidence: [{ label: tx('آخر خطأ', 'Dernière erreur'), value: s.last_error || '—' }],
+        advice: tx('تأكد أن تطبيق Shopify يملك صلاحية write_inventory، ثم اضغط «إعادة المحاولة» في الطلبية. الـ ERP يعيد المحاولة وحده كل 30 دقيقة.', 'Vérifiez le scope write_inventory de l’app Shopify, puis « Réessayer » dans la commande. L’ERP réessaie toutes les 30 min.'),
+        action: { to: '/orders?tab=returned', label: tx('المرتجعة', 'Retournées') },
+        project_id: pid,
+      });
+    if (s.legacy > 0)
+      push({
+        key: `stock.returns_legacy:${pid}`,
+        area: 'stock',
+        type: 'observation',
+        severity: 'medium',
+        title: tx(`${s.legacy} طلبية مرتجعة قديمة لم تُعالَج في المخزون`, `${s.legacy} anciens retours non traités en stock`),
+        insight: tx('سبقت دفتر المرتجعات، فلا يُعرف هل عادت بضاعتها إلى المخزون أم لا.', 'Antérieurs au registre des retours : on ne sait pas s’ils ont été remis en stock.'),
+        advice: tx('في تبويب «مرتجعة»: اختر «أعِدها إلى المخزون الآن»، أو «سبق أن أعدتها يدوياً» إن فعلت ذلك في Shopify.', 'Onglet « Retournées » : « Remettre en stock » ou « Déjà remis à la main ».'),
+        action: { to: '/orders?tab=returned', label: tx('المرتجعة', 'Retournées') },
+        project_id: pid,
+      });
+  }
+}
+
 // ————————————————————————————————————————————————
 // التقييم العام (0–100) لكل مجال
 // ————————————————————————————————————————————————
@@ -932,7 +965,7 @@ export function analyze(projectIds) {
       errors.push({ rule: fn.name, error: e.message });
     }
   };
-  [confirmationRules, deliveryRules, carrierRules, productRules, customerRules, financeAndTimingRules, collectionRules, adsRules, splitRules, setupRules].forEach(safe);
+  [confirmationRules, deliveryRules, carrierRules, productRules, customerRules, financeAndTimingRules, collectionRules, returnRules, adsRules, splitRules, setupRules].forEach(safe);
 
   const states = db
     .prepare(`SELECT * FROM insight_states WHERE project_id IN (0, ${inList(projectIds)})`)

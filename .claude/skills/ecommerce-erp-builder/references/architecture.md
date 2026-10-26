@@ -57,6 +57,11 @@ The schema has these tables:
 - ad_spend, ad_campaigns, campaign_products, creatives, ad_drafts
 - expenses, tasks, contacts (suppliers and carrier desks), store_pages
 - carrier_payouts, with `orders.payout_id` linking each delivered or returned order to the payout that settled it
+- order_returns: one row per returned order.
+  - Per line: `back` (units returned sellable) and `loss` (`damaged` / `missing`).
+  - Shopify sync state, plus `shopify_applied`: what was really pushed, so the sync reconciles toward a target and never repeats.
+  - `goods_lost` and `packaging_lost`.
+  - The ERP stock copy moves via `stock_movements` rows (reason `return*`).
 - audit_log, ai_conversations, ai_actions, job_state
 - split_tests, split_variants, split_clicks
 - insight_states, journal, advisor_reports

@@ -9,7 +9,7 @@ import { HttpError } from './lib/util.js';
 import { IntegrationError } from './lib/http.js';
 import { authRouter, usersRouter } from './routes/auth.js';
 import { coreRouter, hooksRouter } from './routes/core.js';
-import { ordersRouter, customersRouter, carriersRouter } from './routes/orders.js';
+import { ordersRouter, customersRouter, carriersRouter, returnsRouter } from './routes/orders.js';
 import { productsRouter } from './routes/products.js';
 import { adsRouter } from './routes/ads.js';
 import { dashboardRouter, aiRouter, tasksRouter, contactsRouter, financeRouter, pagesRouter, collectionsRouter } from './routes/misc.js';
@@ -71,6 +71,7 @@ export function createApp() {
   app.use('/api/users', usersRouter);
   app.use('/api', coreRouter);
   app.use('/api/orders', ordersRouter);
+  app.use('/api/returns', returnsRouter);
   app.use('/api/customers', customersRouter);
   app.use('/api/carriers', carriersRouter);
   app.use('/api/products', productsRouter);

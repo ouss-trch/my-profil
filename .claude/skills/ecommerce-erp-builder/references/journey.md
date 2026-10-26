@@ -16,12 +16,12 @@ Read this first when you continue ERP TOURECHE in a new conversation, or when yo
 
 | Area | State |
 |---|---|
-| Modules | Today, Dashboard, Advisor, AI assistant, Orders (confirmation + shipping), Abandoned carts, Customers, Carriers, Products + editor (SEO, AI copy, images), Store pages, Suppliers & partners, Ads (BM explorer, PAUSED launch), A/B pages, Finance, **Collections**, Tasks, Activity, Settings |
+| Modules | Today, Dashboard, Advisor, AI assistant, Orders (confirmation + shipping + returns to stock), Abandoned carts, Customers, Carriers, Products + editor (SEO, AI copy, images), Store pages, Suppliers & partners, Ads (BM explorer, PAUSED launch), A/B pages, Finance, **Collections**, Tasks, Activity, Settings |
 | Integrations | Shopify (Dev Dashboard client credentials), Meta Marketing API, Yalidine / NOEST / ZR, n8n (in and out hooks), Anthropic, image providers |
-| Quality bar | 34 `node:test` tests; UI audit on 22 routes × 3 modes with 0 contrast, 0 unnamed buttons, 0 unlabelled fields, 0 overflow |
+| Quality bar | 42 `node:test` tests; UI audit on 24 routes × 3 modes with 0 contrast, 0 unnamed buttons, 0 unlabelled fields, 0 overflow |
 | Hosting | Runs locally (Tailscale). VPS package ready and verified in a simulation (Docker + Traefik + n8n); waiting for the owner to add DNS `erp` → VPS IP and run `deploy/install-vps.sh erp.leadsauto.cloud` |
 | Data safety | Nightly backup (14 kept), optional cloud-folder mirror (30 kept), `npm run restore` and `deploy/erp.sh restore` |
-| Schema | `MIGRATIONS` 0 → 2. Never edit 0; append. Every migration is tested on a DB built by the previous code |
+| Schema | `MIGRATIONS` 0 → 3. Never edit 0; append. Every migration is tested on a DB built by the previous code |
 | Branch | `claude/erp-toureche-system-fdir8x`; not merged into `main` yet (only on the owner's request) |
 
 **Open items for the owner:**
@@ -29,7 +29,7 @@ Read this first when you continue ERP TOURECHE in a new conversation, or when yo
 1. Add the DNS record and run the VPS install.
 2. Rotate the Shopify client secret that was pasted in chat.
 3. Start Collections with an opening balance.
-4. Decide whether returned parcels should restock Shopify automatically. Today they don't: Shopify is the stock source of truth.
+4. Process the returns that predate the returns ledger once (Orders → Returned tab): "restock now" or "already restocked".
 
 ## 3. Phases: what we did, why, and the lesson of each
 
@@ -47,6 +47,7 @@ Read this first when you continue ERP TOURECHE in a new conversation, or when yo
 | 10 | Improvement skills (`6bae7fc`) | Vendored review skills (Sentry, Trail of Bits, Vercel, Anthropic, Superpowers, marketing) with licenses, after scanning them | Read a third-party skill before trusting it |
 | 11 | Security review (`2862dee`) | Setup token, client IP behind Traefik, upload path checks, safer sanitizer, HSTS, dependency upgrades | Review before going public, not after |
 | 12 | Collections (`605946a`) | Carrier payouts reconciled by pasting the statement's tracking numbers; opening balance; Advisor alert after 14 days | The biggest COD leak is money that was delivered but never paid back |
+| 13 | Returns back to stock | A returned parcel goes back to Shopify's available stock (idempotent) and to the ERP copy; damaged or missing units are written off at cost; the real return cost flows into Finance, break-even and per-product ad results | Stock goes back where it was deducted, and never twice
 
 ## 4. The mistakes that cost the most, and the rule that prevents each
 

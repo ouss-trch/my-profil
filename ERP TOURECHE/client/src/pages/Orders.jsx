@@ -29,6 +29,7 @@ import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import { CARRIER_NAMES, StatusBadge, useStatusLabel } from '../components/status.jsx';
 import { DeliveryContacts } from './Contacts.jsx';
+import { ReturnCard, ReturnsBar } from '../components/Returns.jsx';
 import { Badge, Button, Card, Drawer, Empty, ErrorBox, Field, Input, Loading, Modal, Pagination, Select, Tabs, Textarea, Toggle, cx, useAction, useToast } from '../components/ui.jsx';
 
 export const TABS = {
@@ -177,6 +178,7 @@ export default function Orders() {
           </div>
         )}
       </div>
+      {!status && tab === 'returned' && <ReturnsBar onChanged={refreshAll} />}
       <Card pad={false}>
         {loading && !data ? (
           <Loading />
@@ -897,6 +899,8 @@ export function OrderDrawer({ id, onClose, onChanged }) {
               )}
             </Card>
           )}
+
+          <ReturnCard order={o} onChanged={changed} />
 
           {next.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">

@@ -85,4 +85,24 @@ db.prepare("UPDATE orders SET tracking = upper(substr(carrier, 1, 3)) || '-' || 
 openingBalance(pid, { before: new Date(Date.now() + 3600e3 - 25 * 86400e3).toISOString().slice(0, 10) });
 const paid = openOrders([pid], { carrier: 'yalidine' }).filter((o) => o.days >= 9 && o.days <= 16);
 if (paid.length) recordPayout(pid, { carrier: 'yalidine', order_ids: paid.map((o) => o.id), amount: paid.reduce((a, o) => a + o.net, 0) - 400, reference: 'YAL-V-2026-118' });
+// المرتجعات (توضيحية): كأنها طلبيات Shopify عادت إلى المخزون؛ واحدة تالفة، واحدة لم تصل إلى Shopify، واثنتان قديمتان لم تُعالجا
+const rets = db.prepare('SELECT id, order_id, items FROM order_returns ORDER BY id').all();
+rets.forEach((r, k) => {
+  if (k >= rets.length - 2) {
+    db.prepare('DELETE FROM order_returns WHERE id = ?').run(r.id);
+    return;
+  }
+  const items = JSON.parse(r.items).map((i) => ({ ...i, variant_id: `gid://shopify/ProductVariant/${i.product_id || 0}`, why: null }));
+  if (k === 0) Object.assign(items[0], { back: 0, loss: 'damaged' });
+  db.prepare('UPDATE orders SET external_id = ? WHERE id = ?').run(`gid://shopify/Order/${9000 + r.order_id}`, r.order_id);
+  const failed = k === 1;
+  db.prepare('UPDATE order_returns SET items = ?, goods_lost = ?, shopify_state = ?, shopify_applied = ?, shopify_error = ? WHERE id = ?').run(
+    JSON.stringify(items),
+    items.reduce((a, i) => a + (i.qty - i.back) * (i.unit_cost || 0), 0),
+    failed ? 'failed' : 'done',
+    failed ? '{}' : JSON.stringify(Object.fromEntries(items.map((i) => [i.variant_id, i.back]))),
+    failed ? 'shopify: access_denied (write_inventory)' : null,
+    r.id,
+  );
+});
 console.log('seeded', n, 'orders');
