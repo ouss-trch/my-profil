@@ -4,6 +4,7 @@
 //   npm run restore -- <ملف-النسخة-الاحتياطية.db>   (أوقف الـ ERP قبلها)
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { config } from './config.js';
@@ -35,7 +36,13 @@ export function restore(source, target = config.dbFile) {
   // نعمل على نسخة في مجلد البيانات: الملف الأصلي لا يُلمس (قد يكون للقراءة فقط) وملفات WAL المؤقتة تُنشأ بجانبها
   const work = path.join(path.dirname(target), `.restore-${Date.now()}.db`);
   const clean = (f) => ['', '-wal', '-shm'].forEach((ext) => fs.rmSync(`${f}${ext}`, { force: true }));
-  fs.copyFileSync(source, work);
+  // نسخة Google Drive مضغوطة (.db.gz): تُعرف من أول بايتين، لأن erp.sh يمرّرها باسم آخر (/import.db)
+  const head = Buffer.alloc(2);
+  const fd = fs.openSync(source, 'r');
+  fs.readSync(fd, head, 0, 2, 0);
+  fs.closeSync(fd);
+  if (head[0] === 0x1f && head[1] === 0x8b) fs.writeFileSync(work, zlib.gunzipSync(fs.readFileSync(source)));
+  else fs.copyFileSync(source, work);
   let orders;
   try {
     const check = new Database(work, { fileMustExist: true });

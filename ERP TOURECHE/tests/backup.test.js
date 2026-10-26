@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { config } from '../server/config.js';
 import { createProject } from '../server/services/projects.js';
 import { createOrder } from '../server/services/orders.js';
@@ -53,4 +54,40 @@ test('restore: validates the file, keeps the previous database, then restores', 
   fs.writeFileSync(junk, 'not a database');
   assert.throws(() => restore(junk, target));
   assert.throws(() => restore(path.join(tmp, 'missing.db'), target), /backup_not_found/);
+});
+
+test('backup: on the VPS the nightly copy goes compressed to n8n → Google Drive, and only a confirmed upload counts', async () => {
+  const { setSetting } = await import('../server/lib/settings.js');
+  config.backupMirrorDir = '';
+  const sent = [];
+  let reply = { ok: true, id: 'drive-file-1' };
+  const prev = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push({ url: String(url), type: init.headers['Content-Type'], body: Buffer.from(init.body) });
+    return new Response(JSON.stringify(reply), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    setSetting('n8n_backup_url', 'https://n8n.example/webhook/toureche-erp-backup-x');
+    const out = await backup({ force: true });
+    assert.equal(out.driveError, null);
+    assert.match(sent[0].url, /\/toureche-erp-backup-x\?name=toureche-\d{4}-\d{2}-\d{2}\.db\.gz$/);
+    assert.equal(sent[0].type, 'application/gzip');
+    assert.equal(zlib.gunzipSync(sent[0].body).subarray(0, 15).toString(), 'SQLite format 3');
+    assert.equal(backupStatus().drive.ok, true);
+    assert.equal(backupStatus().offsite_ok, true);
+    assert.equal(offsite(), undefined);
+    // n8n ردّ بلا تأكيد (حساب Google Drive غير متصل مثلاً) ← خطأ ظاهر وتنبيه عالي الأهمية، لا أمان وهمي
+    reply = { message: 'Workflow was started' };
+    const bad = await backup();
+    assert.match(bad.driveError, /drive_upload_unconfirmed/);
+    assert.equal(backupStatus().offsite_ok, false);
+    assert.equal(offsite()?.severity, 'high');
+    // ملف Google Drive يُسترجع كما هو، حتى باسم آخر (erp.sh يمرّره باسم /import.db)
+    const gz = path.join(tmp, 'import.db');
+    fs.writeFileSync(gz, sent[0].body);
+    assert.ok(restore(gz, path.join(tmp, 'from-drive.db')).orders >= 1);
+  } finally {
+    globalThis.fetch = prev;
+    setSetting('n8n_backup_url', '');
+  }
 });

@@ -826,26 +826,37 @@ function setupRules(projectIds, push) {
       });
   }
   // البيانات خارج الجهاز: الكود في GitHub، لكن الطلبيات والزبائن في قاعدة البيانات المحلية فقط
-  const b = backupStatus().mirror;
-  if (!b.configured || !b.reachable || b.behind)
+  const st = backupStatus();
+  const b = st.mirror;
+  const d = st.drive;
+  if (!st.offsite_ok) {
+    const broken = b.configured || d.configured;
     push({
       key: 'setup.backup_offsite',
       area: 'setup',
       type: 'alert',
-      severity: b.configured ? 'high' : 'medium',
-      title: b.configured
+      severity: broken ? 'high' : 'medium',
+      title: broken
         ? tx('النسخة الاحتياطية خارج الجهاز متوقفة', 'La sauvegarde hors ordinateur ne se fait plus')
         : tx('النسخ الاحتياطية على هذا الجهاز فقط', 'Sauvegardes uniquement sur cet ordinateur'),
-      insight: tx('إن تعطّل الجهاز تضيع الطلبيات والزبائن والإعدادات. الكود محفوظ في GitHub، أما البيانات فلا.', 'Si l’ordinateur lâche, commandes, clients et réglages sont perdus. Le code est sur GitHub, pas les données.'),
-      evidence: [
-        { label: tx('المجلد السحابي', 'Dossier cloud'), value: b.dir || '✗' },
-        { label: tx('آخر نسخة خارج الجهاز', 'Dernière copie externe'), value: b.last?.name || '—' },
-      ],
-      advice: b.configured
-        ? tx('تأكد أن المجلد موجود وأن تطبيق Google Drive أو OneDrive يعمل، ثم اضغط «نسخة احتياطية الآن».', 'Vérifiez que le dossier existe et que Google Drive / OneDrive tourne, puis « Sauvegarder maintenant ».')
-        : tx('ضع مسار مجلد Google Drive أو OneDrive أو iCloud في ERP_BACKUP_MIRROR داخل ملف .env ثم أعد التشغيل.', 'Indiquez un dossier Google Drive / OneDrive / iCloud dans ERP_BACKUP_MIRROR (.env) puis redémarrez.'),
+      insight: tx('إن تعطّل الجهاز أو الخادم تضيع الطلبيات والزبائن والإعدادات. الكود محفوظ في GitHub، أما البيانات فلا.', 'Si l’ordinateur ou le serveur lâche, commandes, clients et réglages sont perdus. Le code est sur GitHub, pas les données.'),
+      evidence: d.configured
+        ? [
+            { label: tx('آخر نسخة في Google Drive', 'Dernière copie Google Drive'), value: d.last_ok_at || '—' },
+            { label: tx('الخطأ', 'Erreur'), value: d.error || '—' },
+          ]
+        : [
+            { label: tx('المجلد السحابي', 'Dossier cloud'), value: b.dir || '✗' },
+            { label: tx('آخر نسخة خارج الجهاز', 'Dernière copie externe'), value: b.last?.name || '—' },
+          ],
+      advice: d.configured
+        ? tx('افتح سير العمل «Toureche ERP · نسخ احتياطي» في n8n وتأكد أن حساب Google Drive متصل، ثم اضغط «نسخة احتياطية الآن».', 'Ouvrez le workflow « Toureche ERP · sauvegarde » dans n8n, vérifiez le compte Google Drive, puis « Sauvegarder maintenant ».')
+        : b.configured
+          ? tx('تأكد أن المجلد موجود وأن تطبيق Google Drive أو OneDrive يعمل، ثم اضغط «نسخة احتياطية الآن».', 'Vérifiez que le dossier existe et que Google Drive / OneDrive tourne, puis « Sauvegarder maintenant ».')
+          : tx('على الـ VPS: ضع Webhook النسخ الاحتياطي في الإعدادات ← عام ← n8n. على حاسوب: ضع مسار مجلد Google Drive في ERP_BACKUP_MIRROR داخل ملف .env.', 'Sur le VPS : renseignez le webhook de sauvegarde (Paramètres → Général → n8n). Sur un ordinateur : ERP_BACKUP_MIRROR dans .env.'),
       action: { to: '/settings?tab=system', label: tx('النظام', 'Système') },
     });
+  }
 }
 
 // التحصيل: مال الطلبيات المسلّمة الذي ما زال عند شركة التوصيل

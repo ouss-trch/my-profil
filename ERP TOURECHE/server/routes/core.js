@@ -151,8 +151,8 @@ coreRouter.get('/system/sync', (_req, res) => res.json(fullsync.status()));
 
 coreRouter.post('/system/backup', requireRole('admin'), async (req, res) => {
   const out = await backup({ force: true });
-  audit(req, 'backup_created', { details: { mirrored: Boolean(out.mirrored), mirror_error: out.mirrorError } });
-  res.json({ file: out.file.split(/[\\/]/).pop(), mirrored: Boolean(out.mirrored), mirror_error: out.mirrorError, status: backupStatus() });
+  audit(req, 'backup_created', { details: { mirrored: Boolean(out.mirrored), mirror_error: out.mirrorError, drive: Boolean(out.drive), drive_error: out.driveError } });
+  res.json({ file: out.file.split(/[\\/]/).pop(), mirrored: Boolean(out.mirrored), mirror_error: out.mirrorError, drive: Boolean(out.drive), drive_error: out.driveError, status: backupStatus() });
 });
 
 coreRouter.get('/system/snapshot', requireRole('admin', 'manager'), async (_req, res) => res.json(await makeSnapshot()));

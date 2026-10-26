@@ -91,8 +91,12 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 | `erp reset-password USER PASS` | كلمة مرور منسية |
 | `erp setup-token` | رمز الإعداد الأول (قبل إنشاء حساب المدير فقط) |
 
-**النسخ خارج الخادم:** البيانات في volume `erp-toureche_erp_data`. لنسخة يومية في Google Drive: ثبّت `rclone` واربطه بـ Drive (`rclone config`)، أضف `ERP_BACKUP_MIRROR=/offsite` إلى `deploy/.env` ثم `bash deploy/erp.sh update`، وأضف إلى `crontab -e`:
-`30 3 * * * rclone copy "/opt/erp/ERP TOURECHE/deploy/offsite" gdrive:ERP-backups`
+**النسخ خارج الخادم (Google Drive عبر n8n):** البيانات في volume `erp-toureche_erp_data`. كل ليلة (03:00) يضغط الـ ERP نسخة اليوم ويرسلها إلى سير العمل «Toureche ERP · نسخ احتياطي إلى Google Drive» في n8n، فيرفعها إلى مجلد `TOURECHE-ERP-backups` في Google Drive ويُبقي آخر 30 نسخة (الأقدم تذهب إلى سلة المهملات).
+1. في n8n: تأكد أن حساب **Google Drive account** متصل، وأن سير العمل مفعّل.
+2. في الـ ERP: الإعدادات ← عام ← n8n ← **Webhook النسخ الاحتياطي (Google Drive)** = رابط الـ Webhook (Production URL) من سير العمل. الرابط فيه رمز سري: لا تنشره.
+3. الإعدادات ← النظام ← **نسخة احتياطية الآن**: يجب أن تظهر «يعمل». لا تُعدّ النسخة محفوظة إلا إن أكّد n8n وصولها إلى Drive، وأي فشل يظهر في البطاقة وفي المستشار.
+4. احفظ محتوى المفتاح السري في مدير كلمات المرور (بدونه تبقى الطلبيات والزبائن، لكن تُعاد مفاتيح الربط يدوياً): `docker exec erp-toureche cat /data/.secret-key`
+
 وفعّل أيضاً النسخ الاحتياطي للـ VPS من hPanel.
 
 ---
@@ -142,7 +146,7 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 - كلمة مرور دخول + **كلمة مرور حساسة** منفصلة للحذف والأسعار والميزانيات وتفعيل الحملات والإعدادات.
 - المفاتيح السرية مشفّرة AES-256-GCM ولا تُعرض بعد حفظها. احفظ نسخة من `data/.secret-key`.
 - جلسات httpOnly + SameSite=Strict، حماية CSRF، قفل بعد محاولات خاطئة، سجل نشاط كامل.
-- نسخة احتياطية كل ليلة في `data/backups` (آخر 14 يوماً) + نسخة خارج الجهاز في مجلد سحابي عبر `ERP_BACKUP_MIRROR` (انظر أدناه).
+- نسخة احتياطية كل ليلة في `data/backups` (آخر 14 يوماً) + نسخة خارج الجهاز: Google Drive عبر n8n على الـ VPS، أو مجلد سحابي عبر `ERP_BACKUP_MIRROR` على حاسوب (انظر أدناه).
 - نسيت كلمة المرور؟ `npm run reset-password -- اسم_المستخدم كلمةجديدة123` أو `npm run reset-password -- --sensitive كلمةجديدة123`.
 
 ---
@@ -172,6 +176,13 @@ npm start
 ```
 
 نفس المستخدمين وكلمات المرور. `restore` يتحقق من الملف ويحفظ القاعدة السابقة قبل الاستبدال.
+
+**إن تعطّل الـ VPS:** ثبّت الـ ERP على خادم جديد (قسم الـ VPS أعلاه)، نزّل آخر ملف `toureche-YYYY-MM-DD.db.gz` من مجلد `TOURECHE-ERP-backups` في Google Drive وانقله إلى الخادم، ثم:
+
+```bash
+erp restore /root/toureche-2026-10-27.db.gz     # يقبل الملف المضغوط كما هو
+erp import-key /root/.secret-key                # من مدير كلمات المرور
+```
 
 ---
 

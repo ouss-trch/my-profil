@@ -9,6 +9,7 @@ import { nowIso } from '../lib/util.js';
  *  - toureche-erp-products ← test · product.published · social.posted
  *  - toureche-erp-report-… ← test · report.snapshot
  *  - toureche-erp-sheets  ← قراءة/كتابة جدولي SOU9NA و autoparts عبر المفتاح x-erp-key
+ *  - toureche-erp-backup-… ← ملف النسخة الليلية مضغوطاً (?name=…db.gz) ← Google Drive، يرد { ok: true } (services/backup.js)
  * كل الطلبات بالشكل: { event, data, project, sent_at } — العقد في n8n تقرأ body.event و body.data
  */
 const URL_KEY = { events: 'n8n_events_url', products: 'n8n_products_url', report: 'n8n_report_url' };

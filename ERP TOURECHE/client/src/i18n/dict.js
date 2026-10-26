@@ -129,6 +129,8 @@ export const DICT = {
 
   // أخطاء الخادم
   'err.network_unreachable': ['تعذّر الوصول إلى الخدمة (الشبكة أو الخدمة متوقفة)', 'Service injoignable (réseau ou service en panne)'],
+  'err.drive_upload_unconfirmed': ['n8n لم يؤكد وصول الملف إلى Google Drive', 'n8n n’a pas confirmé l’arrivée du fichier sur Google Drive'],
+  'err.backup_offsite_failed': ['النسخة على الخادم تمت، لكن النسخة خارج الجهاز فشلت: انظر بطاقة النسخ الاحتياطية', 'Copie locale faite, mais la copie externe a échoué : voir la carte Sauvegardes'],
   'err.access_denied': ['صلاحية ناقصة في التطبيق المربوط: راجع الصلاحيات ثم أعد المحاولة', 'Autorisation manquante dans l’app connectée'],
   'err.shop_not_configured': ['نطاق Shopify غير مضبوط في الإعدادات', 'Domaine Shopify non configuré'],
   'err.throttled': ['الخدمة تطلب التمهل: أعد المزامنة بعد دقيقة', 'Service saturé : réessayez dans une minute'],

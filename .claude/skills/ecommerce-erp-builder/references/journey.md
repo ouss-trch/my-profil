@@ -20,7 +20,7 @@ Read this first when you continue ERP TOURECHE in a new conversation, or when yo
 | Integrations | Shopify (Dev Dashboard client credentials), Meta Marketing API, Yalidine / NOEST / ZR, n8n (in and out hooks), Anthropic, image providers |
 | Quality bar | 45 `node:test` tests; UI audit on 24 routes × 3 modes with 0 contrast, 0 unnamed buttons, 0 unlabelled fields, 0 overflow |
 | Hosting | **Live 24/7 at https://erp.leadsauto.cloud** (since 26 Oct 2026): Hostinger VPS KVM 2, container `erp-toureche` next to the n8n stack (Traefik + Postgres + Redis + n8n), DNS `erp` A → `72.61.84.209`, clone in `/opt/erp`, managed with `erp update` / `erp status` / `erp backup`. Admin account created through the setup token |
-| Data safety | Nightly backup (14 kept), optional cloud-folder mirror (30 kept), `npm run restore` and `deploy/erp.sh restore` |
+| Data safety | Nightly backup (14 kept); off-site copy to Google Drive via n8n on the VPS (30 kept) or a cloud-folder mirror on a computer; `npm run restore` and `erp restore` (accepts `.db.gz`) |
 | Schema | `MIGRATIONS` 0 → 3. Never edit 0; append. Every migration is tested on a DB built by the previous code |
 | Branch | `claude/erp-toureche-system-fdir8x`; not merged into `main` yet (only on the owner's request) |
 
@@ -49,6 +49,7 @@ Read this first when you continue ERP TOURECHE in a new conversation, or when yo
 | 12 | Collections (`605946a`) | Carrier payouts reconciled by pasting the statement's tracking numbers; opening balance; Advisor alert after 14 days | The biggest COD leak is money that was delivered but never paid back |
 | 13 | Returns back to stock | A returned parcel goes back to Shopify's available stock (idempotent) and to the ERP copy; damaged or missing units are written off at cost; the real return cost flows into Finance, break-even and per-product ad results | Stock goes back where it was deducted, and never twice
 | 14 | Manual full sync | On the owner's request, background pulls (Shopify, Sheets, tracking, Meta, tariffs) run only when `auto_sync` is on (off by default). The top-bar button runs one ordered full sync on the server with live per-step progress. Backups and pending returns to Shopify stay automatic | Let the owner decide when data moves; keep only data-protecting jobs automatic
+| 15 | Off-site backup on the VPS | Each night the ERP gzips its backup and POSTs it to a private n8n webhook; n8n uploads it to Google Drive (`TOURECHE-ERP-backups`, last 30 kept) and confirms. Only a confirmed upload counts; failures show in Settings → System and the Advisor. `restore` accepts the `.gz` as is | On a server, "a folder synced to the cloud" does not exist: reuse what is already there (n8n + its Google account) instead of installing rclone
 
 ## 4. The mistakes that cost the most, and the rule that prevents each
 

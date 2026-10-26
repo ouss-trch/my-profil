@@ -11,6 +11,8 @@ export const SETTINGS = {
   n8n_events_url: { scope: 'global', type: 'url', def: '' },
   n8n_products_url: { scope: 'global', type: 'url', def: '' },
   n8n_report_url: { scope: 'global', type: 'url', def: '' },
+  // نسخة احتياطية خارج الخادم: n8n يرفعها إلى Google Drive (رابط فيه رمز سري: لا يُنشر)
+  n8n_backup_url: { scope: 'global', type: 'url', def: '' },
   n8n_sheets_url: { scope: 'global', type: 'url', def: '' },
   n8n_sheets_key: { scope: 'global', type: 'string', secret: true },
   n8n_image_url: { scope: 'global', type: 'url', def: '' },

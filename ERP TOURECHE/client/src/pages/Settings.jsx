@@ -137,6 +137,7 @@ const GLOBAL_GROUPS = [
       { k: 'n8n_events_url', label: ['Webhook الأحداث (الطلبيات/الحالات)', 'Webhook événements'], ltr: true },
       { k: 'n8n_products_url', label: ['Webhook نشر المنتجات (تيليغرام)', 'Webhook produits (Telegram)'], ltr: true },
       { k: 'n8n_report_url', label: ['Webhook التقرير الصباحي', 'Webhook rapport du matin'], ltr: true },
+      { k: 'n8n_backup_url', label: ['Webhook النسخ الاحتياطي (Google Drive)', 'Webhook sauvegarde (Google Drive)'], ltr: true },
       { k: 'n8n_sheets_url', label: ['جسر Google Sheets', 'Pont Google Sheets'], ltr: true },
       { k: 'n8n_sheets_key', label: ['مفتاح الجسر (x-erp-key)', 'Clé du pont (x-erp-key)'] },
       { k: 'n8n_inbound_key', label: ['مفتاح استقبال الطلبيات ‎/api/hooks/…‎', 'Clé de réception /api/hooks/…'] },
@@ -489,39 +490,71 @@ function Security() {
 }
 
 function BackupCard({ b }) {
-  const { t, lang } = useI18n();
+  const { t, lang, err } = useI18n();
   const m = b.mirror;
-  const ok = m.configured && m.reachable && !m.behind;
+  const d = b.drive || {};
+  const ok = b.offsite_ok;
+  // الوجهة الخارجية: Google Drive عبر n8n (الـ VPS) أو مجلد سحابي (حاسوب)
+  const viaDrive = d.configured || !m.configured;
+  const tone = ok ? 'good' : d.configured || m.configured ? 'bad' : 'warn';
   return (
     <Card title={t(['النسخ الاحتياطية', 'Sauvegardes'])}>
       <div className="grid gap-3 text-sm md:grid-cols-2">
         <div className="space-y-1">
-          <div className="text-xs text-sub">{t(['على هذا الجهاز (آخر 14 يوماً)', 'Sur cet ordinateur (14 jours)'])}</div>
+          <div className="text-xs text-sub">{t(['على هذا الخادم (آخر 14 يوماً)', 'Sur ce serveur (14 jours)'])}</div>
           <div className="font-medium">{b.local.last ? `${b.local.last.name} · ${dateTime(b.local.last.at, lang)}` : '—'}</div>
         </div>
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-xs text-sub">
-            {t(['خارج الجهاز (مجلد سحابي، آخر 30)', 'Hors ordinateur (dossier cloud, 30)'])}
-            <Badge tone={ok ? 'good' : m.configured ? 'bad' : 'warn'}>{ok ? t(['يعمل', 'Actif']) : m.configured ? t(['متوقف', 'En panne']) : t(['غير مفعّل', 'Inactif'])}</Badge>
+            {viaDrive ? t(['خارج الخادم (Google Drive عبر n8n، آخر 30)', 'Hors serveur (Google Drive via n8n, 30)']) : t(['خارج الجهاز (مجلد سحابي، آخر 30)', 'Hors ordinateur (dossier cloud, 30)'])}
+            <Badge tone={tone}>{ok ? t(['يعمل', 'Actif']) : tone === 'bad' ? t(['متوقف', 'En panne']) : t(['غير مفعّل', 'Inactif'])}</Badge>
           </div>
-          <div className="ltr break-all font-medium">{m.dir || '—'}</div>
-          {m.last && <div className="text-xs text-muted">{`${m.last.name} · ${dateTime(m.last.at, lang)}`}</div>}
+          {viaDrive ? (
+            <>
+              <div className="font-medium">{d.last_ok_at ? dateTime(d.last_ok_at, lang) : '—'}</div>
+              {d.error && (
+                <div className="break-words text-xs text-bad" title={d.error}>
+                  {err({ code: d.error.replace(/^[a-z0-9_]+:\s*/i, '') })}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="ltr break-all font-medium">{m.dir || '—'}</div>
+              {m.last && <div className="text-xs text-muted">{`${m.last.name} · ${dateTime(m.last.at, lang)}`}</div>}
+            </>
+          )}
         </div>
       </div>
       {!ok && (
         <div className="mt-3 space-y-1.5 rounded-lg bg-raised p-3 text-xs text-sub">
-          <p>
-            {m.configured
-              ? t(['المجلد غير موجود أو لم يُنسخ إليه اليوم. تأكد أن تطبيق Google Drive أو OneDrive يعمل ثم اضغط «نسخة احتياطية الآن».', 'Dossier introuvable ou pas de copie aujourd’hui. Vérifiez que Google Drive / OneDrive tourne puis « Sauvegarder maintenant ».'])
-              : t(['إن تعطّل الجهاز تضيع البيانات. أضف هذا السطر إلى ملف .env (بمسار مجلد Google Drive أو OneDrive) ثم أعد تشغيل الـ ERP:', 'Si l’ordinateur lâche, les données sont perdues. Ajoutez cette ligne au fichier .env (dossier Google Drive ou OneDrive) puis redémarrez :'])}
-          </p>
-          {!m.configured && (
+          {d.configured ? (
+            <p>
+              {t([
+                'لم تصل نسخة الليلة إلى Google Drive. في n8n افتح «Toureche ERP · نسخ احتياطي إلى Google Drive»، وتأكد أن حساب Google Drive متصل وأن سير العمل مفعّل، ثم اضغط «نسخة احتياطية الآن».',
+                'La copie de la nuit n’est pas arrivée sur Google Drive. Dans n8n, ouvrez « Toureche ERP · sauvegarde Google Drive », vérifiez le compte Google Drive et que le workflow est actif, puis « Sauvegarder maintenant ».',
+              ])}
+            </p>
+          ) : m.configured ? (
+            <p>
+              {t([
+                'المجلد غير موجود أو لم يُنسخ إليه اليوم. تأكد أن تطبيق Google Drive أو OneDrive يعمل ثم اضغط «نسخة احتياطية الآن».',
+                'Dossier introuvable ou pas de copie aujourd’hui. Vérifiez que Google Drive / OneDrive tourne puis « Sauvegarder maintenant ».',
+              ])}
+            </p>
+          ) : (
             <>
+              <p>
+                {t([
+                  'إن تعطّل الخادم تضيع البيانات. على الـ VPS: ضع رابط Webhook النسخ الاحتياطي في الإعدادات ← عام ← n8n، فتُرفع نسخة كل ليلة إلى Google Drive.',
+                  'Si le serveur lâche, les données sont perdues. Sur le VPS : renseignez le webhook de sauvegarde dans Paramètres → Général → n8n ; une copie part chaque nuit sur Google Drive.',
+                ])}
+              </p>
+              <p>{t(['على حاسوب: أضف هذا السطر إلى ملف .env (بمسار مجلد Google Drive أو OneDrive) ثم أعد تشغيل الـ ERP:', 'Sur un ordinateur : ajoutez cette ligne au fichier .env (dossier Google Drive ou OneDrive) puis redémarrez :'])}</p>
               <code className="ltr block rounded bg-surface px-2 py-1">ERP_BACKUP_MIRROR='G:\My Drive\ERP-backups'</code>
-              <code className="ltr block rounded bg-surface px-2 py-1">ERP_BACKUP_MIRROR='~/Library/CloudStorage/GoogleDrive-…/My Drive/ERP-backups'</code>
-              <p>{t(['الاسترجاع على جهاز جديد: README ← «إن تعطّل الجهاز».', 'Restauration sur un nouvel ordinateur : README → « Si l’ordinateur lâche ».'])}</p>
             </>
           )}
+          <p>{t(['الاسترجاع: README ← «إن تعطّل الجهاز».', 'Restauration : README → « Si l’ordinateur lâche ».'])}</p>
         </div>
       )}
     </Card>
@@ -539,7 +572,22 @@ function System() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <Button icon={Database} loading={busy === 'bk'} onClick={() => run('bk', () => api.post('/system/backup', {}), { success: t(['تمت النسخة الاحتياطية', 'Sauvegarde effectuée']) }).then(() => reload(true))}>
+        <Button
+          icon={Database}
+          loading={busy === 'bk'}
+          onClick={() =>
+            run(
+              'bk',
+              async () => {
+                const out = await api.post('/system/backup', {});
+                // النسخة المحلية وحدها لا تحمي من تعطّل الخادم: فشل النسخة الخارجية يُعرض كخطأ
+                if (out.drive_error || out.mirror_error) throw Object.assign(new Error('backup_offsite_failed'), { code: 'backup_offsite_failed' });
+                return out;
+              },
+              { success: t(['تمت النسخة الاحتياطية', 'Sauvegarde effectuée']) },
+            ).then(() => reload(true))
+          }
+        >
           {t(['نسخة احتياطية الآن', 'Sauvegarder maintenant'])}
         </Button>
         <Button icon={Server} loading={busy === 'snap'} onClick={() => run('snap', () => api.post('/system/snapshot', {}), { success: t(['أُرسل التقرير إلى n8n', 'Rapport envoyé à n8n']) })}>
