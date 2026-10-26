@@ -12,11 +12,12 @@ COPY . .
 RUN npm --prefix client run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
+# Traefik يصل من شبكة Docker الخاصة (172.x)، فنثق بالعناوين الخاصة كي يُحسب حدّ المحاولات على IP الزائر لا على Traefik
 ENV NODE_ENV=production \
     ERP_DATA_DIR=/data \
     ERP_PORT=3600 \
     ERP_HOST=0.0.0.0 \
-    ERP_TRUST_PROXY=1 \
+    ERP_TRUST_PROXY="loopback, uniquelocal" \
     TZ=Africa/Algiers
 WORKDIR /app
 COPY --from=build /app/package.json ./

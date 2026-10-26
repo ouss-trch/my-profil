@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { hashPassword, verifyPassword, passwordProblem } from '../lib/crypto.js';
-import { createSession, destroySession, requireAuth, requireRole, requireSensitive, checkLocked, recordFail, clearFails, usersCount } from '../lib/auth.js';
+import { createSession, destroySession, requireAuth, requireRole, requireSensitive, checkLocked, recordFail, clearFails, usersCount, checkSetupToken, clearSetupToken, setupTokenRequired } from '../lib/auth.js';
 import { getSensitiveHash, setSensitiveHash } from '../lib/settings.js';
 import { audit } from '../lib/audit.js';
 import { HttpError, badRequest, v } from '../lib/util.js';
@@ -14,21 +14,27 @@ let dummyHash = null;
 const getDummyHash = async () => (dummyHash ||= await hashPassword('timing-equalizer-only'));
 
 authRouter.get('/status', (req, res) => {
-  res.json({ setup_required: usersCount() === 0, user: req.user || null, sensitive_password_set: Boolean(getSensitiveHash()) });
+  const setupRequired = usersCount() === 0;
+  res.json({ setup_required: setupRequired, setup_token_required: setupRequired && setupTokenRequired(req), user: req.user || null, sensitive_password_set: Boolean(getSensitiveHash()) });
 });
 
 /** أول تشغيل: إنشاء حساب المدير + كلمة مرور العمليات الحساسة + أول مشروع */
 authRouter.post('/setup', async (req, res) => {
   if (usersCount() > 0) throw new HttpError(409, 'already_setup');
+  checkSetupToken(req, req.body.setup_token);
   const username = v.str(req.body.username, { required: true, max: 40, name: 'username' });
   const password = String(req.body.password || '');
   const sensitive = String(req.body.sensitive_password || '');
   const problem = passwordProblem(password) || passwordProblem(sensitive);
   if (problem) throw badRequest(problem);
   if (password === sensitive) throw badRequest('sensitive_must_differ');
-  const info = db.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, 'admin')").run(username, v.str(req.body.display_name, { max: 80 }) || username, await hashPassword(password));
-  setSensitiveHash(await hashPassword(sensitive));
+  const [passwordHash, sensitiveHash] = [await hashPassword(password), await hashPassword(sensitive)];
+  // طلبان متزامنان: نعيد الفحص بعد التجزئة (لا await بينه وبين الإدراج) حتى لا يُنشأ مديران
+  if (usersCount() > 0) throw new HttpError(409, 'already_setup');
+  const info = db.prepare("INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, 'admin')").run(username, v.str(req.body.display_name, { max: 80 }) || username, passwordHash);
+  setSensitiveHash(sensitiveHash);
   if (!db.prepare('SELECT 1 FROM projects').get()) createProject({ name: v.str(req.body.project_name, { max: 80 }) || 'SOU9NA', domain: v.str(req.body.project_domain, { max: 120 }) });
+  clearSetupToken();
   createSession(req, res, info.lastInsertRowid);
   audit({ ...req, user: { id: info.lastInsertRowid } }, 'setup');
   res.json({ ok: true });

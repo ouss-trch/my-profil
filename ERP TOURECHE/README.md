@@ -64,14 +64,14 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 
 الـ ERP يعمل في حاوية Docker مستقلة على نفس الخادم، خلف Traefik الموجود مع n8n، بدومين فرعي و HTTPS تلقائي. حاوية n8n لا تُلمس.
 
-1. **الدومين:** أضف سجل `A` باسم `erp` (مثلاً `erp.souqnna.com`) ← عنوان IP الخادم، من حيث تدير DNS الدومين. مع Cloudflare: اجعله «DNS only» حتى تصدر الشهادة.
+1. **الدومين:** أضف سجل `A` باسم `erp` (مثلاً `erp.leadsauto.cloud`) ← عنوان IP الخادم، من حيث تدير DNS الدومين. مع Cloudflare: اجعله «DNS only» حتى تصدر الشهادة.
 2. **على الخادم** (hPanel ← VPS ← Browser terminal، أو SSH):
    ```bash
    cd /opt && git clone -b claude/erp-toureche-system-fdir8x https://github.com/ouss-trch/my-profil.git erp
-   cd "/opt/erp/ERP TOURECHE" && bash deploy/install-vps.sh erp.souqnna.com
+   cd "/opt/erp/ERP TOURECHE" && bash deploy/install-vps.sh erp.leadsauto.cloud
    ```
    السكربت يقرأ إعداد Traefik من حاوية n8n (الشبكة، المنافذ، الشهادة)، يتحقق من الدومين، يبني الـ ERP ويشغّله، ثم يتأكد أنه يعمل.
-3. افتح `https://erp.souqnna.com` ← حساب المدير + كلمة المرور الحساسة + أول مشروع. في الإعدادات ضع «الرابط العام لاختبارات الصفحات» = `https://erp.souqnna.com`.
+3. افتح `https://erp.leadsauto.cloud` ← **رمز الإعداد** الذي طبعه السكربت (أو `bash deploy/erp.sh setup-token`) + حساب المدير + كلمة المرور الحساسة + أول مشروع. الرمز يمنع أي شخص يصل إلى الرابط قبلك من إنشاء حساب المدير، ويُحذف بعد الإعداد. في الإعدادات ضع «الرابط العام لاختبارات الصفحات» = `https://erp.leadsauto.cloud`.
 4. **نقل بياناتك من الحاسوب** (إن كان لديك): انسخ آخر ملف `toureche-YYYY-MM-DD.db` وملف `data/.secret-key` إلى الخادم ثم:
    ```bash
    bash deploy/erp.sh restore /root/toureche-2026-10-26.db
@@ -86,6 +86,7 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 | `bash deploy/erp.sh backup` | نسخة احتياطية الآن |
 | `bash deploy/erp.sh restore FILE.db` | استرجاع (يتحقق من الملف، يحفظ القاعدة الحالية، ويعيد تشغيل الـ ERP في كل الحالات) |
 | `bash deploy/erp.sh reset-password USER PASS` | كلمة مرور منسية |
+| `bash deploy/erp.sh setup-token` | رمز الإعداد الأول (قبل إنشاء حساب المدير فقط) |
 
 **النسخ خارج الخادم:** البيانات في volume `erp-toureche_erp_data`. لنسخة يومية في Google Drive: ثبّت `rclone` واربطه بـ Drive (`rclone config`)، أضف `ERP_BACKUP_MIRROR=/offsite` إلى `deploy/.env` ثم `bash deploy/erp.sh update`، وأضف إلى `crontab -e`:
 `30 3 * * * rclone copy "/opt/erp/ERP TOURECHE/deploy/offsite" gdrive:ERP-backups`

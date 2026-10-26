@@ -9,7 +9,7 @@ export default function Login() {
   const { t, lang, setLang } = useI18n();
   const { auth, refreshAuth } = useApp();
   const setup = auth.setupRequired;
-  const [f, setF] = useState({ username: '', password: '', display_name: '', sensitive_password: '', project_name: 'SOU9NA', project_domain: 'souqnna.com' });
+  const [f, setF] = useState({ setup_token: '', username: '', password: '', display_name: '', sensitive_password: '', project_name: 'SOU9NA', project_domain: 'souqnna.com' });
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [dark, setDark] = useState(document.documentElement.classList.contains('dark'));
@@ -71,8 +71,23 @@ export default function Login() {
             {setup && <p className="mt-1 text-xs leading-relaxed text-sub">{t('auth.setupHint')}</p>}
           </div>
           {auth.offline && <ErrorBox error={{ code: 'network_error' }} onRetry={refreshAuth} />}
+          {setup && auth.setupTokenRequired && (
+            <Field
+              label={t('auth.setupToken')}
+              hint={
+                <>
+                  {t('auth.setupTokenHint')}{' '}
+                  <code dir="ltr" className="whitespace-nowrap">
+                    bash deploy/erp.sh setup-token
+                  </code>
+                </>
+              }
+            >
+              <Input autoFocus className="ltr font-mono tracking-wider" autoComplete="one-time-code" autoCapitalize="characters" spellCheck={false} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" value={f.setup_token} onChange={set('setup_token')} required />
+            </Field>
+          )}
           <Field label={t('auth.username')}>
-            <Input autoFocus autoComplete="username" value={f.username} onChange={set('username')} required />
+            <Input autoFocus={!(setup && auth.setupTokenRequired)} autoComplete="username" value={f.username} onChange={set('username')} required />
           </Field>
           {setup && (
             <Field label={t('auth.displayName')}>

@@ -116,6 +116,8 @@ export const DICT = {
   'auth.projectName': ['اسم المشروع الأول', 'Nom du premier projet'],
   'auth.projectDomain': ['دومين المتجر', 'Domaine de la boutique'],
   'auth.start': ['ابدأ', 'Commencer'],
+  'auth.setupToken': ['رمز الإعداد', 'Code d’installation'],
+  'auth.setupTokenHint': ['يظهر في نافذة تشغيل النظام، أو على الخادم بالأمر:', 'Affiché au démarrage de l’ERP, ou sur le VPS avec :'],
   'auth.pwRule': ['8 أحرف على الأقل، حروف وأرقام', '8 caractères minimum, lettres et chiffres'],
   'auth.locked': ['تم قفل الشاشة', 'Écran verrouillé'],
 
@@ -135,6 +137,8 @@ export const DICT = {
   'err.sensitive_password_wrong': ['كلمة مرور العمليات الحساسة غير صحيحة', 'Mot de passe sensible incorrect'],
   'err.password_too_short': ['كلمة المرور قصيرة (8 أحرف على الأقل)', 'Mot de passe trop court (8 min.)'],
   'err.password_needs_letters_and_digits': ['كلمة المرور يجب أن تحتوي حروفاً وأرقاماً', 'Le mot de passe doit contenir lettres et chiffres'],
+  'err.setup_token_required': ['أدخل رمز الإعداد: يحمي الحساب الأول من أن يسبقك إليه أحد', 'Saisissez le code d’installation : il protège le premier compte'],
+  'err.setup_token_wrong': ['رمز الإعداد غير صحيح — انسخه من نافذة التشغيل أو من الأمر ⁦bash deploy/erp.sh setup-token⁩', 'Code d’installation incorrect — copiez-le depuis le démarrage ou ⁦bash deploy/erp.sh setup-token⁩'],
   'err.sensitive_must_differ': ['كلمة المرور الحساسة يجب أن تختلف عن كلمة الدخول', 'Le mot de passe sensible doit différer'],
   'err.meta_not_configured': ['Meta غير مربوط في إعدادات هذا المشروع', 'Meta non configuré pour ce projet'],
   'err.meta_token_missing': ['رمز Meta غير موجود', 'Jeton Meta manquant'],

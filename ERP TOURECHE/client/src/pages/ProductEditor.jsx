@@ -537,12 +537,16 @@ function SeoTab({ p, f, set, onApplied }) {
   );
 }
 
-/** تنقية HTML المولّد قبل المعاينة (إزالة السكربتات والأحداث) */
+/** تنقية HTML المولّد قبل المعاينة (إزالة السكربتات والأحداث والروابط التنفيذية، حتى المموّهة مثل «java&#9;script:») */
 function sanitize(html) {
   const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-  doc.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach((n) => n.remove());
+  doc.querySelectorAll('script,style,iframe,frame,object,embed,link,meta,base,form').forEach((n) => n.remove());
   doc.querySelectorAll('*').forEach((el) => {
-    for (const a of [...el.attributes]) if (/^on/i.test(a.name) || /javascript:/i.test(a.value)) el.removeAttribute(a.name);
+    for (const a of [...el.attributes]) {
+      // eslint-disable-next-line no-control-regex
+      const value = a.value.replace(/[\u0000-\u0020]/g, '').toLowerCase();
+      if (/^on/i.test(a.name) || /^(srcdoc|formaction)$/i.test(a.name) || /(javascript|vbscript):/.test(value)) el.removeAttribute(a.name);
+    }
   });
   return doc.body.innerHTML;
 }

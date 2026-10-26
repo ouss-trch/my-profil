@@ -23,12 +23,21 @@ function save(projectId, buffer, ext = 'png') {
   return { file: `${projectId}/${name}`, url: `/uploads/${projectId}/${name}` };
 }
 
+/** مسار ملف محلي من رابط /uploads/… — null إن خرج عن مجلد الصور (مثل /uploads/../.secret-key) */
+export function uploadPath(url) {
+  if (!String(url || '').startsWith('/uploads/')) return null;
+  const file = path.resolve(config.uploadsDir, url.slice('/uploads/'.length));
+  return file.startsWith(path.resolve(config.uploadsDir) + path.sep) ? file : null;
+}
+
 async function fetchImage(url) {
   if (url.startsWith('/uploads/')) {
-    const file = path.join(config.uploadsDir, url.replace('/uploads/', ''));
-    if (!file.startsWith(config.uploadsDir)) throw new IntegrationError('images', 'invalid', 'bad_path');
+    const file = uploadPath(url);
+    if (!file) throw new IntegrationError('images', 'invalid', 'bad_path');
     return { buffer: fs.readFileSync(file), mime: file.endsWith('.jpg') || file.endsWith('.jpeg') ? 'image/jpeg' : file.endsWith('.webp') ? 'image/webp' : 'image/png' };
   }
+  // روابط عامة فقط: لا يُستعمل الخادم لطلب عناوين داخلية (n8n، شبكة Docker…)
+  if (!/^https:\/\//i.test(url)) throw new IntegrationError('images', 'invalid', 'bad_path');
   const res = await request('images', url, { raw: true, timeoutMs: 60000 });
   if (!res.ok) throw new IntegrationError('images', 'invalid', `source_image_${res.status}`);
   return { buffer: Buffer.from(await res.arrayBuffer()), mime: res.headers.get('content-type') || 'image/jpeg' };
@@ -110,7 +119,7 @@ export async function generateImages(projectId, { prompt, sourceUrls = [], count
 
 export function readUpload(relPath) {
   const file = path.resolve(config.uploadsDir, relPath);
-  if (!file.startsWith(config.uploadsDir + path.sep)) throw new IntegrationError('images', 'invalid', 'bad_path');
+  if (!file.startsWith(path.resolve(config.uploadsDir) + path.sep)) throw new IntegrationError('images', 'invalid', 'bad_path');
   return fs.readFileSync(file);
 }
 

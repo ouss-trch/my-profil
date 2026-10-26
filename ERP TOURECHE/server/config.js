@@ -38,7 +38,9 @@ export const config = {
   sessionDays: Number(env.ERP_SESSION_DAYS || 14),
   // نافذة صلاحية كلمة مرور العمليات الحساسة بعد إدخالها (بالدقائق) — 0 = في كل مرة
   sensitiveWindowMin: Number(env.ERP_SENSITIVE_WINDOW_MIN || 0),
-  trustProxy: env.ERP_TRUST_PROXY === '1' || env.ERP_TRUST_PROXY === 'true',
+  // من نثق بترويسة X-Forwarded-For منه (لمعرفة IP الزائر الحقيقي في حدّ المحاولات):
+  // 1 = وسيط على نفس الجهاز (tailscale serve)؛ أو قائمة Express مثل «loopback, uniquelocal» (Traefik داخل Docker)
+  trustProxy: ['1', 'true'].includes(env.ERP_TRUST_PROXY) ? 'loopback' : ['', '0', 'false'].includes(env.ERP_TRUST_PROXY || '') ? false : env.ERP_TRUST_PROXY,
   disableScheduler: env.ERP_DISABLE_SCHEDULER === '1',
   // عناوين عامة إضافية مسموحة (مثل رابط Tailscale Funnel أو Cloudflare) عند وجود وسيط يغيّر ترويسة Host
   allowedOrigins: String(env.ERP_ALLOWED_ORIGINS || '')

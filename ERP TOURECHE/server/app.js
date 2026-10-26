@@ -18,7 +18,7 @@ import { advisorRouter, splitsRouter, goHandler, hitHandler } from './routes/ins
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
-  if (config.trustProxy) app.set('trust proxy', 'loopback');
+  if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
   app.use(
     helmet({
@@ -34,7 +34,8 @@ export function createApp() {
         },
       },
       crossOriginEmbedderPolicy: false,
-      hsts: false, // HTTPS يتكفل به Tailscale عند استعمال «tailscale serve»
+      // يتجاهله المتصفح على http (localhost)، ويُثبّت HTTPS عند الوصول عبر Tailscale أو دومين الـVPS
+      hsts: { maxAge: 180 * 86400, includeSubDomains: false },
     }),
   );
   app.use(express.json({ limit: '4mb' }));

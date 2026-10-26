@@ -7,6 +7,7 @@
 #   bash deploy/erp.sh restore FILE.db   # استرجاع بيانات (مثلاً من الحاسوب) — يوقف الـ ERP ثم يعيده
 #   bash deploy/erp.sh import-key FILE   # وضع ملف .secret-key القديم (لمفاتيح الربط المشفّرة)
 #   bash deploy/erp.sh reset-password USER NEWPASS
+#   bash deploy/erp.sh setup-token       # رمز الإعداد الأول (يُطلب قبل إنشاء حساب المدير)
 set -euo pipefail
 cd "$(dirname "$0")"
 C="docker compose --env-file .env"
@@ -36,5 +37,6 @@ case "${1:-}" in
     [ $rc -eq 0 ] && echo "✓ وُضع المفتاح"
     exit $rc ;;
   reset-password) docker exec erp-toureche node server/cli.js reset-password "${2:?}" "${3:?}" ;;
-  *) sed -n '2,9p' "$0" ;;
+  setup-token) docker exec erp-toureche cat /data/.setup-token 2>/dev/null || echo "لا يوجد رمز: الإعداد الأول تمّ" ;;
+  *) sed -n '2,10p' "$0" ;;
 esac

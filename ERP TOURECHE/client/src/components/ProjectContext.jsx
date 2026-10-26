@@ -20,7 +20,7 @@ export function AppProvider({ children }) {
   const refreshAuth = useCallback(async () => {
     try {
       const s = await api.get('/auth/status', { project: null });
-      setAuth({ loading: false, user: s.user, setupRequired: s.setup_required });
+      setAuth({ loading: false, user: s.user, setupRequired: s.setup_required, setupTokenRequired: s.setup_token_required });
       return s;
     } catch {
       setAuth({ loading: false, user: null, setupRequired: false, offline: true });

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, parseJson } from '../db/index.js';
-import { config } from '../config.js';
 import { projectConfig } from '../lib/settings.js';
 import { HttpError, nowIso, slugify, badRequest, dzDay } from '../lib/util.js';
 import * as shopify from '../integrations/shopify.js';
@@ -10,6 +9,7 @@ import * as meta from '../integrations/meta.js';
 import * as n8n from '../integrations/n8n.js';
 import { analyzeSeo } from './seo.js';
 import { assertSupplier } from './contacts.js';
+import { uploadPath } from '../integrations/images.js';
 import { getProject, inList } from './projects.js';
 
 const JSON_FIELDS = ['tags', 'collections', 'options', 'variants', 'images', 'specs', 'angles'];
@@ -196,8 +196,8 @@ async function resolveImageSources(cfg, images) {
       continue;
     }
     if (img.url?.startsWith('/uploads/')) {
-      const file = path.join(config.uploadsDir, img.url.replace('/uploads/', ''));
-      if (!fs.existsSync(file)) continue;
+      const file = uploadPath(img.url);
+      if (!file || !fs.existsSync(file)) continue;
       const ext = path.extname(file).slice(1).toLowerCase();
       const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
       const url = await shopify.stagedUpload(cfg, { buffer: fs.readFileSync(file), filename: path.basename(file), mimeType: mime });
@@ -297,8 +297,8 @@ async function imageBlocks(images, max = 6) {
   for (const img of (images || []).slice(0, max)) {
     if (/^https:\/\//.test(img.url || '')) out.push({ url: img.url });
     else if (img.url?.startsWith('/uploads/')) {
-      const file = path.join(config.uploadsDir, img.url.replace('/uploads/', ''));
-      if (!fs.existsSync(file)) continue;
+      const file = uploadPath(img.url);
+      if (!file || !fs.existsSync(file)) continue;
       const ext = path.extname(file).slice(1).toLowerCase();
       out.push({ data: fs.readFileSync(file).toString('base64'), mediaType: ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png' });
     }

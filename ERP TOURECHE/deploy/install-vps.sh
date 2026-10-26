@@ -69,5 +69,7 @@ done
 echo ""
 echo "✓ الـ ERP يعمل على الخادم 24/7"
 echo "  افتح: https://$DOMAIN  (أول مرة: حساب المدير + كلمة المرور الحساسة + أول مشروع)"
+TOKEN=$(docker exec erp-toureche cat /data/.setup-token 2>/dev/null || true)
+[ -z "$TOKEN" ] || echo "  رمز الإعداد الأول (اكتبه في صفحة الإعداد): $TOKEN"
 echo "  من n8n داخل نفس الخادم استعمل: http://erp-toureche:3600/api/hooks/<slug>/orders"
 echo "  التحديث لاحقاً: bash deploy/erp.sh update"

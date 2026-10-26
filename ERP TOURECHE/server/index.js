@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { createApp } from './app.js';
 import { startScheduler } from './services/scheduler.js';
 import { db } from './db/index.js';
+import { setupToken } from './lib/auth.js';
 
 const app = createApp();
 
@@ -18,6 +19,8 @@ const server = app.listen(config.port, config.host, () => {
   for (const ip of tailscale) console.log(`  عبر Tailscale:     http://${ip}:${config.port}`);
   for (const ip of ips.filter((x) => !x.startsWith('100.'))) console.log(`  على الشبكة المحلية: http://${ip}:${config.port}`);
   console.log(`  البيانات: ${config.dataDir}`);
+  const token = setupToken();
+  if (token) console.log(`  رمز الإعداد الأول (يُطلب عند الفتح من جهاز آخر): ${token}`);
   console.log('');
   startScheduler();
 });

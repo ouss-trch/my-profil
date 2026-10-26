@@ -1,11 +1,10 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { db, parseJson } from '../db/index.js';
-import { config } from '../config.js';
 import { getSetting, setSetting, projectConfig } from '../lib/settings.js';
 import { HttpError, addDays, badRequest, dzDay, dzDayStartIso, nowIso, round } from '../lib/util.js';
 import * as meta from '../integrations/meta.js';
 import { request } from '../lib/http.js';
+import { uploadPath } from '../integrations/images.js';
 import { toDa } from './analytics.js';
 import { getProduct } from './products.js';
 import { inList } from './projects.js';
@@ -404,10 +403,11 @@ export async function launchTest(projectId, productId, o) {
   if (o.imageUrl) {
     let buffer;
     if (o.imageUrl.startsWith('/uploads/')) {
-      const file = path.resolve(config.uploadsDir, o.imageUrl.replace('/uploads/', ''));
-      if (!file.startsWith(path.resolve(config.uploadsDir))) throw badRequest('bad_path');
+      const file = uploadPath(o.imageUrl);
+      if (!file) throw badRequest('bad_path');
       buffer = fs.readFileSync(file);
     } else {
+      if (!/^https:\/\//i.test(o.imageUrl)) throw badRequest('bad_path');
       const res = await request('images', o.imageUrl, { raw: true, timeoutMs: 60000 });
       buffer = Buffer.from(await res.arrayBuffer());
     }

@@ -1,6 +1,9 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { db } from '../db/index.js';
 import { config } from '../config.js';
-import { sha256, verifyPassword } from './crypto.js';
+import { safeEqual, sha256, verifyPassword } from './crypto.js';
 import { getSensitiveHash } from './settings.js';
 import { HttpError, nowIso, randomId } from './util.js';
 
@@ -125,3 +128,40 @@ export function requireSensitive(req, _res, next) {
 }
 
 export const usersCount = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+
+// ——— رمز الإعداد الأول ———
+// ما دام لا يوجد أي حساب، فأول من يفتح الرابط يصبح المدير. على خادم عام (VPS) يكفي أن يسبقك أحد إلى الرابط،
+// لذلك يُطلب رمز يُكتب في data/.setup-token ولا يُرى إلا من داخل الخادم (نافذة التشغيل، أو deploy/erp.sh setup-token).
+// من يفتح http://localhost مباشرة على نفس الجهاز معفى منه.
+const setupTokenFile = () => path.join(config.dataDir, '.setup-token');
+const normToken = (s) => String(s ?? '').toUpperCase().replace(/[^0-9A-F]/g, '');
+
+/** الرمز الحالي (يُنشأ عند الحاجة)، أو null إن كان الإعداد قد تمّ */
+export function setupToken() {
+  const file = setupTokenFile();
+  if (usersCount() > 0) {
+    fs.rmSync(file, { force: true });
+    return null;
+  }
+  if (!fs.existsSync(file)) {
+    const hex = crypto.randomBytes(10).toString('hex').toUpperCase();
+    fs.writeFileSync(file, `${hex.match(/.{4}/g).join('-')}\n`, { mode: 0o600 });
+  }
+  return fs.readFileSync(file, 'utf8').trim();
+}
+
+/** طلب مباشر من نفس الجهاز، لا عبر وسيط (Traefik / Tailscale serve يضيفان X-Forwarded-For) */
+export function isDirectLocal(req) {
+  const a = req.socket?.remoteAddress || '';
+  return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(a) && !req.headers['x-forwarded-for'] && !req.headers.forwarded;
+}
+
+export const setupTokenRequired = (req) => usersCount() === 0 && !isDirectLocal(req);
+
+export function checkSetupToken(req, given) {
+  if (!setupTokenRequired(req)) return;
+  if (!given) throw new HttpError(403, 'setup_token_required');
+  if (!safeEqual(normToken(given), normToken(setupToken()))) throw new HttpError(403, 'setup_token_wrong');
+}
+
+export const clearSetupToken = () => fs.rmSync(setupTokenFile(), { force: true });
