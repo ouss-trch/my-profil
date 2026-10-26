@@ -49,6 +49,7 @@ export function textOf(message) {
 function translateError(e) {
   if (e instanceof Anthropic.AuthenticationError) return new IntegrationError('ai', 'auth', 'anthropic_auth_failed');
   if (e instanceof Anthropic.RateLimitError) return new IntegrationError('ai', 'rate_limit', 'anthropic_rate_limited');
+  if (e instanceof Anthropic.NotFoundError) return new IntegrationError('ai', 'config', 'ai_model_not_found');
   if (e instanceof Anthropic.BadRequestError) return new IntegrationError('ai', 'invalid', e.message);
   if (e instanceof Anthropic.APIConnectionError) return new IntegrationError('ai', 'network', 'network_unreachable');
   if (e instanceof Anthropic.APIError) return new IntegrationError('ai', 'server', e.message);

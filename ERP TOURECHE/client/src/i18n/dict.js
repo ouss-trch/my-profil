@@ -163,6 +163,7 @@ export const DICT = {
   'err.image_required': ['اختر صورة أو منشوراً للإعلان', 'Choisissez une image ou une publication'],
   'err.budget_required': ['حدد الميزانية اليومية (1 على الأقل بعملة الحساب)', 'Indiquez le budget journalier (≥ 1 dans la devise du compte)'],
   'err.ad_account_required': ['اختر حساباً إعلانياً', 'Choisissez un compte publicitaire'],
+  'err.ai_model_not_found': ['النموذج المحفوظ غير موجود عند Claude: اختر نموذجاً من القائمة ثم احفظ', 'Modèle introuvable chez Claude : choisissez-en un dans la liste puis enregistrez'],
   'err.ai_not_configured': ['أضف مفتاح Claude في الإعدادات لتفعيل الذكاء الاصطناعي', 'Ajoutez la clé Claude dans les paramètres'],
   'err.split_needs_two_variants': ['يلزم صفحتان على الأقل', 'Au moins deux pages sont nécessaires'],
   'err.split_variant_url_invalid': ['رابط الصفحة {x} غير صالح', "L'URL de la page {x} est invalide"],

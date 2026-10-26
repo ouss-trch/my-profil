@@ -49,6 +49,7 @@
 | A return restocked a product that was never deducted | A non-Shopify order (Sheets) never reduced Shopify stock | Restock only where the sale was deducted; mark the other lines `not_deducted` and still count the return cost |
 | First order sync fails with `Invalid timestamp for query filter created_at` | Shopify's search rejects relative dates such as `created_at:>-60d` | Send an absolute ISO date; tested against the live store |
 | Store pages still say "missing permission" after a new app version adds `read_online_store_pages` | Releasing a version is not enough: each store must approve the new scope (Shopify asks when the app is opened from the store admin); the cached token also carries the old scopes | Tell the owner to open the app from Shopify admin → Apps and approve. On `ACCESS_DENIED` drop the cached token and retry once. The secondary info pages never block product pages: without the scope they are skipped and kept, not deleted |
+| AI test shows a raw `404 not_found_error … model: claude-sonnet 5.5` | The model was a free-text field and the owner typed the marketing name with a space | Make the model a dropdown of exact API ids. Read old saved values through a normalizer (`Claude Sonnet 5.5` → `claude-sonnet-5-5`) or fall back to the default. Map the SDK's `NotFoundError` to a readable "model not found" message |
 
 ## Verification checklist (run before every delivery)
 

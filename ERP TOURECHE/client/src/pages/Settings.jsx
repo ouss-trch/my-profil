@@ -105,7 +105,18 @@ const GLOBAL_GROUPS = [
     test: 'ai',
     fields: [
       { k: 'anthropic_api_key', label: ['مفتاح Claude API', 'Clé API Claude'] },
-      { k: 'ai_model', label: ['النموذج', 'Modèle'], ltr: true },
+      {
+        k: 'ai_model',
+        label: ['النموذج', 'Modèle'],
+        type: 'enum',
+        values: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1'],
+        labels: {
+          'claude-opus-5-5': ['Opus 5.5 — الافتراضي، متوازن', 'Opus 5.5 — par défaut, équilibré'],
+          'claude-sonnet-5-5': ['Sonnet 5.5 — أرخص بمرتين، جيد جداً', 'Sonnet 5.5 — 2× moins cher, très bon'],
+          'claude-haiku-5-5': ['Haiku 5.5 — الأرخص والأسرع', 'Haiku 5.5 — le moins cher, rapide'],
+          'claude-fable-5-1': ['Fable 5.1 — الأقوى والأغلى', 'Fable 5.1 — le plus puissant, le plus cher'],
+        },
+      },
       { k: 'ai_effort', label: ['مستوى التفكير', "Niveau d'effort"], type: 'enum', values: ['low', 'medium', 'high', 'xhigh', 'max'] },
     ],
   },
@@ -183,7 +194,7 @@ function SettingInput({ def, value, onChange, id }) {
         )}
       </div>
     );
-  if (def.type === 'enum') return <Select id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value)} options={def.values.map((v) => ({ value: v, label: v || '—' }))} />;
+  if (def.type === 'enum') return <Select id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value)} options={def.values.map((v) => ({ value: v, label: def.labels?.[v] ? t(def.labels[v]) : v || '—' }))} />;
   if (def.type === 'list') return <Input id={id} className="ltr" value={(value || []).join(', ')} onChange={(e) => onChange(e.target.value.split(/[,\s]+/).filter(Boolean).map((x) => x.replace(/^act_/, '')))} />;
   if (def.type === 'weights') {
     const w = value || {};

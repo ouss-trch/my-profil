@@ -2,6 +2,11 @@ import { db, parseJson } from '../db/index.js';
 import { encrypt, decrypt } from './crypto.js';
 import { nowIso } from './util.js';
 
+// نماذج Claude المتاحة في القائمة (أسماء API الدقيقة — الاسم المكتوب خطأً يعطي 404)
+export const AI_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1'];
+// «Claude Sonnet 5.5» أو «claude-sonnet 5.5» ← claude-sonnet-5-5
+const modelId = (v) => String(v).trim().toLowerCase().replace(/[\s._]+/g, '-');
+
 /**
  * تعريف كل الإعدادات: النطاق (global أو project)، هل هي سرّية (تُشفَّر ولا تُعاد للواجهة)، والقيمة الافتراضية.
  * المفاتيح السرية لا تُرجعها الواجهة أبداً — فقط «مضبوط/غير مضبوط» وآخر 4 أحرف.
@@ -18,7 +23,7 @@ export const SETTINGS = {
   n8n_image_url: { scope: 'global', type: 'url', def: '' },
   n8n_inbound_key: { scope: 'global', type: 'string', secret: true },
   anthropic_api_key: { scope: 'global', type: 'string', secret: true },
-  ai_model: { scope: 'global', type: 'string', def: 'claude-opus-5-5' },
+  ai_model: { scope: 'global', type: 'enum', values: AI_MODELS, normalize: modelId, def: 'claude-opus-5-5' },
   ai_effort: { scope: 'global', type: 'enum', values: ['low', 'medium', 'high', 'xhigh', 'max'], def: 'medium' },
   image_provider: { scope: 'global', type: 'enum', values: ['none', 'n8n', 'openai', 'gemini'], def: 'none' },
   openai_api_key: { scope: 'global', type: 'string', secret: true },
@@ -102,6 +107,12 @@ function coerce(def, val) {
       return Number.isFinite(Number(val)) ? Number(val) : def.def;
     case 'bool':
       return val === true || val === 'true' || val === 1 || val === '1';
+    case 'enum': {
+      // قيمة قديمة خارج القائمة (مثل نموذج كُتب يدوياً) لا تكسر شيئاً: تُصحَّح أو تعود للافتراضي
+      if (def.values.includes(val)) return val;
+      const fixed = def.normalize ? def.normalize(val) : val;
+      return def.values.includes(fixed) ? fixed : def.def;
+    }
     default:
       return val;
   }
@@ -124,6 +135,7 @@ export function setSetting(key, value, projectId) {
   let val = value;
   if (def.type === 'number') val = value === '' || value === null ? null : Number(value);
   if (def.type === 'bool') val = value === true || value === 'true' || value === 1 || value === '1';
+  if (def.type === 'enum' && val !== null && def.normalize) val = def.normalize(val);
   if (def.type === 'enum' && val !== null && !def.values.includes(val)) throw new Error(`invalid_value:${key}`);
   if (def.type === 'url' && val && !/^https?:\/\/[^\s]+$/i.test(String(val))) throw new Error(`invalid_url:${key}`);
   db.prepare(
