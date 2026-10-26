@@ -19,6 +19,7 @@ import * as fullsync from '../services/fullsync.js';
 import { recentFailures } from '../services/effects.js';
 import { backup, backupStatus } from '../services/backup.js';
 import { makeSnapshot, sendSnapshot } from '../services/snapshot.js';
+import { updateStatus, requestUpdate, requestCheck } from '../services/updater.js';
 
 export const coreRouter = Router();
 
@@ -154,6 +155,15 @@ coreRouter.post('/system/backup', requireRole('admin'), async (req, res) => {
   audit(req, 'backup_created', { details: { mirrored: Boolean(out.mirrored), mirror_error: out.mirrorError, drive: Boolean(out.drive), drive_error: out.driveError } });
   res.json({ file: out.file.split(/[\\/]/).pop(), mirrored: Boolean(out.mirrored), mirror_error: out.mirrorError, drive: Boolean(out.drive), drive_error: out.driveError, status: backupStatus() });
 });
+
+// تحديث الـ ERP من داخله (VPS): الطلب تنفّذه خدمة erp-updater على الخادم
+coreRouter.get('/system/update', requireRole('admin'), (_req, res) => res.json(updateStatus()));
+coreRouter.post('/system/update', requireRole('admin'), requireSensitive, (req, res) => {
+  const out = requestUpdate();
+  audit(req, 'update_requested', { details: { from: out.current.commit, behind: out.check?.behind ?? null } });
+  res.json(out);
+});
+coreRouter.post('/system/update/check', requireRole('admin'), (_req, res) => res.json(requestCheck()));
 
 coreRouter.get('/system/snapshot', requireRole('admin', 'manager'), async (_req, res) => res.json(await makeSnapshot()));
 coreRouter.post('/system/snapshot', requireRole('admin', 'manager'), async (_req, res) => res.json(await sendSnapshot()));

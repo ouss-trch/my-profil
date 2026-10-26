@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Database, KeyRound, Plug, Plus, Save, Server, Settings as SettingsIcon, ShieldCheck, Trash2, Users, FolderKanban, CheckCircle2, XCircle } from 'lucide-react';
+import { Database, KeyRound, Plug, Plus, Save, Server, Settings as SettingsIcon, ShieldCheck, Trash2, Users, FolderKanban, CheckCircle2, XCircle, Download, RefreshCw, Loader2 } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
@@ -572,16 +572,244 @@ function BackupCard({ b }) {
   );
 }
 
+// ——— تحديث الـ ERP من داخله (VPS) ———
+const UPDATE_STEPS = [
+  ['backup', ['نسخة احتياطية', 'Sauvegarde']],
+  ['pull', ['جلب النسخة الجديدة', 'Téléchargement']],
+  ['build', ['البناء (1–3 دقائق)', 'Construction (1–3 min)']],
+  ['restart', ['إعادة التشغيل', 'Redémarrage']],
+  ['verify', ['فحص التشغيل', 'Vérification']],
+];
+const ageMs = (iso) => (iso ? Date.now() - Date.parse(iso) : Infinity);
+const short = (c) => (c ? c.slice(0, 7) : '—');
+
+function UpdateCard() {
+  const { t, lang, err } = useI18n();
+  // بعد الضغط: متابعة كل 3 ثوانٍ حتى النهاية (والـ ERP يغيب دقيقة أثناء إعادة التشغيل)
+  const [watch, setWatch] = useState(null);
+  const [confirm, setConfirm] = useState(false);
+  const [result, setResult] = useState(null);
+  const { data: s, error, loading, reload, setData } = useApi('/system/update', { interval: watch ? 3000 : 60e3 });
+  const { run, busy } = useAction();
+  const checked = useRef(false);
+
+  // فحص تلقائي عند فتح الصفحة إن مرّت أكثر من ساعة على آخر فحص
+  useEffect(() => {
+    if (checked.current || !s?.supported || !s.agent?.installed || ageMs(s.check?.checked_at) < 3600e3) return;
+    checked.current = true;
+    api.post('/system/update/check', {}).then(() => setTimeout(() => reload(true), 8000), () => {});
+  }, [s, reload]);
+
+  const upd = s?.update;
+  const running = Boolean(s?.pending) || upd?.state === 'running';
+  // انتهى ما بدأناه: الخادم أجاب ولم يعد هناك طلب معلّق ولا تحديث جارٍ
+  useEffect(() => {
+    if (watch && s && !running && !error) {
+      setResult(s.update);
+      setWatch(null);
+    }
+  }, [watch, s, running, error]);
+
+  if (loading && !s) return <Card title={t(['تحديث الـ ERP', 'Mise à jour de l’ERP'])} icon={Download}><Loading /></Card>;
+  if (!s) return error ? <ErrorBox error={error} onRetry={reload} /> : null;
+
+  // انقطاع الاتصال أثناء التحديث = الـ ERP يُعاد تشغيله
+  const restarting = Boolean(watch) && Boolean(error);
+  const ch = s.check;
+  const upToDate = ch && !ch.error && ch.behind === 0;
+  const canUpdate = s.supported && s.agent?.installed && !running && !watch && !upToDate;
+  const stepIdx = UPDATE_STEPS.findIndex(([k]) => k === upd?.step);
+  const tone = { ok: 'good', failed: 'bad', stale: 'bad', running: 'info' };
+
+  const start = () =>
+    run(
+      'up',
+      async () => {
+        const out = await api.post('/system/update', {}, { reason: t(['تحديث الـ ERP', 'Mise à jour de l’ERP']) });
+        // الرد فيه الطلب المعلّق: المتابعة تبدأ منه لا من حالة قديمة
+        setData(out);
+        setResult(null);
+        setWatch({ from: s.current.commit });
+        setConfirm(false);
+        return out;
+      },
+      { success: t(['بدأ التحديث', 'Mise à jour lancée']) },
+    );
+
+  return (
+    <Card
+      title={t(['تحديث الـ ERP', 'Mise à jour de l’ERP'])}
+      icon={Download}
+      actions={
+        s.supported && s.agent?.installed ? (
+          <Button size="sm" variant="ghost" icon={RefreshCw} loading={busy === 'chk'} disabled={running || Boolean(watch)} onClick={() => run('chk', () => api.post('/system/update/check', {}), { success: t(['جارٍ البحث عن نسخة جديدة…', 'Recherche d’une nouvelle version…']) }).then(() => setTimeout(() => reload(true), 6000))}>
+            {t(['فحص الآن', 'Vérifier'])}
+          </Button>
+        ) : null
+      }
+    >
+      <div className="grid gap-4 text-sm md:grid-cols-2">
+        <div className="min-w-0 space-y-1">
+          <div className="text-xs text-sub">{t(['النسخة الحالية', 'Version actuelle'])}</div>
+          <div className="flex flex-wrap items-center gap-2 font-medium">
+            <code className="ltr rounded bg-raised px-1.5 py-0.5 text-xs">{short(s.current.commit)}</code>
+            {s.current.date && <span className="text-xs text-muted">{dateTime(s.current.date, lang)}</span>}
+          </div>
+          {s.current.subject && <p className="ltr line-clamp-2 break-words text-start text-xs text-muted">{s.current.subject}</p>}
+        </div>
+        <div className="min-w-0 space-y-1">
+          <div className="text-xs text-sub">{t(['آخر تحديث', 'Dernière mise à jour'])}</div>
+          {upd ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2 font-medium">
+                <span>{dateTime(upd.finished_at || upd.started_at, lang)}</span>
+                <Badge tone={tone[upd.state] || 'neutral'}>
+                  {upd.state === 'ok' ? t(['نجح', 'Réussie']) : upd.state === 'running' ? t(['جارٍ', 'En cours']) : t(['فشل', 'Échec'])}
+                </Badge>
+              </div>
+              {upd.state !== 'running' && upd.error && <p className="break-words text-xs text-bad">{err({ code: upd.state === 'stale' ? 'update_interrupted' : `update_${upd.error}` })}</p>}
+            </>
+          ) : (
+            <div className="font-medium">{s.current.built_at ? dateTime(s.current.built_at, lang) : '—'}</div>
+          )}
+        </div>
+      </div>
+
+      {(running || watch) && (
+        <div className="mt-4 rounded-lg bg-raised p-3" aria-live="polite">
+          {restarting ? (
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <Loader2 className="h-4 w-4 animate-spin text-brand" />
+              {t(['الـ ERP يُعاد تشغيله… الصفحة تعود وحدها خلال دقيقة', 'L’ERP redémarre… la page revient seule dans une minute'])}
+            </p>
+          ) : s.pending ? (
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <Loader2 className="h-4 w-4 animate-spin text-brand" />
+              {t(['بانتظار خدمة التحديث على الخادم…', 'En attente du service de mise à jour…'])}
+            </p>
+          ) : (
+            <ol className="space-y-1.5 text-sm">
+              {UPDATE_STEPS.map(([k, label], i) => (
+                <li key={k} className={cx('flex items-center gap-2', i > stepIdx && 'text-muted')}>
+                  {i < stepIdx ? <CheckCircle2 className="h-4 w-4 text-good" /> : i === stepIdx ? <Loader2 className="h-4 w-4 animate-spin text-brand" /> : <span className="inline-block h-4 w-4 rounded-full border border-line" />}
+                  {t(label)}
+                </li>
+              ))}
+            </ol>
+          )}
+          {s.pending?.stuck && <p className="mt-2 text-xs text-bad">{err({ code: 'updater_not_responding' })}</p>}
+        </div>
+      )}
+
+      {result && !watch && (
+        <div className={cx('mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg p-3 text-sm', result.state === 'ok' ? 'bg-good/10' : 'bg-bad/5')}>
+          <span className={result.state === 'ok' ? 'text-good' : 'text-bad'}>
+            {result.state === 'ok' ? t(['تم التحديث إلى {c}', 'Mise à jour vers {c} terminée'], { c: short(result.to) }) : err({ code: `update_${result.error || 'interrupted'}` })}
+          </span>
+          {result.state === 'ok' && (
+            <Button size="sm" variant="primary" icon={RefreshCw} onClick={() => window.location.reload()}>
+              {t(['إعادة تحميل الصفحة', 'Recharger la page'])}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {s.supported && s.agent?.installed && !running && !watch && (
+        <div className="mt-4 space-y-2">
+          {!ch ? (
+            <p className="text-xs text-muted">{t(['لم يتم البحث عن نسخة جديدة بعد.', 'Pas encore de vérification.'])}</p>
+          ) : ch.error ? (
+            <p className="text-xs text-bad">{t(['تعذّر الاتصال بـ GitHub: {e}', 'GitHub injoignable : {e}'], { e: ch.error })}</p>
+          ) : ch.behind > 0 ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="warn">{t(['{n} تغييرات جديدة', '{n} nouveautés'], { n: ch.behind })}</Badge>
+                <span className="text-xs text-muted">{t(['آخر فحص {x}', 'Vérifié {x}'], { x: ago(ch.checked_at, lang) })}</span>
+              </div>
+              <ul className="space-y-1 text-xs text-sub">
+                {ch.changes.slice(0, 5).map((c) => (
+                  <li key={c.commit} className="ltr flex gap-2 text-start">
+                    <code className="shrink-0 text-muted">{c.commit}</code>
+                    <span className="min-w-0 break-words">{c.subject}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="good">{t(['لديك آخر نسخة', 'À jour'])}</Badge>
+              <span className="text-xs text-muted">{t(['آخر فحص {x}', 'Vérifié {x}'], { x: ago(ch.checked_at, lang) })}</span>
+            </div>
+          )}
+          <Button variant="primary" icon={Download} disabled={!canUpdate} onClick={() => setConfirm(true)}>
+            {t(['تحديث الآن', 'Mettre à jour'])}
+          </Button>
+          {!s.agent.alive && <p className="text-xs text-bad">{err({ code: 'updater_not_responding' })}</p>}
+        </div>
+      )}
+
+      {!s.supported ? (
+        <p className="mt-3 rounded-lg bg-raised p-3 text-xs text-sub">
+          {t(['التحديث من هنا يعمل على الـ VPS. على الحاسوب: git pull ثم npm run setup ثم أعد تشغيل الـ ERP.', 'La mise à jour d’ici fonctionne sur le VPS. Sur un ordinateur : git pull, npm run setup puis redémarrez.'])}
+        </p>
+      ) : !s.agent?.installed ? (
+        <p className="mt-3 rounded-lg bg-raised p-3 text-xs text-sub">{err({ code: 'updater_not_installed' })}</p>
+      ) : null}
+
+      {s.log && (
+        <details
+          className="mt-3 text-xs"
+          // النتيجة في آخر السجل (بعد مخرجات البناء): نبدأ من الأسفل
+          onToggle={(e) => {
+            const pre = e.currentTarget.querySelector('pre');
+            if (pre) pre.scrollTop = pre.scrollHeight;
+          }}
+        >
+          <summary className="cursor-pointer text-sub">{t(['سجل آخر تحديث', 'Journal de la dernière mise à jour'])}</summary>
+          <pre className="ltr mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-raised p-2 text-start text-[11px] leading-relaxed [unicode-bidi:plaintext]">{s.log}</pre>
+        </details>
+      )}
+
+      <Modal
+        open={confirm}
+        onClose={() => setConfirm(false)}
+        size="sm"
+        icon={Download}
+        title={t(['تحديث الـ ERP الآن؟', 'Mettre à jour l’ERP maintenant ?'])}
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirm(false)}>
+              {t('c.cancel')}
+            </Button>
+            <Button variant="primary" icon={Download} loading={busy === 'up'} onClick={start}>
+              {t(['تحديث الآن', 'Mettre à jour'])}
+            </Button>
+          </div>
+        }
+      >
+        <ol className="list-decimal space-y-1.5 ps-5 text-sm">
+          <li>{t(['نسخة احتياطية تلقائية قبل أي تغيير.', 'Sauvegarde automatique avant tout changement.'])}</li>
+          <li>{t(['جلب النسخة الجديدة من GitHub وبناؤها (1–3 دقائق). الـ ERP يبقى يعمل أثناء البناء.', 'Téléchargement et construction (1–3 min). L’ERP reste disponible pendant la construction.'])}</li>
+          <li>{t(['إعادة التشغيل: الـ ERP يغيب دقيقة تقريباً.', 'Redémarrage : l’ERP est indisponible environ une minute.'])}</li>
+          <li>{t(['إن لم تشتغل النسخة الجديدة، يرجع تلقائياً إلى النسخة السابقة.', 'Si la nouvelle version ne démarre pas, retour automatique à la précédente.'])}</li>
+        </ol>
+      </Modal>
+    </Card>
+  );
+}
+
 function System() {
   const { t, lang } = useI18n();
   const { data, error, loading, reload } = useApi('/system/jobs', { interval: 30e3 });
   const { run, busy } = useAction();
-  const { projects } = useApp();
+  const { projects, auth } = useApp();
+  const admin = auth.user?.role === 'admin';
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
   const pname = (id) => (id ? projects.find((p) => p.id === id)?.name || id : '—');
   return (
     <div className="space-y-4">
+      {admin && <UpdateCard />}
       <div className="flex flex-wrap gap-2">
         <Button
           icon={Database}

@@ -7,6 +7,12 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      # النسخة التي تُبنى (يكتبها erp.sh update) لتظهر في الإعدادات ← النظام
+      args:
+        ERP_COMMIT: ${ERP_COMMIT:-}
+        ERP_COMMIT_DATE: ${ERP_COMMIT_DATE:-}
+        ERP_COMMIT_SUBJECT: ${ERP_COMMIT_SUBJECT:-}
+        ERP_BUILT_AT: ${ERP_BUILT_AT:-}
     image: erp-toureche:latest
     container_name: erp-toureche
     restart: unless-stopped
@@ -16,6 +22,9 @@ services:
     volumes:
       - erp_data:/data
       - ${ERP_OFFSITE_DIR:-./offsite}:/offsite
+      # زر «تحديث الآن»: الحاوية تكتب الطلب في inbox، وخدمة erp-updater على الخادم تكتب النتيجة في state (قراءة فقط هنا)
+      - ${ERP_UPDATER_DIR:-/var/lib/erp-updater}/inbox:/updater/inbox
+      - ${ERP_UPDATER_DIR:-/var/lib/erp-updater}/state:/updater/state:ro
     networks:
       - proxy
     labels:

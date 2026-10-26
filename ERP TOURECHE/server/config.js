@@ -48,5 +48,7 @@ export const config = {
     .map((x) => x.trim().replace(/\/$/, ''))
     .filter(Boolean),
   anthropicApiKey: env.ANTHROPIC_API_KEY || '',
+  // مجلد التبادل مع خدمة التحديث على الـ VPS (غير موجود على الحاسوب)
+  updaterDir: env.ERP_UPDATER_MOUNT || '/updater',
   isTest: env.NODE_ENV === 'test' || Boolean(env.NODE_TEST_CONTEXT),
 };
