@@ -81,7 +81,7 @@ const [, , base, out] = process.argv;
     for (const t of ['campaigns', 'decisions', 'tests', 'launch', 'drafts', 'health']) await go(`/ads?tab=${t}`, 1200);
     await go('/splits');
     await go('/splits/1');
-    for (const p of ['/finance', '/collections', '/tasks', '/contacts', '/contacts?kind=delivery', '/contacts?kind=service', '/contacts?kind=wholesale', '/contacts?kind=other', '/store-pages', '/activity', '/assistant']) await go(p);
+    for (const p of ['/finance', '/collections', '/collections?carrier=yalidine', '/collections?carrier=zr', '/collections?carrier=noest', '/tasks', '/contacts', '/contacts?kind=delivery', '/contacts?kind=service', '/contacts?kind=wholesale', '/contacts?kind=other', '/store-pages', '/activity', '/assistant']) await go(p);
     for (const t of ['integrations', 'general', 'projects', 'users', 'security', 'system']) await go(`/settings?tab=${t}`, 1000);
   }
   await b.close();
