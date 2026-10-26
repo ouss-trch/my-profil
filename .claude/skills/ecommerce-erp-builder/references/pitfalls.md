@@ -47,6 +47,8 @@
 | Stock in Shopify drifts lower after every returned parcel; cost of sales looks wrong | Returns were counted only as a return fee; goods never went back to stock | Returns ledger: restock on `returned` (the carrier's "back with the seller"), per-line damaged/missing, and reconciliation toward a target with an idempotency key |
 | Restocking would double-count | Returns that existed before the ledger may already have been restocked by hand | Never backfill automatically: list them once and let the owner pick "restock now" or "already restocked" (the latter records the movement without changing stock) |
 | A return restocked a product that was never deducted | A non-Shopify order (Sheets) never reduced Shopify stock | Restock only where the sale was deducted; mark the other lines `not_deducted` and still count the return cost |
+| First order sync fails with `Invalid timestamp for query filter created_at` | Shopify's search rejects relative dates such as `created_at:>-60d` | Send an absolute ISO date; tested against the live store |
+| Store pages still say "missing permission" after a new app version adds `read_online_store_pages` | The client-credentials token is cached for 24 h and carries the old scopes | On `ACCESS_DENIED`, drop the cached token and retry once; a scope that is really missing still fails after that single retry |
 
 ## Verification checklist (run before every delivery)
 

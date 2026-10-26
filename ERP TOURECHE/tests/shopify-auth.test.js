@@ -53,3 +53,31 @@ test('shopify orders: the first sync asks for the last 60 days with an absolute 
   assert.ok(Math.abs(Date.parse(seen[0].slice(13, -1)) - (Date.now() - 60 * 86400e3)) < 60e3);
   assert.equal(seen[1], "updated_at:>'2026-10-20T10:00:00Z'");
 });
+
+test('shopify auth: a permission granted after the token was issued is picked up at once (fresh token, one retry)', async () => {
+  const tokens = [];
+  const prev = globalThis.fetch;
+  let issued = 0;
+  globalThis.fetch = async (url, init) => {
+    const reply = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (String(url).endsWith('/admin/oauth/access_token')) return reply({ access_token: `shpca_${++issued}`, expires_in: 86399 });
+    const token = init.headers['X-Shopify-Access-Token'];
+    tokens.push(token);
+    // الرمز الأول صدر قبل إضافة read_online_store_pages
+    if (token === 'shpca_1') return reply({ errors: [{ message: 'Access denied for pages field. Required access: `read_online_store_pages` access scope.', extensions: { code: 'ACCESS_DENIED' } }] });
+    if (init.body.includes('pages(')) return reply({ data: { pages: { nodes: [{ id: 'gid://shopify/Page/1', title: 'FAQ', handle: 'faq', isPublished: true }], pageInfo: { hasNextPage: false } } } });
+    return reply({ errors: [{ message: 'Access denied', extensions: { code: 'ACCESS_DENIED' } }] });
+  };
+  try {
+    const c = cfg({ shopify_client_id: 'cid', shopify_client_secret: 'shpss_x', projectId: 16 });
+    const pages = await shopify.listPages(c);
+    assert.equal(pages[0].handle, 'faq');
+    assert.deepEqual(tokens, ['shpca_1', 'shpca_2']);
+    // صلاحية ناقصة فعلاً: محاولة واحدة فقط ثم رسالة واضحة، بلا حلقة
+    tokens.length = 0;
+    await assert.rejects(shopify.gql(c, 'query { shop { name } }'), /access_denied/);
+    assert.deepEqual(tokens, ['shpca_2', 'shpca_3']);
+  } finally {
+    globalThis.fetch = prev;
+  }
+});

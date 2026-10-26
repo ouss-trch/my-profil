@@ -23,12 +23,13 @@ function shopDomain(cfg) {
  * تطبيق Dev Dashboard (Client ID + Client secret) هو الطريقة المعتمدة، فيُستعمل أولاً إن وُجد؛
  * رمز shpat_ القديم احتياطي فقط. (كان العكس: رمز قديم منتهٍ في الحقل يُفشل كل شيء ولا يُجرَّب التطبيق أبداً)
  */
+const tokenKey = (cfg) => `${cfg.projectId}:${cfg.shopify_client_id}`;
 async function accessToken(cfg) {
   if (!cfg.shopify_client_id || !cfg.shopify_client_secret) {
     if (cfg.shopify_access_token) return cfg.shopify_access_token;
     throw new IntegrationError('shopify', 'config', 'credentials_missing');
   }
-  const key = `${cfg.projectId}:${cfg.shopify_client_id}`;
+  const key = tokenKey(cfg);
   const cached = tokenCache.get(key);
   if (cached && cached.expires > Date.now() + 60e3) return cached.token;
   let data;
@@ -65,6 +66,7 @@ export const isConfigured = (cfg) => Boolean(cfg.shopify_shop && (cfg.shopify_ac
 
 export async function gql(cfg, query, variables = {}) {
   const url = `https://${shopDomain(cfg)}/admin/api/${cfg.shopify_api_version || '2026-07'}/graphql.json`;
+  let refreshed = false;
   for (let attempt = 0; attempt < 4; attempt++) {
     const token = await accessToken(cfg);
     let res;
@@ -83,8 +85,15 @@ export async function gql(cfg, query, variables = {}) {
         await sleep(2000 * (attempt + 1));
         continue;
       }
-      if (errors.some((x) => x.extensions?.code === 'ACCESS_DENIED'))
+      if (errors.some((x) => x.extensions?.code === 'ACCESS_DENIED')) {
+        // صلاحية أُضيفت للتو (نسخة جديدة من التطبيق) لا تظهر في الرمز المحفوظ: رمز جديد ومحاولة واحدة قبل الرفض
+        if (!refreshed && cfg.shopify_client_id && cfg.shopify_client_secret) {
+          refreshed = true;
+          tokenCache.delete(tokenKey(cfg));
+          continue;
+        }
         throw new IntegrationError('shopify', 'auth', 'access_denied', errors.map((x) => x.message).join('; '));
+      }
       throw new IntegrationError('shopify', 'invalid', errors.map((x) => x.message).join('; ').slice(0, 400));
     }
     return data;
