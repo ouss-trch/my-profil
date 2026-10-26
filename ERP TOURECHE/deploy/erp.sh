@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# إدارة ERP TOURECHE على الـ VPS
-#   bash deploy/erp.sh update            # جلب آخر نسخة من GitHub وإعادة البناء (البيانات لا تتأثر)
-#   bash deploy/erp.sh logs              # آخر السجلات
-#   bash deploy/erp.sh status            # الحالة
-#   bash deploy/erp.sh backup            # نسخة احتياطية الآن (تظهر في /data/backups وفي offsite/ إن ضُبط)
-#   bash deploy/erp.sh restore FILE.db   # استرجاع بيانات (مثلاً من الحاسوب) — يوقف الـ ERP ثم يعيده
-#   bash deploy/erp.sh import-key FILE   # وضع ملف .secret-key القديم (لمفاتيح الربط المشفّرة)
-#   bash deploy/erp.sh reset-password USER NEWPASS
-#   bash deploy/erp.sh setup-token       # رمز الإعداد الأول (يُطلب قبل إنشاء حساب المدير)
+# إدارة ERP TOURECHE على الـ VPS (بعد التثبيت يكفي كتابة erp بدل bash deploy/erp.sh)
+#   erp update            # جلب آخر نسخة من GitHub وإعادة البناء (البيانات لا تتأثر)
+#   erp logs              # آخر السجلات
+#   erp status            # الحالة
+#   erp backup            # نسخة احتياطية الآن (تظهر في /data/backups وفي offsite/ إن ضُبط)
+#   erp restore FILE.db   # استرجاع بيانات (مثلاً من الحاسوب) — يوقف الـ ERP ثم يعيده
+#   erp import-key FILE   # وضع ملف .secret-key القديم (لمفاتيح الربط المشفّرة)
+#   erp reset-password USER NEWPASS
+#   erp setup-token       # رمز الإعداد الأول (يُطلب قبل إنشاء حساب المدير)
 set -euo pipefail
-cd "$(dirname "$0")"
+# يعمل أيضاً عبر الرابط /usr/local/bin/erp
+cd "$(dirname "$(readlink -f "$0")")"
 C="docker compose --env-file .env"
 [ -f .env ] || { echo "✗ شغّل install-vps.sh أولاً"; exit 1; }
 
@@ -38,5 +39,5 @@ case "${1:-}" in
     exit $rc ;;
   reset-password) docker exec erp-toureche node server/cli.js reset-password "${2:?}" "${3:?}" ;;
   setup-token) docker exec erp-toureche cat /data/.setup-token 2>/dev/null || echo "لا يوجد رمز: الإعداد الأول تمّ" ;;
-  *) sed -n '2,10p' "$0" ;;
+  *) sed -n '2,10p' "$(readlink -f "$0")" ;;
 esac

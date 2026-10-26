@@ -19,7 +19,8 @@ LABELS=$(docker inspect -f '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{"\n
 RESOLVER=$(printf '%s\n' "$LABELS" | sed -n 's/^traefik\.http\.routers\.\([^.]*\)\.tls\.certresolver=\(.*\)$/\2/p' | head -1)
 SECURE_ROUTER=$(printf '%s\n' "$LABELS" | sed -n 's/^traefik\.http\.routers\.\([^.]*\)\.tls\.certresolver=.*$/\1/p' | head -1)
 ENTRY_HTTPS=$(printf '%s\n' "$LABELS" | sed -n "s/^traefik\.http\.routers\.${SECURE_ROUTER:-_none_}\.entrypoints=//p" | head -1)
-ENTRY_HTTP=$(printf '%s\n' "$LABELS" | grep '^traefik\.http\.routers\.[^.]*\.entrypoints=' | grep -v "routers\.${SECURE_ROUTER:-_none_}\." | sed 's/^.*entrypoints=//' | head -1)
+# grep بلا نتيجة يعيد 1، ومع pipefail كان يوقف السكربت بصمت (قالب Hostinger فيه موجّه واحد فقط)
+ENTRY_HTTP=$(printf '%s\n' "$LABELS" | grep '^traefik\.http\.routers\.[^.]*\.entrypoints=' | grep -v "routers\.${SECURE_ROUTER:-_none_}\." | sed 's/^.*entrypoints=//' | head -1 || true)
 NETWORK=$(printf '%s\n' "$LABELS" | sed -n 's/^traefik\.docker\.network=//p' | head -1)
 if [ -z "$NETWORK" ]; then
   # الشبكة المشتركة بين Traefik و n8n
@@ -29,6 +30,14 @@ if [ -z "$NETWORK" ]; then
 fi
 [ -n "$RESOLVER" ] || { echo "✗ لم أجد certresolver في إعداد n8n. أرسل ناتج: docker inspect $N8N"; exit 1; }
 [ -n "$NETWORK" ] || { echo "✗ لم أجد شبكة مشتركة بين Traefik و n8n."; exit 1; }
+# قالب Hostinger (ووثائق n8n) يضع الموجّه على «web,websecure» معاً: نأخذ منها مدخل HTTPS ومدخل HTTP
+if [[ "$ENTRY_HTTPS" == *,* ]]; then
+  LIST=$(printf '%s' "$ENTRY_HTTPS" | tr ',' '\n' | sed 's/^ *//; s/ *$//')
+  SEC=$(printf '%s\n' "$LIST" | grep -iE 'secure|https|443' | head -1 || true)
+  SEC=${SEC:-$(printf '%s\n' "$LIST" | tail -1)}
+  [ -n "$ENTRY_HTTP" ] || ENTRY_HTTP=$(printf '%s\n' "$LIST" | grep -vx "$SEC" | head -1 || true)
+  ENTRY_HTTPS=$SEC
+fi
 ENTRY_HTTPS=${ENTRY_HTTPS:-websecure}
 ENTRY_HTTP=${ENTRY_HTTP:-web}
 
@@ -72,4 +81,10 @@ echo "  افتح: https://$DOMAIN  (أول مرة: حساب المدير + كل�
 TOKEN=$(docker exec erp-toureche cat /data/.setup-token 2>/dev/null || true)
 [ -z "$TOKEN" ] || echo "  رمز الإعداد الأول (اكتبه في صفحة الإعداد): $TOKEN"
 echo "  من n8n داخل نفس الخادم استعمل: http://erp-toureche:3600/api/hooks/<slug>/orders"
-echo "  التحديث لاحقاً: bash deploy/erp.sh update"
+# أمر قصير من أي مجلد (أسهل على الهاتف): erp update · erp logs · erp setup-token
+chmod +x erp.sh
+if ln -sf "$PWD/erp.sh" /usr/local/bin/erp 2>/dev/null; then
+  echo "  الأوامر لاحقاً من أي مكان: erp update · erp status · erp logs · erp backup · erp setup-token"
+else
+  echo "  التحديث لاحقاً: bash \"$PWD/erp.sh\" update"
+fi
