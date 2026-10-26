@@ -19,15 +19,15 @@ Read this first when you continue ERP TOURECHE in a new conversation, or when yo
 | Modules | Today, Dashboard, Advisor, AI assistant, Orders (confirmation + shipping + returns to stock), Abandoned carts, Customers, Carriers, Products + editor (SEO, AI copy, images), Store pages, Suppliers & partners, Ads (BM explorer, PAUSED launch), A/B pages, Finance, **Collections**, Tasks, Activity, Settings |
 | Integrations | Shopify (Dev Dashboard client credentials), Meta Marketing API, Yalidine / NOEST / ZR, n8n (in and out hooks), Anthropic, image providers |
 | Quality bar | 42 `node:test` tests; UI audit on 24 routes × 3 modes with 0 contrast, 0 unnamed buttons, 0 unlabelled fields, 0 overflow |
-| Hosting | Runs locally (Tailscale). VPS package ready and verified in a simulation (Docker + Traefik + n8n); waiting for the owner to add DNS `erp` → VPS IP and run `deploy/install-vps.sh erp.leadsauto.cloud` |
+| Hosting | **Live 24/7 at https://erp.leadsauto.cloud** (since 26 Oct 2026): Hostinger VPS KVM 2, container `erp-toureche` next to the n8n stack (Traefik + Postgres + Redis + n8n), DNS `erp` A → `72.61.84.209`, clone in `/opt/erp`, managed with `erp update` / `erp status` / `erp backup`. Admin account created through the setup token |
 | Data safety | Nightly backup (14 kept), optional cloud-folder mirror (30 kept), `npm run restore` and `deploy/erp.sh restore` |
 | Schema | `MIGRATIONS` 0 → 3. Never edit 0; append. Every migration is tested on a DB built by the previous code |
 | Branch | `claude/erp-toureche-system-fdir8x`; not merged into `main` yet (only on the owner's request) |
 
 **Open items for the owner:**
 
-1. Add the DNS record and run the VPS install.
-2. Rotate the Shopify client secret that was pasted in chat.
+1. Connect Shopify on the VPS install (myshopify domain + Client ID + a **rotated** Client secret, with `write_inventory`), then carriers and Meta.
+2. Point n8n's order webhook at `http://erp-toureche:3600/api/hooks/<slug>/orders`.
 3. Start Collections with an opening balance.
 4. Process the returns that predate the returns ledger once (Orders → Returned tab): "restock now" or "already restocked".
 
