@@ -111,7 +111,7 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 | الخدمة | ما تحتاجه |
 |---|---|
 | **Shopify** | تطبيق من **Dev Dashboard** (لم يعد Shopify يسمح بإنشاء تطبيقات من لوحة المتجر) بالصلاحيات: `read/write_products`, `read/write_orders`, `read/write_inventory`, `read/write_themes`, `read/write_metafields`, `read_online_store_pages` (+ `read_customer_events` اختياري لمصدر الزيارة). ثبّته على متجرك، ثم ضع في الـ ERP: نطاق `xxxx.myshopify.com` (وليس دومين المتجر) + **Client ID** + **Client secret**. الـ ERP يجدد رمز الدخول كل 24 ساعة. يشترط أن يكون التطبيق والمتجر في نفس المؤسسة على Dev Dashboard. (تطبيق قديم برمز `shpat_…` ما زال مدعوماً) |
-| **Meta** | رمز **System User** دائم من Business Manager بصلاحيات `ads_management`, `ads_read`, `business_management`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`. الحسابات الإعلانية تختارها من صفحة الإعلانات |
+| **Meta** | رمز **System User** دائم من Business Manager بصلاحيات `ads_management`, `ads_read`, `business_management`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`. بعد حفظ الرمز اضغط **«اكتشاف من Meta»** في نفس البطاقة: تختار الـ BM والحسابات والبيكسل (يظهر آخر حدث وصله) والصفحة بالأسماء، ويجلب الـ ERP رمز الصفحة ومعرّف إنستغرام بنفسه. البيكسل نفسه الذي يرسل له n8n حدث `Purchase` عند كل طلبية |
 | **التوصيل** | Yalidine (API ID + token) · ZR Express (token + key) · NOEST (api_token + user_guid) |
 | **n8n** | روابط Webhook (الأحداث، المنتجات/تيليغرام، التقرير الصباحي، جسر Google Sheets) |
 | **Claude** | مفتاح API في الإعدادات ← عام (مشفّر) |

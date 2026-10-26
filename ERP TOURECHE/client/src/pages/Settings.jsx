@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Database, KeyRound, Plug, Plus, Save, Server, Settings as SettingsIcon, ShieldCheck, Trash2, Users, FolderKanban, CheckCircle2, XCircle, Download, RefreshCw, Loader2 } from 'lucide-react';
+import { Database, KeyRound, Plug, Plus, Save, Server, Settings as SettingsIcon, ShieldCheck, Trash2, Users, FolderKanban, CheckCircle2, XCircle, Download, RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
@@ -40,12 +40,19 @@ const PROJECT_GROUPS = [
     title: ['Meta (إعلانات، بيكسل، صفحة)', 'Meta (pubs, pixel, page)'],
     test: 'meta',
     fields: [
-      { k: 'meta_access_token', label: ['رمز System User (لا ينتهي)', 'Jeton System User (permanent)'], hint: ['من Business Manager ← مستخدمو النظام، بصلاحيات ads_management وads_read وbusiness_management', 'Business Manager → Utilisateurs système (ads_management, ads_read, business_management)'] },
-      { k: 'meta_ad_account_ids', label: ['الحسابات الإعلانية للمشروع (افصل بفاصلة)', 'Comptes pub du projet (virgules)'], type: 'list', ltr: true, hint: ['يمكن اختيارها أيضاً من صفحة الإعلانات ← Business Manager', 'Aussi sélectionnables depuis Pubs → Business Manager'] },
+      {
+        k: 'meta_access_token',
+        label: ['رمز System User (لا ينتهي)', 'Jeton System User (permanent)'],
+        hint: [
+          'Business Manager ← الإعدادات ← مستخدمو النظام ← إنشاء رمز، بصلاحيات ads_read وbusiness_management (وads_management لإطلاق الحملات، وpages_show_list وpages_read_engagement للصفحة). احفظه، ثم اضغط «اكتشاف من Meta» لملء الباقي.',
+          'Business Manager → Paramètres → Utilisateurs système → Générer un jeton (ads_read, business_management ; ads_management pour lancer ; pages_show_list, pages_read_engagement pour la page). Enregistrez, puis « Détecter depuis Meta ».',
+        ],
+      },
+      { k: 'meta_ad_account_ids', label: ['الحسابات الإعلانية للمشروع (افصل بفاصلة)', 'Comptes pub du projet (virgules)'], type: 'list', ltr: true, hint: ['تُملأ بـ «اكتشاف من Meta»، أو من صفحة الإعلانات ← Business Manager', 'Rempli par « Détecter depuis Meta », ou Pubs → Business Manager'] },
       { k: 'meta_page_id', label: ['معرّف الصفحة', 'ID de la page'], ltr: true },
       { k: 'meta_page_token', label: ['رمز الصفحة (للنشر ومنشوراتها)', 'Jeton de page (publication)'] },
       { k: 'meta_ig_user_id', label: ['معرّف حساب إنستغرام', 'ID Instagram'], ltr: true },
-      { k: 'meta_pixel_id', label: ['معرّف البيكسل', 'ID du pixel'], ltr: true },
+      { k: 'meta_pixel_id', label: ['معرّف البيكسل', 'ID du pixel'], ltr: true, hint: ['نفس بيكسل المتجر: n8n يرسل له «Purchase» عند كل طلبية، والـ ERP يرسل «طلبية سُلّمت» إن فعّلتها أدناه', 'Le même pixel que la boutique : n8n envoie « Purchase », l’ERP envoie « livrée » si activé'] },
       { k: 'meta_capi_delivered', label: ['إرسال حدث «طلبية سُلّمت» إلى Meta (CAPI)', 'Envoyer « commande livrée » à Meta (CAPI)'], type: 'bool', hint: ['يعلّم الخوارزمية من يستلم فعلاً لا من يطلب فقط', 'Apprend à l’algorithme qui reçoit vraiment'] },
       { k: 'meta_capi_event', label: ['اسم الحدث', "Nom de l'événement"], ltr: true },
       { k: 'meta_graph_version', label: ['إصدار Graph API', 'Version Graph API'], ltr: true },
@@ -216,6 +223,194 @@ function SettingInput({ def, value, onChange, id }) {
   return <Input id={id} type={def.type === 'number' ? 'number' : 'text'} className={def.ltr ? 'ltr' : ''} value={value ?? ''} onChange={(e) => onChange(def.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />;
 }
 
+// ——— إعداد Meta بنقرة: اختيار الحسابات والبيكسل والصفحة بالأسماء بدل نسخ المعرّفات ———
+function MetaSetup({ projectId, tokenSet, current, onApplied }) {
+  const { t, lang } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [bm, setBm] = useState(null);
+  const [bmId, setBmId] = useState('');
+  const [sel, setSel] = useState([]);
+  const [assets, setAssets] = useState(null);
+  const [pixel, setPixel] = useState('');
+  const [page, setPage] = useState('');
+  const [loadErr, setLoadErr] = useState(null);
+  const [done, setDone] = useState(null);
+  const { run, busy } = useAction();
+  const opts = { project: projectId };
+
+  const start = async () => {
+    setOpen(true);
+    setDone(null);
+    setLoadErr(null);
+    setBm(null);
+    try {
+      const d = await api.get('/ads/businesses?refresh=1', opts);
+      setBm(d);
+      const all = d.businesses.flatMap((b) => b.accounts.map((a) => ({ ...a, bm: b.id || 'none' })));
+      const linked = all.filter((a) => a.in_project);
+      setSel(linked.map((a) => a.id));
+      setBmId(d.selected_business || linked[0]?.bm || d.businesses[0]?.id || 'none');
+    } catch (e) {
+      setLoadErr(e);
+    }
+  };
+
+  // أصول أول حساب مختار: البيكسلات (مع آخر حدث) والصفحات
+  const main = sel[0] || '';
+  useEffect(() => {
+    if (!open || !main) return;
+    let off = false;
+    setAssets(null);
+    api.get(`/ads/accounts/${main}/assets`, { project: projectId }).then(
+      (a) => {
+        if (off) return;
+        setAssets(a);
+        const fired = [...a.pixels].sort((x, y) => String(y.last_fired_time || '').localeCompare(String(x.last_fired_time || '')));
+        setPixel(a.pixels.some((x) => x.id === current.pixel) ? current.pixel : fired[0]?.id || '');
+        setPage(a.pages.some((x) => x.id === current.page) ? current.page : a.pages[0]?.id || '');
+      },
+      () => !off && setAssets({ pixels: [], pages: [] }),
+    );
+    return () => {
+      off = true;
+    };
+  }, [open, main, projectId, current.pixel, current.page]);
+
+  const businesses = bm?.businesses || [];
+  const accounts = businesses.find((b) => (b.id || 'none') === bmId)?.accounts || [];
+  const toggle = (id) => setSel((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
+  const apply = () =>
+    run(
+      'apply',
+      async () => {
+        const out = await api.post('/ads/meta-setup', { business_id: bmId === 'none' ? '' : bmId, ad_account_ids: sel, pixel_id: pixel || null, page_id: page || null }, { ...opts, reason: t(['ربط Meta بالمشروع', 'Connexion Meta du projet']) });
+        setDone(out);
+        onApplied?.();
+        return out;
+      },
+      { success: t(['حُفظ إعداد Meta', 'Configuration Meta enregistrée']) },
+    );
+  const fired = (iso) => (iso && !iso.startsWith('1970') && !iso.startsWith('1969') ? t(['آخر حدث {x}', 'Dernier événement {x}'], { x: ago(iso, lang) }) : t(['لم يُستعمل', 'Jamais utilisé']));
+
+  return (
+    <>
+      <Button size="sm" variant="primary" icon={Sparkles} disabled={!tokenSet} title={tokenSet ? '' : t(['احفظ رمز System User أولاً', 'Enregistrez d’abord le jeton System User'])} onClick={start}>
+        {t(['اكتشاف من Meta', 'Détecter depuis Meta'])}
+      </Button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        size="md"
+        icon={Sparkles}
+        title={t(['ربط Meta بالمشروع', 'Connecter Meta au projet'])}
+        footer={
+          done ? (
+            <Button variant="primary" onClick={() => setOpen(false)}>
+              {t(['تم', 'OK'])}
+            </Button>
+          ) : (
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="ghost" onClick={() => setOpen(false)}>
+                {t('c.cancel')}
+              </Button>
+              <Button variant="primary" icon={Save} loading={busy === 'apply'} disabled={!sel.length} onClick={apply}>
+                {t(['حفظ الاختيار', 'Enregistrer'])}
+              </Button>
+            </div>
+          )
+        }
+      >
+        {loadErr ? (
+          <ErrorBox error={loadErr} onRetry={start} />
+        ) : !bm ? (
+          <Loading />
+        ) : done ? (
+          <ul className="space-y-2 text-sm">
+            <li className="flex items-start gap-2">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good" />
+              <span>{t(['الحسابات: {x}', 'Comptes : {x}'], { x: done.accounts.map((a) => `${a.name} (${a.currency})`).join('، ') })}</span>
+            </li>
+            {done.pixel && (
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good" />
+                <span>{t(['البيكسل: {x}', 'Pixel : {x}'], { x: done.pixel.name })}</span>
+              </li>
+            )}
+            {done.page && (
+              <li className="flex items-start gap-2">
+                {done.page.token ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />}
+                <span>
+                  {t(['الصفحة: {x}', 'Page : {x}'], { x: done.page.name })}
+                  {!done.page.token && <span className="block text-xs text-sub">{t(['رمز الصفحة لم يُجلب: في Business Manager أسند الصفحة لمستخدم النظام (مهام «إنشاء المحتوى») ثم أعد المحاولة.', 'Jeton de page non obtenu : assignez la page à l’utilisateur système dans Business Manager puis réessayez.'])}</span>}
+                </span>
+              </li>
+            )}
+            <li className="flex items-start gap-2">
+              {done.instagram ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted" />}
+              <span>{done.instagram ? t(['إنستغرام: @{x}', 'Instagram : @{x}'], { x: done.instagram.username || done.instagram.id }) : t(['لا حساب إنستغرام مرتبط بهذه الصفحة', 'Aucun compte Instagram lié à cette page'])}</span>
+            </li>
+          </ul>
+        ) : !businesses.length ? (
+          <p className="text-sm text-sub">{t(['الرمز لا يرى أي حساب إعلاني. في Business Manager أسند الحسابات لمستخدم النظام.', 'Le jeton ne voit aucun compte. Assignez les comptes à l’utilisateur système.'])}</p>
+        ) : (
+          <div className="space-y-4 text-sm">
+            <Field label={t(['Business Manager', 'Business Manager'])}>
+              <Select value={bmId} onChange={(e) => setBmId(e.target.value)} options={businesses.map((b) => ({ value: b.id || 'none', label: `${b.name || t(['حسابات خارج BM', 'Hors BM'])} (${b.accounts.length})` }))} />
+            </Field>
+            <fieldset>
+              <legend className="mb-1.5 text-xs font-medium text-sub">{t(['الحسابات الإعلانية لهذا المشروع', 'Comptes pub de ce projet'])}</legend>
+              <div className="space-y-1">
+                {accounts.map((a) => (
+                  <label key={a.id} className={cx('flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-2', sel.includes(a.id) && 'border-brand bg-brand/5')}>
+                    <input type="checkbox" checked={sel.includes(a.id)} onChange={() => toggle(a.id)} className="h-4 w-4 accent-[var(--brand,#0f766e)]" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{a.name}</span>
+                      <span className="ltr block text-start text-xs text-muted">
+                        {a.id} · {a.currency}
+                      </span>
+                    </span>
+                    <Badge tone={a.status === 1 ? 'good' : 'bad'}>{a.status === 1 ? t(['نشط', 'Actif']) : t(['متوقف', 'Inactif'])}</Badge>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            {main && (
+              <>
+                <fieldset>
+                  <legend className="mb-1.5 text-xs font-medium text-sub">{t(['البيكسل (Dataset) — نفس الذي يستعمله المتجر و n8n', 'Pixel (dataset) — le même que la boutique et n8n'])}</legend>
+                  {!assets ? (
+                    <Loading />
+                  ) : assets.pixels.length ? (
+                    <div className="space-y-1">
+                      {assets.pixels.map((x) => (
+                        <label key={x.id} className={cx('flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-2', pixel === x.id && 'border-brand bg-brand/5')}>
+                          <input type="radio" name="pixel" checked={pixel === x.id} onChange={() => setPixel(x.id)} className="h-4 w-4" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium">{x.name}</span>
+                            <span className="block text-xs text-muted">
+                              <span className="ltr">{x.id}</span> · {fired(x.last_fired_time)}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted">{t(['لا بيكسل مرتبط بهذا الحساب.', 'Aucun pixel lié à ce compte.'])}</p>
+                  )}
+                </fieldset>
+                <Field label={t(['الصفحة (للنشر ومنشوراتها، وإنستغرام المرتبط بها)', 'Page (publication, Instagram lié)'])}>
+                  <Select value={page} onChange={(e) => setPage(e.target.value)} placeholder={t(['— بدون صفحة —', '— Sans page —'])} options={(assets?.pages || []).map((x) => ({ value: x.id, label: x.name }))} />
+                </Field>
+              </>
+            )}
+            <p className="text-xs text-sub">{t(['رمز الصفحة ومعرّف إنستغرام يُجلبان تلقائياً عند الحفظ. لا شيء يُنشر ولا يُصرف.', 'Le jeton de page et l’ID Instagram sont récupérés automatiquement. Rien n’est publié ni dépensé.'])}</p>
+          </div>
+        )}
+      </Modal>
+    </>
+  );
+}
+
 function SettingsForm({ groups, load, save, projectId }) {
   const { t, err } = useI18n();
   const { run, busy } = useAction();
@@ -258,14 +453,21 @@ function SettingsForm({ groups, load, save, projectId }) {
         <Card
           key={g.key}
           title={t(g.title)}
-          actions={(g.tests || (g.test ? [g.test] : [])).map((s) => (
-            <div key={s} className="flex items-center gap-1.5">
-              <Button size="sm" loading={tests[s]?.loading} onClick={() => test(s)}>
-                {t(['اختبار', 'Tester'])} {g.tests ? s : ''}
-              </Button>
-              {tests[s] && !tests[s].loading && (tests[s].ok ? <CheckCircle2 className="h-4 w-4 text-good" /> : <XCircle className="h-4 w-4 text-bad" title={tests[s].error} />)}
-            </div>
-          ))}
+          actions={
+            <>
+              {g.key === 'meta' && projectId && (
+                <MetaSetup projectId={projectId} tokenSet={Boolean(vals.meta_access_token?.set)} current={{ pixel: vals.meta_pixel_id || '', page: vals.meta_page_id || '' }} onApplied={() => reload(true)} />
+              )}
+              {(g.tests || (g.test ? [g.test] : [])).map((s) => (
+                <div key={s} className="flex items-center gap-1.5">
+                  <Button size="sm" loading={tests[s]?.loading} onClick={() => test(s)}>
+                    {t(['اختبار', 'Tester'])} {g.tests ? s : ''}
+                  </Button>
+                  {tests[s] && !tests[s].loading && (tests[s].ok ? <CheckCircle2 className="h-4 w-4 text-good" /> : <XCircle className="h-4 w-4 text-bad" title={tests[s].error} />)}
+                </div>
+              ))}
+            </>
+          }
         >
           <div className="grid gap-3 md:grid-cols-2">
             {g.fields

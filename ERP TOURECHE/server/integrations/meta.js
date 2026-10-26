@@ -127,6 +127,14 @@ export async function accountAssets(cfg, accountId) {
   };
 }
 
+/** رمز الصفحة وحساب إنستغرام المرتبط بها (يُرجعهما Meta إن كانت الصفحة مُسندة لمستخدم النظام) */
+export async function pageLink(cfg, pageId) {
+  const p = await graph(cfg, pageId, { params: { fields: 'id,name,access_token,instagram_business_account{id,username}' } });
+  return { id: p.id, name: p.name, access_token: p.access_token || null, ig: p.instagram_business_account ? { id: p.instagram_business_account.id, username: p.instagram_business_account.username || null } : null };
+}
+
+export const pixelBasic = (cfg, pixelId) => graph(cfg, pixelId, { params: { fields: 'id,name,last_fired_time' } });
+
 export const adsets = (cfg, campaignId) =>
   paged(cfg, `${campaignId}/adsets`, { fields: 'id,name,status,effective_status,daily_budget,lifetime_budget,optimization_goal,targeting', limit: 100 });
 

@@ -561,6 +561,39 @@ export function setProjectAccount(projectId, accountId, linked) {
   return linked ? list.length + 1 : list.length;
 }
 
+/**
+ * إعداد Meta بنقرة (الإعدادات ← Meta ← «اكتشاف من Meta»): يتحقق من كل اختيار برمز المشروع،
+ * ثم يحفظ الـ BM والحسابات والبيكسل والصفحة، ويجلب بنفسه رمز الصفحة وحساب إنستغرام المرتبط.
+ */
+export async function applyMetaSetup(projectId, { business_id, ad_account_ids = [], pixel_id, page_id }) {
+  const cfg = projectConfig(projectId);
+  if (!cfg.meta_access_token) throw badRequest('meta_token_missing');
+  const ids = [...new Set(ad_account_ids.map((x) => String(x).replace(/^act_/, '')).filter((x) => /^\d{5,20}$/.test(x)))];
+  if (!ids.length) throw badRequest('meta_account_required');
+  const accounts = [];
+  for (const id of ids) {
+    const a = await meta.accountInfo(cfg, id);
+    accounts.push({ id, name: a.name, currency: a.currency });
+  }
+  const pixel = pixel_id ? await meta.pixelBasic(cfg, String(pixel_id)) : null;
+  const page = page_id ? await meta.pageLink(cfg, String(page_id)) : null;
+  setSetting('meta_business_id', business_id ? String(business_id) : '', projectId);
+  setSetting('meta_ad_account_ids', ids, projectId);
+  if (pixel) setSetting('meta_pixel_id', String(pixel.id), projectId);
+  if (page) {
+    setSetting('meta_page_id', String(page.id), projectId);
+    if (page.access_token) setSetting('meta_page_token', page.access_token, projectId);
+    if (page.ig) setSetting('meta_ig_user_id', String(page.ig.id), projectId);
+  }
+  cache.delete(`bm:${projectId}`);
+  return {
+    accounts,
+    pixel: pixel ? { id: pixel.id, name: pixel.name, last_fired_time: pixel.last_fired_time || null } : null,
+    page: page ? { id: page.id, name: page.name, token: Boolean(page.access_token) } : null,
+    instagram: page?.ig || null,
+  };
+}
+
 const STATUS_GROUP = {
   ACTIVE: 'active',
   IN_PROCESS: 'review',

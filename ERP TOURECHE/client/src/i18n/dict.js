@@ -163,6 +163,8 @@ export const DICT = {
   'err.image_required': ['اختر صورة أو منشوراً للإعلان', 'Choisissez une image ou une publication'],
   'err.budget_required': ['حدد الميزانية اليومية (1 على الأقل بعملة الحساب)', 'Indiquez le budget journalier (≥ 1 dans la devise du compte)'],
   'err.ad_account_required': ['اختر حساباً إعلانياً', 'Choisissez un compte publicitaire'],
+  'err.meta_token_missing': ['احفظ رمز System User أولاً', 'Enregistrez d’abord le jeton System User'],
+  'err.meta_account_required': ['اختر حساباً إعلانياً واحداً على الأقل', 'Choisissez au moins un compte publicitaire'],
   'err.update_backup_failed': ['فشلت النسخة الاحتياطية قبل التحديث، فلم يتغيّر شيء. افتح «سجل آخر تحديث».', 'La sauvegarde avant mise à jour a échoué : rien n’a changé. Voir le journal.'],
   'err.update_pull_failed': ['تعذّر جلب النسخة الجديدة من GitHub، فلم يتغيّر شيء. افتح «سجل آخر تحديث».', 'Impossible de télécharger depuis GitHub : rien n’a changé. Voir le journal.'],
   'err.update_build_failed': ['فشل بناء النسخة الجديدة، والـ ERP بقي يعمل بالنسخة السابقة.', 'La construction a échoué ; l’ERP tourne toujours sur l’ancienne version.'],

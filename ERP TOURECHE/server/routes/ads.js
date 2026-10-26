@@ -38,6 +38,19 @@ adsRouter.put('/accounts/:accountId/project', requireRole('admin', 'manager'), r
   res.json({ ok: true, accounts: count });
 });
 
+/** إعداد Meta بنقرة من الإعدادات: الحسابات + البيكسل + الصفحة (ورمزها وإنستغرام يُجلبان تلقائياً) */
+adsRouter.post('/meta-setup', requireRole('admin'), requireSensitive, async (req, res) => {
+  const b = req.body || {};
+  const out = await ads.applyMetaSetup(pid(req), {
+    business_id: b.business_id ? v.str(b.business_id, { max: 40 }) : '',
+    ad_account_ids: Array.isArray(b.ad_account_ids) ? b.ad_account_ids.slice(0, 20) : [],
+    pixel_id: b.pixel_id ? v.str(b.pixel_id, { max: 40 }) : null,
+    page_id: b.page_id ? v.str(b.page_id, { max: 40 }) : null,
+  });
+  audit(req, 'meta_setup_applied', { projectId: pid(req), details: { accounts: out.accounts.map((a) => a.id), pixel: out.pixel?.id || null, page: out.page?.id || null, page_token: Boolean(out.page?.token), instagram: out.instagram?.id || null } });
+  res.json(out);
+});
+
 // ——— إطلاق حملة لأي منتج + المسودات + الإعدادات الدائمة ———
 adsRouter.get('/launch/:productId', (req, res) => res.json(ads.launchContext(pid(req), Number(req.params.productId))));
 
