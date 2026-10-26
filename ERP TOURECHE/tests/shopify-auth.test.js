@@ -34,3 +34,22 @@ test('shopify auth: a refused exchange explains why (wrong client, or app and st
   exchange = { status: 400, body: { error: 'shop_not_permitted', error_description: 'Shop is not permitted' } };
   await assert.rejects(shopify.shopInfo(cfg({ shopify_client_id: 'cid', shopify_client_secret: 'x', projectId: 14 })), /shop_not_permitted/);
 });
+
+test('shopify orders: the first sync asks for the last 60 days with an absolute date (Shopify rejects "-60d")', async () => {
+  const seen = [];
+  const prev = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    const { variables } = JSON.parse(init.body);
+    seen.push(variables.q);
+    return new Response(JSON.stringify({ data: { orders: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await shopify.ordersUpdatedSince(cfg({ shopify_access_token: 'shpat_ok', projectId: 15 }), null);
+    await shopify.ordersUpdatedSince(cfg({ shopify_access_token: 'shpat_ok', projectId: 15 }), '2026-10-20T10:00:00Z');
+  } finally {
+    globalThis.fetch = prev;
+  }
+  assert.match(seen[0], /^created_at:>'\d{4}-\d{2}-\d{2}T[\d:.]+Z'$/);
+  assert.ok(Math.abs(Date.parse(seen[0].slice(13, -1)) - (Date.now() - 60 * 86400e3)) < 60e3);
+  assert.equal(seen[1], "updated_at:>'2026-10-20T10:00:00Z'");
+});

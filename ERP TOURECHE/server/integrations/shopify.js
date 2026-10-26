@@ -108,7 +108,7 @@ const ORDER_FIELDS = `id name createdAt updatedAt cancelledAt displayFinancialSt
   totalPriceSet { shopMoney { amount } } subtotalPriceSet { shopMoney { amount } }
   totalShippingPriceSet { shopMoney { amount } } totalDiscountsSet { shopMoney { amount } }
   shippingAddress { name firstName lastName phone address1 address2 city province zip }
-  customer { firstName lastName phone }
+  customer { firstName lastName defaultPhoneNumber { phoneNumber } }
   lineItems(first: 30) { nodes { title quantity variantTitle sku originalUnitPriceSet { shopMoney { amount } } variant { id } product { id } } }`;
 // مصدر الزيارة (UTM + صفحة الهبوط) — لربط كل طلبية بالصفحة/النسخة التي جلبتها في اختبارات A/B
 const JOURNEY_FIELDS = `customerJourneySummary { firstVisit { landingPage utmParameters { source campaign content } } lastVisit { landingPage utmParameters { source campaign content } } }`;
@@ -118,7 +118,8 @@ let journeyAllowed = true;
 export async function ordersUpdatedSince(cfg, sinceIso, maxPages = 10) {
   const out = [];
   let after = null;
-  const q = sinceIso ? `updated_at:>'${sinceIso}'` : 'created_at:>-60d';
+  // تاريخ مطلق: Shopify يرفض الصيغة النسبية «created_at:>-60d» (Invalid timestamp)، فكانت أول مزامنة تفشل
+  const q = sinceIso ? `updated_at:>'${sinceIso}'` : `created_at:>'${new Date(Date.now() - 60 * 86400e3).toISOString()}'`;
   const query = () => `query($q: String!, $after: String) { orders(first: 50, after: $after, query: $q, sortKey: UPDATED_AT) { nodes { ${ORDER_FIELDS} ${journeyAllowed ? JOURNEY_FIELDS : ''} } pageInfo { hasNextPage endCursor } } }`;
   for (let page = 0; page < maxPages; page++) {
     let d;
@@ -166,7 +167,7 @@ export function parseOrder(node) {
     external_id: node.id,
     shopify_name: node.name,
     customer_name: name || null,
-    phone: normalizePhone(a.phone) || normalizePhone(node.phone) || normalizePhone(c.phone),
+    phone: normalizePhone(a.phone) || normalizePhone(node.phone) || normalizePhone(c.defaultPhoneNumber?.phoneNumber),
     wilaya_code: wilaya?.code || null,
     commune: attr(node, 'commune') || a.city || null,
     address: [a.address1, a.address2].filter(Boolean).join(' — ') || null,
