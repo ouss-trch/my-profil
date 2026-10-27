@@ -120,6 +120,12 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 **استقبال الطلبيات من n8n أو أي نموذج:** `POST /api/hooks/<slug-المشروع>/orders` مع الترويسة `x-erp-key` (المفتاح من الإعدادات ← عام ← n8n).
 الحقول المدعومة: `customer_name, phone, wilaya, commune, address, delivery_type, items[], total, utm_source, utm_campaign, utm_content, landing_url`.
 
+**جدول SOU9NA Orders (يكتبه سير COD في n8n):**
+- ورقة `customer`: كل طلبية وكل نموذج متروك بأعمدة إنجليزية. يقرؤها الـ ERP والتقرير الصباحي، وعمود `landing_page` فيها ينسب الطلبية لصفحة الهبوط.
+- ورقة `Orders`: سطر عربي واضح لكل طلبية فقط: التاريخ بتوقيت الجزائر، رقم Shopify، الحالة، الزبون، العنوان، المنتج، الأسعار، صفحة الهبوط. السطر الأحمر طلبية لم تُنشأ في Shopify.
+- ربط الـ ERP بالجدول: الإعدادات ← عام ← n8n: رابط «جسر Google Sheets» ومفتاحه (من عقدة Authorize في سير الجسر). ثم في تكاملات المشروع: «مزامنة الجدول» + معرّف الجدول + اسم الورقة `customer`. الطلبيات التي لم تُنشأ في Shopify تدخل الـ ERP بوسم `not-created-in-shopify`.
+- **Client secret في مكانين:** إن غيّرته في Dev Dashboard فحدّثه في الـ ERP وفي n8n (Credentials ← «Shopify SOU9NA»). وإلا ترفض Shopify كل طلبية (`Missing or invalid client secret`)، فلا تصل إلى Shopify ولا إلى الـ ERP، بل إلى الجدول وتيليغرام فقط.
+
 ---
 
 ## صفحات الهبوط بالذكاء الاصطناعي (صفحات المتجر ← «إنشاء صفحة هبوط»)
