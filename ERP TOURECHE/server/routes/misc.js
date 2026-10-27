@@ -274,6 +274,7 @@ pagesRouter.get('/landing', (req, res) => {
     base: scope.all ? null : pages.storeBase(scope.id),
     frameworks: Object.entries(landing.FRAMEWORKS).map(([id, f]) => ({ id, label: f.label, when: f.when })),
     angles: landing.ANGLE_PRESETS,
+    layouts: Object.entries(landing.LAYOUTS).map(([id, l]) => ({ id, label: l.label })),
     // هل بيانات التوصيل والسياسات جاهزة لكاتب الصفحة؟
     delivery: scope.all ? null : (({ imported_at, delivery_time, summary }) => ({ imported_at, delivery_time, served: summary.served }))(delivery.getDelivery(scope.id)),
   });

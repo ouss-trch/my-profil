@@ -65,6 +65,71 @@ export const ANGLE_PRESETS = [
   ['التوفير', 'economie'],
 ];
 
+/**
+ * تصميم لكل زاوية تسويقية: ترتيب الأقسام، أقسام خاصة بالزاوية، الألوان، ونوع الصور.
+ * القاعدة في صفحات الدفع عند الاستلام في الجزائر: الشاشة الأولى فيها العنوان والصورة والسعر والزر،
+ * تحتها مباشرة شريط الثقة (الدفع عند الاستلام، المعاينة، التوصيل)، ثم قسم الزاوية نفسه وصورتان والفوائد، فالنموذج مبكراً؛
+ * وبعده القصة والصور الباقية وما يجيب عن الاعتراضات (التوصيل، الضمانات، الأسئلة) وزر يعيد إلى النموذج.
+ * الرموز: hero · trust · story · story:first · story:rest · benefits · steps · occasions · compare · moments · specs ·
+ * gallery (صورتان متجاورتان) · visual (صورة) · visuals (الباقي) · visuals:2 · delivery · guarantee · faq · cta
+ */
+export const LAYOUTS = {
+  gift: {
+    label: ['هدية: دافئ، الصورة أولاً، المناسبات', 'Cadeau : chaleureux, image d’abord, occasions'],
+    match: /هدي|cadeau|gift/i,
+    top: ['hero', 'trust', 'occasions', 'gallery', 'benefits', 'steps'],
+    bottom: ['story', 'visuals', 'delivery', 'guarantee', 'faq', 'cta'],
+    brief: 'occasions: من 3 إلى 6 مناسبات أو أشخاص يُهدى لهم المنتج (عيد ميلاد، النجاح، العودة إلى المدرسة…) تناسبه فعلاً. الصفحة دافئة: فرحة من يتلقّى الهدية. لا تذكر تغليفاً أو علبة هدية إلا إن وُجدا في المعطيات.',
+    shots: 'Gift mood. hero: the product presented as a gift on a festive table, wrapping paper and a ribbon placed around it (never covering or changing the product). Then: hands holding it as if just unwrapped, the product next to a gift bag, a close-up detail, the real colors side by side.',
+  },
+  problem: {
+    label: ['المشكلة والحل: مقارنة «بدونه / معه»', 'Problème → solution : comparaison sans / avec'],
+    match: /مشكل|solution|probl/i,
+    top: ['hero', 'trust', 'story:first', 'compare', 'visual', 'benefits', 'steps'],
+    bottom: ['story:rest', 'visuals', 'guarantee', 'delivery', 'faq', 'cta'],
+    brief: 'compare: «بدونه» و«معه»: من 3 إلى 4 أسطر قصيرة متقابلة، المشكلة اليومية كما يعيشها الزبون مقابل ما يحلّه المنتج بخصائصه المذكورة في المعطيات فقط. الفقرة الأولى من story هي المشكلة.',
+    shots: 'Problem → solution mood. hero: the product as the clean, reliable answer, bright studio light. Then: a close-up of the part that solves the problem (lid, seal, strap…), the product in use (hands only), the product where it is needed (bag, desk), the real colors.',
+  },
+  daily: {
+    label: ['الاستعمال اليومي: يوم كامل مع المنتج', 'Usage quotidien : une journée avec le produit'],
+    match: /يومي|روتين|quotidien|daily/i,
+    top: ['hero', 'trust', 'moments', 'visuals:2', 'benefits', 'steps'],
+    bottom: ['story', 'visuals', 'delivery', 'guarantee', 'faq', 'cta'],
+    brief: 'moments: من 3 إلى 4 لحظات من يوم الزبون (الصباح، المدرسة أو العمل، الخروج، المساء) وكيف يخدمه المنتج فيها، جملة لكل لحظة.',
+    shots: 'Everyday-life mood, natural daylight. hero: the product in a bright morning scene (breakfast table or school bag). Then one shot per moment of the day: at school or a desk, outdoors in a park, on the go — hands only.',
+  },
+  value: {
+    label: ['الجودة مقابل السعر: خصائص ومقارنة', 'Qualité-prix : caractéristiques et comparaison'],
+    match: /جودة|مقابل السعر|qualit|prix|توفير|econom|économ/i,
+    top: ['hero', 'trust', 'specs', 'gallery', 'compare', 'steps'],
+    bottom: ['benefits', 'guarantee', 'story', 'visuals', 'delivery', 'faq', 'cta'],
+    brief: 'specs: من 4 إلى 6 خصائص حقيقية من المعطيات فقط (المادة، السعة، المقاس، الألوان، الملحقات) بشكل «الخاصية» و«القيمة». compare: ما تدفع مقابله: 3 أسطر «منتج عادي» مقابل 3 أسطر «هذا المنتج» بخصائص حقيقية فقط، دون ذكر علامات أخرى.',
+    shots: 'Premium product mood. hero: studio shot on a neutral seamless background, crisp detail. Then: macro of the material and finish, the product with its real parts laid out, a size reference next to a familiar object, the real colors lined up.',
+  },
+  family: {
+    label: ['للأطفال والعائلة: لحظات عائلية', 'Enfants et famille : moments en famille'],
+    match: /أطفال|طفل|عائل|famil|enfant|kids/i,
+    top: ['hero', 'trust', 'moments', 'gallery', 'benefits', 'steps'],
+    bottom: ['story', 'occasions', 'visuals', 'delivery', 'guarantee', 'faq', 'cta'],
+    brief: 'moments: 3 لحظات عائلية يُستعمل فيها المنتج. occasions: من 3 إلى 5 لمن يناسب (العمر، الاستعمال) من المعطيات فقط.',
+    shots: 'Warm family-home mood. hero: the product in a child’s or a parent’s hands at home (hands only). Then: a kids’ room or school setting, a family outing, a close-up detail, the real colors.',
+  },
+  classic: {
+    label: ['كلاسيكي: الفقرات والصور بالتناوب', 'Classique : paragraphes et images alternés'],
+    top: ['hero', 'trust', 'story:first', 'visual', 'benefits', 'steps'],
+    bottom: ['story:rest', 'visuals', 'delivery', 'guarantee', 'faq', 'cta'],
+    brief: '',
+    shots: 'hero: the product as the clear subject in a scene that fits the angle. Then: design, a close-up detail, a visible feature, in use (hands only), the real colors.',
+  },
+};
+const FRAMEWORK_LAYOUT = { pas: 'problem', bab: 'daily', fab: 'value', fourp: 'value', fomo: 'value', aida: 'classic' };
+/** التصميم: ما اختاره التاجر، وإلا من كلمات الزاوية، وإلا من إطار الكتابة */
+export function layoutFor(angle, framework, chosen) {
+  if (LAYOUTS[chosen]) return chosen;
+  for (const [id, l] of Object.entries(LAYOUTS)) if (l.match?.test(String(angle || ''))) return id;
+  return FRAMEWORK_LAYOUT[framework] || 'classic';
+}
+
 const TONES = {
   ar: 'العربية الفصحى المبسّطة القريبة من الزبون الجزائري (جمل قصيرة، كلمات يومية).',
   darija: 'الدارجة الجزائرية مكتوبة بالحروف العربية بشكل طبيعي ومحترم، مع كلمات فرنسية شائعة عند الحاجة.',
@@ -95,6 +160,10 @@ export function landingSystem(brand) {
    - كل لقطة تُظهر شيئاً حقيقياً تراه في الصور أو تذكره المعطيات. ممنوع إظهار ملحق أو قطعة أو لون غير موجود، أو نتيجة غير مثبتة.
    - headline: 3–7 كلمات بالعربية تقول الفائدة لا الوصف. points: من 0 إلى 3 تسميات قصيرة (2–4 كلمات) تشير لما يُرى في اللقطة.
    - scene: بالإنجليزية لمولّد الصور، جملتان أو ثلاث: المشهد والخلفية، الإضاءة، زاوية الكاميرا، وما حول المنتج. لا تطلب كتابة أي نص في الصورة ولا تصف المنتج بشكل مختلف عن صوره.
+   - اتبع أجواء الصور الخاصة بتصميم الصفحة (layout.shots)، حتى تختلف صور كل زاوية عن صور الزوايا الأخرى.
+13. التصميم (layout) يُعطى مع المعطيات، ولكل تصميم أقسامه الخاصة: املأ ما يطلبه layout.brief فقط، واترك غيره فارغاً (عنوان فارغ وقوائم فارغة).
+   - trust: من 3 إلى 4 نقاط ثقة قصيرة جداً (2–5 كلمات) من delivery وstore_policies فقط، مثل: الدفع عند الاستلام، المعاينة قبل الدفع (إن كانت في السياسة)، التوصيل إلى N ولاية، الاستبدال (إن كان في السياسة).
+   - العناوين بنفس الأسلوب والزاوية، والأسطر قصيرة تُقرأ على الهاتف في ثانية.
 
 الإطار المطلوب للفقرات (story) يُعطى مع المعطيات؛ اتبعه بالترتيب، وstage لكل فقرة هو اسم مرحلتها.`;
 }
@@ -106,12 +175,17 @@ const VISUAL_ITEM = { type: 'object', additionalProperties: false, required: ['k
 export const LANDING_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['product_short', 'angle_slug', 'hero', 'story', 'benefits', 'steps', 'guarantee', 'faq', 'final_cta', 'seo', 'owner_todo', 'visuals'],
+  required: ['product_short', 'angle_slug', 'hero', 'trust', 'story', 'occasions', 'compare', 'moments', 'specs', 'benefits', 'steps', 'guarantee', 'faq', 'final_cta', 'seo', 'owner_todo', 'visuals'],
   properties: {
     product_short: s,
     angle_slug: s,
     hero: { type: 'object', additionalProperties: false, required: ['eyebrow', 'headline', 'subheadline', 'bullets', 'cta', 'note'], properties: { eyebrow: s, headline: s, subheadline: s, bullets: sArr, cta: s, note: s } },
+    trust: sArr,
     story: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['stage', 'heading', 'body'], properties: { stage: s, heading: s, body: s } } },
+    occasions: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: sArr } },
+    compare: { type: 'object', additionalProperties: false, required: ['heading', 'without_label', 'with_label', 'without', 'with'], properties: { heading: s, without_label: s, with_label: s, without: sArr, with: sArr } },
+    moments: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['when', 'text'], properties: { when: s, text: s } } } } },
+    specs: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['label', 'value'], properties: { label: s, value: s } } } } },
     benefits: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['title', 'text'], properties: { title: s, text: s } } } } },
     steps: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: sArr } },
     guarantee: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: sArr } },
@@ -174,7 +248,13 @@ function cleanCopy(c) {
   const list = (a, n, max) => (Array.isArray(a) ? a : []).map((x) => clip(x, max)).filter(Boolean).slice(0, n);
   return {
     hero: { eyebrow: clip(c.hero?.eyebrow, 80), headline: clip(c.hero?.headline, 140), subheadline: clip(c.hero?.subheadline, 300), bullets: list(c.hero?.bullets, 4, 140), cta: clip(c.hero?.cta, 60) || 'اطلب الآن', note: clip(c.hero?.note, 140) },
+    trust: list(c.trust, 4, 60),
     story: (c.story || []).slice(0, 4).map((x) => ({ stage: clip(x.stage, 40), heading: clip(x.heading, 120), body: String(x.body || '').trim().slice(0, 900) })).filter((x) => x.body),
+    occasions: { heading: clip(c.occasions?.heading, 120), items: list(c.occasions?.items, 6, 60) },
+    compare: { heading: clip(c.compare?.heading, 120), without_label: clip(c.compare?.without_label, 40), with_label: clip(c.compare?.with_label, 40), without: list(c.compare?.without, 4, 120), with: list(c.compare?.with, 4, 120) },
+    moments: { heading: clip(c.moments?.heading, 120), items: (c.moments?.items || []).slice(0, 4).map((x) => ({ when: clip(x.when, 40).replace(/\|/g, '/'), text: clip(x.text, 220) })).filter((x) => x.text) },
+    specs: { heading: clip(c.specs?.heading, 120), items: (c.specs?.items || []).slice(0, 6).map((x) => ({ label: clip(x.label, 60).replace(/\|/g, '/'), value: clip(x.value, 120) })).filter((x) => x.label && x.value) },
+    layout: LAYOUTS[c.layout] ? c.layout : undefined,
     benefits: { heading: clip(c.benefits?.heading, 120), items: (c.benefits?.items || []).slice(0, 5).map((x) => ({ title: clip(x.title, 80).replace(/\|/g, '/'), text: clip(x.text, 220) })).filter((x) => x.title) },
     steps: { heading: clip(c.steps?.heading, 120), items: list(c.steps?.items, 4, 160) },
     guarantee: { heading: clip(c.guarantee?.heading, 120), items: list(c.guarantee?.items, 4, 180) },
@@ -249,6 +329,7 @@ export async function generateLanding(projectId, input, userId = null) {
   const angle = clip(input.angle, 80);
   if (!angle) throw badRequest('landing_angle_required');
   const framework = FRAMEWORKS[input.framework] ? input.framework : 'aida';
+  const layout = layoutFor(angle, framework, input.layout);
   const tone = TONES[input.tone] ? input.tone : 'ar';
   const cfg = projectConfig(projectId);
   const brand = cfg.brand_name || getProject(projectId).name;
@@ -262,6 +343,7 @@ export async function generateLanding(projectId, input, userId = null) {
     angle,
     audience: clip(input.audience || p.audience, 200) || null,
     framework: { id: framework, story_plan: FRAMEWORKS[framework].story },
+    layout: { id: layout, brief: LAYOUTS[layout].brief, shots: LAYOUTS[layout].shots },
   };
   const images = await imageBlocks(p.images, 4).catch(() => []);
   const raw = await ai.structured({
@@ -271,7 +353,7 @@ export async function generateLanding(projectId, input, userId = null) {
     effort: 'medium',
     images,
   });
-  const copy = cleanCopy(raw);
+  const copy = cleanCopy({ ...raw, layout });
   // الرابط: ما كتبه التاجر، وإلا «المنتج-الزاوية» كما تقترحه الواجهة (مقبض لاتيني + زاوية جاهزة)، وإلا اقتراح Claude
   const handlePart = /^[a-z0-9-]+$/.test(p.handle) ? p.handle.split('-').slice(0, 2).join('-') : '';
   const anglePart = ANGLE_PRESETS.find(([ar]) => ar === angle)?.[1] || '';
@@ -302,10 +384,12 @@ export async function planVisuals(id) {
   const p = getProduct(l.product_id);
   const cfg = projectConfig(l.project_id);
   const brand = cfg.brand_name || getProject(l.project_id).name;
-  const images = await imageBlocks(p.images, 4).catch(() => []);
+  // الصورة الرئيسية وحدها + وصف صفحة المنتج: الشكل من الصورة والتفاصيل من الوصف
+  const images = await imageBlocks(p.images, 1).catch(() => []);
+  const layout = LAYOUTS[layoutFor(l.angle, l.framework, l.copy.layout)];
   const raw = await ai.structured({
     system: landingSystem(brand).replace('{tone}', TONES[l.tone] || TONES.ar),
-    prompt: `المعطيات (JSON):\n${JSON.stringify({ product: productFacts(p), angle: l.angle, headline: l.copy.hero?.headline, benefits: l.copy.benefits?.items }, null, 2)}\n\nالصور المرفقة هي صور المنتج الحقيقية. اكتب خطة الصور الوصفية فقط (القاعدة 12) لهذه الصفحة.`,
+    prompt: `المعطيات (JSON):\n${JSON.stringify({ product: productFacts(p), angle: l.angle, layout: { shots: layout.shots }, headline: l.copy.hero?.headline, benefits: l.copy.benefits?.items }, null, 2)}\n\nالصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text. اكتب خطة الصور الوصفية فقط (القاعدة 12) لهذه الصفحة.`,
     schema: { type: 'object', additionalProperties: false, required: ['visuals'], properties: { visuals: { type: 'array', items: VISUAL_ITEM } } },
     effort: 'medium',
     images,
@@ -314,15 +398,33 @@ export async function planVisuals(id) {
   return getLanding(id);
 }
 
-/** تعليمات مولّد الصور: المنتج نفسه بالضبط، مشهد جديد، بلا أي كتابة (النص يأتي من الصفحة) */
+const plainText = (html, n) =>
+  String(html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, n);
+
+/**
+ * تعليمات مولّد الصور: المنتج الذي في الصورة الرئيسية نفسه بالضبط (تطابق 100%)، وتفاصيله من وصف صفحة المنتج، في مشهد جديد.
+ * دون كتابة افتراضياً (النص حيّ في الصفحة)؛ «بالكتابة» تجربة: العنوان العربي داخل الصورة، يراجعه التاجر قبل اعتماده.
+ */
 export function visualPrompt(p, v) {
+  const description = plainText(p.description_html, 900);
   return [
-    `The attached photos show the real product "${p.title}". Create one new image of THIS exact product for its landing page.`,
-    'Product fidelity is mandatory: same shape, proportions, colors, prints and characters, logos, materials and parts as in the photos. Do not redesign, recolor, add or remove anything on the product, and do not add accessories that are not in the photos.',
+    `The attached photo is the main photo of the real product "${p.title}". Create one new image of THIS exact product for its landing page.`,
+    'Product fidelity must be 100%: identical shape, proportions, colors, prints and characters, logos, materials and parts as in the photo. Do not redesign, recolor, add or remove anything on the product, and do not add accessories that are not in the photo or the description.',
+    description ? `Product description from its page (use it for real details only, never to change how it looks): ${description}` : '',
     `Scene: ${v.scene}`,
     'Style: premium e-commerce photography, realistic, soft natural light, sharp focus on the product as the clear subject, uncluttered background, portrait composition.',
-    'Do not write any text, letters, numbers, prices, logos or watermarks anywhere in the image. No human faces; hands are fine.',
-  ].join('\n');
+    v.with_text && v.headline
+      ? `Write exactly this Arabic headline once in the image, in a clean bold Arabic font, correctly joined letters, right-to-left, large and legible, in empty space and never over the product: «${v.headline}». No other text, numbers, prices, logos or watermarks.`
+      : 'Do not write any text, letters, numbers, prices, logos or watermarks anywhere in the image.',
+    'No human faces; hands are fine.',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 /** رسم لقطة واحدة (التاجر يرسمها واحدة واحدة ليراجعها، أو كلها بالتتابع من الواجهة) */
@@ -331,13 +433,14 @@ export async function generateVisual(id, vid) {
   const v = l.visuals.find((x) => x.id === vid);
   if (!v) throw new HttpError(404, 'visual_not_found');
   const p = getProduct(l.product_id);
-  const sources = (p.images || []).map((i) => i.url).filter((u) => /^https:\/\//.test(u || '') || uploadPath(u)).slice(0, 4);
+  // الصورة الرئيسية وحدها (الأولى في معرض المنتج)
+  const sources = (p.images || []).map((i) => i.url).filter((u) => /^https:\/\//.test(u || '') || uploadPath(u)).slice(0, 1);
   if (!sources.length) throw badRequest('visual_needs_product_photos');
   const prompt = visualPrompt(p, v);
   const [img] = await generateImages(l.project_id, { prompt, sourceUrls: sources, count: 1, aspect: '4:5', product: { id: p.id, title: p.title } });
   db.prepare('INSERT INTO creatives (project_id, product_id, kind, file, url, prompt, provider) VALUES (?, ?, ?, ?, ?, ?, ?)').run(l.project_id, p.id, 'image', img.file, img.url, prompt, imageProvider());
   // قراءة جديدة: لقطات أخرى قد تكون رُسمت في الأثناء
-  const fresh = getLanding(id).visuals.map((x) => (x.id === vid ? { ...x, image: img.url, shopify_url: null, width: null, height: null, approved: true } : x));
+  const fresh = getLanding(id).visuals.map((x) => (x.id === vid ? { ...x, image: img.url, drawn_with_text: Boolean(v.with_text && v.headline), shopify_url: null, width: null, height: null, approved: true } : x));
   saveVisuals(id, fresh);
   return getLanding(id);
 }
@@ -353,6 +456,8 @@ export function updateVisual(id, vid, input) {
     if (input.headline !== undefined) next.headline = clip(input.headline, 90);
     if (input.points !== undefined) next.points = (Array.isArray(input.points) ? input.points : String(input.points).split(/\n+/)).map((t) => clip(t, 40)).filter(Boolean).slice(0, 3);
     if (input.scene !== undefined && clip(input.scene, 700)) next.scene = clip(input.scene, 700);
+    // الصورة الرئيسية لا تُكتب فيها (العنوان الرئيسي نص حيّ فوقها)
+    if (input.with_text !== undefined) next.with_text = Boolean(input.with_text) && x.kind !== 'hero';
     return next;
   });
   saveVisuals(id, list);
@@ -391,10 +496,10 @@ const paragraphs = (t) =>
     .join('');
 
 /**
- * قالب صفحة الهبوط: قسم النصوص والصور الوصفية في الأعلى ← قسم المنتج نفسه (المعرض، السعر، العروض، النموذج)
- * ← التوصيل والضمانات والأسئلة. الصور الوصفية (إن وُجدت) تحلّ محل صور المنتج الأصلية في الأعلى وتتخلل الفقرات.
+ * قالب صفحة الهبوط حسب تصميم الزاوية (LAYOUTS): قسم أعلى (الإقناع) ← قسم المنتج نفسه (المعرض، السعر، العروض، النموذج)
+ * ← قسم أسفل (الاعتراضات). الصور الوصفية تحلّ محل صور المنتج الأصلية وتتوزع حسب التصميم.
  */
-export function buildTemplate(copy, productTpl, { visuals = [], delivery = null } = {}) {
+export function buildTemplate(copy, productTpl, { visuals = [], delivery = null, layout = 'classic' } = {}) {
   const main = structuredClone(productTpl?.sections?.main);
   if (!main || main.type !== 'product-main') throw new HttpError(409, 'landing_theme_unsupported');
   main.settings = { ...(main.settings || {}), layout: 'stack', show_breadcrumb: false, show_sticky: true };
@@ -402,31 +507,62 @@ export function buildTemplate(copy, productTpl, { visuals = [], delivery = null 
   walkBlocks(main, (b) => {
     if (b.type === '_pdp-description') b.disabled = true;
   });
+  const L = LAYOUTS[layout] || LAYOUTS.classic;
   let n = 0;
   const block = (type, settings) => [`${type}_${++n}`, { type, settings }];
   const shots = visuals.filter((x) => x.shopify_url);
   const heroShot = shots.find((x) => x.kind === 'hero') || shots[0] || null;
-  const rest = shots.filter((x) => x !== heroShot);
-  const visual = (x) => block('visual', { image_url: x.shopify_url, width: x.width || 928, height: x.height || 1152, headline: x.headline, points: x.points.join('\n'), alt: x.headline });
-  // الترتيب في المصفوفة = ترتيب الصفحة، والمعرّفات (hero_1، text_2…) تُعطى بنفس الترتيب
-  const top = [
-    block('hero', { eyebrow: copy.hero.eyebrow, headline: copy.hero.headline, subheadline: copy.hero.subheadline, bullets: copy.hero.bullets.join('\n'), cta: copy.hero.cta, note: copy.hero.note, show_image: true, image_url: heroShot?.shopify_url || '', image_width: heroShot?.width || 928, image_height: heroShot?.height || 1152 }),
-    ...copy.story.flatMap((x, i) => [
-      block('text', { heading: x.heading, body: paragraphs(x.body) || `<p>${escapeHtml(x.body)}</p>`, tone: i % 2 ? 'soft' : 'plain' }),
-      ...(rest[i] ? [visual(rest[i])] : []),
-    ]),
-    ...(shots.length ? [] : [block('images', { offset: 1, count: 3 })]),
-    ...(copy.benefits.items.length ? [block('benefits', { heading: copy.benefits.heading, items: copy.benefits.items.map((x) => `${x.title} | ${x.text}`).join('\n') })] : []),
-    ...rest.slice(copy.story.length).map(visual),
-    ...(copy.steps.items.length ? [block('steps', { heading: copy.steps.heading, items: copy.steps.items.join('\n') })] : []),
-  ];
-  const bottom = [
-    ...(delivery ? [block('delivery', delivery)] : []),
-    ...(copy.guarantee.items.length ? [block('guarantee', { heading: copy.guarantee.heading, items: copy.guarantee.items.join('\n') })] : []),
-    ...copy.faq.map((x) => block('faq', { q: x.q, a: x.a })),
-    block('cta', { headline: copy.final_cta.headline, cta: copy.final_cta.cta, note: copy.final_cta.note }),
-  ];
-  const section = (list) => ({ type: 'erp-lp', blocks: Object.fromEntries(list), block_order: list.map(([id]) => id), settings: {} });
+  const queue = shots.filter((x) => x !== heroShot);
+  // صورة رُسم عنوانها داخلها لا يُكرَّر عنوانها تحتها
+  const caption = (x) => (x.drawn_with_text ? '' : x.headline);
+  const visual = (x) => block('visual', { image_url: x.shopify_url, width: x.width || 928, height: x.height || 1152, headline: caption(x), points: (x.points || []).join('\n'), alt: x.headline });
+  let photosShown = false;
+  // لا صور وصفية: صور المنتج الأصلية مرة واحدة في أول مكان مخصص للصور
+  const photos = () => (shots.length || photosShown ? [] : ((photosShown = true), [block('images', { offset: 1, count: 3 })]));
+  const take = (k) => queue.splice(0, k);
+  const story = copy.story || [];
+  const para = (x, i) => block('text', { heading: x.heading, body: paragraphs(x.body) || `<p>${escapeHtml(x.body)}</p>`, tone: layout === 'problem' && i === 0 ? 'alert' : i % 2 ? 'soft' : 'plain' });
+  const trust = copy.trust?.length ? copy.trust : ['الدفع عند الاستلام', ...(delivery?.served ? [`التوصيل إلى ${delivery.served} ولاية`] : []), 'اتصال تأكيد قبل الشحن'];
+  const parts = {
+    hero: () => [block('hero', { eyebrow: copy.hero.eyebrow, headline: copy.hero.headline, subheadline: copy.hero.subheadline, bullets: copy.hero.bullets.join('\n'), cta: copy.hero.cta, note: copy.hero.note, show_image: true, image_url: heroShot?.shopify_url || '', image_width: heroShot?.width || 928, image_height: heroShot?.height || 1152 })],
+    trust: () => [block('trust', { items: trust.join('\n') })],
+    story: () => story.flatMap((x, i) => [para(x, i), ...take(1).map(visual)]),
+    'story:first': () => (story[0] ? [para(story[0], 0)] : []),
+    'story:rest': () => story.slice(1).flatMap((x, i) => [para(x, i + 1), ...take(1).map(visual)]),
+    occasions: () => (copy.occasions?.items?.length ? [block('occasions', { heading: copy.occasions.heading, items: copy.occasions.items.join('\n') })] : []),
+    compare: () =>
+      copy.compare?.without?.length && copy.compare?.with?.length
+        ? [block('compare', { heading: copy.compare.heading, without_label: copy.compare.without_label || 'بدونه', with_label: copy.compare.with_label || 'معه', without: copy.compare.without.join('\n'), with: copy.compare.with.join('\n') })]
+        : [],
+    moments: () => (copy.moments?.items?.length ? [block('moments', { heading: copy.moments.heading, items: copy.moments.items.map((x) => `${x.when} | ${x.text}`).join('\n') })] : []),
+    specs: () => (copy.specs?.items?.length ? [block('specs', { heading: copy.specs.heading, items: copy.specs.items.map((x) => `${x.label} | ${x.value}`).join('\n') })] : []),
+    gallery: () => {
+      const pair = take(2);
+      if (pair.length === 2) return [block('gallery', { image_1: pair[0].shopify_url, width_1: pair[0].width || 928, height_1: pair[0].height || 1152, caption_1: caption(pair[0]), image_2: pair[1].shopify_url, width_2: pair[1].width || 928, height_2: pair[1].height || 1152, caption_2: caption(pair[1]) })];
+      return pair.length ? pair.map(visual) : photos();
+    },
+    visual: () => {
+      const one = take(1);
+      return one.length ? one.map(visual) : photos();
+    },
+    'visuals:2': () => {
+      const two = take(2);
+      return two.length ? two.map(visual) : photos();
+    },
+    visuals: () => queue.splice(0).map(visual),
+    benefits: () => (copy.benefits.items.length ? [block('benefits', { heading: copy.benefits.heading, items: copy.benefits.items.map((x) => `${x.title} | ${x.text}`).join('\n') })] : []),
+    steps: () => (copy.steps.items.length ? [block('steps', { heading: copy.steps.heading, items: copy.steps.items.join('\n') })] : []),
+    delivery: () => (delivery ? [block('delivery', delivery)] : []),
+    guarantee: () => (copy.guarantee.items.length ? [block('guarantee', { heading: copy.guarantee.heading, items: copy.guarantee.items.join('\n') })] : []),
+    faq: () => copy.faq.map((x) => block('faq', { q: x.q, a: x.a })),
+    cta: () => [block('cta', { headline: copy.final_cta.headline, cta: copy.final_cta.cta, note: copy.final_cta.note })],
+  };
+  // الترتيب في المصفوفة = ترتيب الصفحة، والمعرّفات (hero_1، trust_2…) تُعطى بنفس الترتيب
+  const top = L.top.flatMap((k) => parts[k]());
+  // صور المنتج الأصلية تبقى فوق النموذج إن لم يجد التصميم مكاناً لها
+  if (!shots.length && !photosShown) top.push(...photos());
+  const bottom = L.bottom.flatMap((k) => parts[k]());
+  const section = (list) => ({ type: 'erp-lp', blocks: Object.fromEntries(list), block_order: list.map(([id]) => id), settings: { style: L === LAYOUTS.classic ? 'classic' : layout } });
   return { layout: 'erp-landing', sections: { lp_top: section(top), main, lp_bottom: section(bottom) }, order: ['lp_top', 'main', 'lp_bottom'] };
 }
 
@@ -459,7 +595,7 @@ export function sectionLiquid() {
   ERP TOURECHE · نصوص صفحة الهبوط (كتبها الـ ERP، ويمكن تعديلها هنا). في قوالب المنتج فقط: الصورة والسعر من منتج الصفحة نفسه.
 {%- endcomment -%}
 {%- assign lp_v = product.selected_or_first_available_variant -%}
-<div class="erp-lp" data-erp-lp>
+<div class="erp-lp erp-lp--{{ section.settings.style | default: 'classic' }}" data-erp-lp>
   {%- for block in section.blocks -%}
     {%- case block.type -%}
       {%- when 'hero' -%}
@@ -479,8 +615,68 @@ export function sectionLiquid() {
           <button type="button" class="rw-b rw-o erp-lp__cta" data-erp-to-form>{{ block.settings.cta | default: 'اطلب الآن' | escape }}</button>
           {%- if block.settings.note != blank -%}<p class="erp-lp__note">{{ block.settings.note | escape }}</p>{%- endif -%}
         </header>
+      {%- when 'trust' -%}
+        {%- assign lines = block.settings.items | newline_to_br | split: '<br />' -%}
+        <ul class="erp-lp__trust" {{ block.shopify_attributes }}>{%- for l in lines -%}{%- assign t = l | strip -%}{%- if t != blank -%}<li>{{ t | escape }}</li>{%- endif -%}{%- endfor -%}</ul>
+      {%- when 'occasions' -%}
+        <section class="erp-lp__block erp-lp__block--tint" {{ block.shopify_attributes }}>
+          {%- if block.settings.heading != blank -%}<h2 class="erp-lp__h2">{{ block.settings.heading | escape }}</h2>{%- endif -%}
+          {%- assign lines = block.settings.items | newline_to_br | split: '<br />' -%}
+          <ul class="erp-lp__chips erp-lp__chips--big">{%- for l in lines -%}{%- assign t = l | strip -%}{%- if t != blank -%}<li>{{ t | escape }}</li>{%- endif -%}{%- endfor -%}</ul>
+        </section>
+      {%- when 'compare' -%}
+        <section class="erp-lp__block" {{ block.shopify_attributes }}>
+          {%- if block.settings.heading != blank -%}<h2 class="erp-lp__h2">{{ block.settings.heading | escape }}</h2>{%- endif -%}
+          <div class="erp-lp__compare">
+            <div class="erp-lp__col erp-lp__col--no">
+              <h3>{{ block.settings.without_label | default: 'بدونه' | escape }}</h3>
+              {%- assign lines = block.settings.without | newline_to_br | split: '<br />' -%}
+              <ul>{%- for l in lines -%}{%- assign t = l | strip -%}{%- if t != blank -%}<li>{{ t | escape }}</li>{%- endif -%}{%- endfor -%}</ul>
+            </div>
+            <div class="erp-lp__col erp-lp__col--yes">
+              <h3>{{ block.settings.with_label | default: 'معه' | escape }}</h3>
+              {%- assign lines = block.settings.with | newline_to_br | split: '<br />' -%}
+              <ul>{%- for l in lines -%}{%- assign t = l | strip -%}{%- if t != blank -%}<li>{{ t | escape }}</li>{%- endif -%}{%- endfor -%}</ul>
+            </div>
+          </div>
+        </section>
+      {%- when 'moments' -%}
+        <section class="erp-lp__block" {{ block.shopify_attributes }}>
+          {%- if block.settings.heading != blank -%}<h2 class="erp-lp__h2">{{ block.settings.heading | escape }}</h2>{%- endif -%}
+          {%- assign lines = block.settings.items | newline_to_br | split: '<br />' -%}
+          <ol class="erp-lp__timeline">
+            {%- for l in lines -%}{%- assign t = l | strip -%}{%- if t != blank -%}
+              {%- assign parts = t | split: '|' -%}{%- assign rest = t | remove_first: parts.first | remove_first: '|' | strip -%}
+              <li><b>{{ parts.first | strip | escape }}</b>{%- if rest != blank -%}<span>{{ rest | escape }}</span>{%- endif -%}</li>
+            {%- endif -%}{%- endfor -%}
+          </ol>
+        </section>
+      {%- when 'specs' -%}
+        <section class="erp-lp__block erp-lp__block--soft" {{ block.shopify_attributes }}>
+          {%- if block.settings.heading != blank -%}<h2 class="erp-lp__h2">{{ block.settings.heading | escape }}</h2>{%- endif -%}
+          {%- assign lines = block.settings.items | newline_to_br | split: '<br />' -%}
+          <dl class="erp-lp__specs">
+            {%- for l in lines -%}{%- assign t = l | strip -%}{%- if t != blank -%}
+              {%- assign parts = t | split: '|' -%}{%- assign rest = t | remove_first: parts.first | remove_first: '|' | strip -%}
+              <div><dt>{{ parts.first | strip | escape }}</dt><dd>{{ rest | escape }}</dd></div>
+            {%- endif -%}{%- endfor -%}
+          </dl>
+        </section>
+      {%- when 'gallery' -%}
+        <div class="erp-lp__gallery" {{ block.shopify_attributes }}>
+          {%- for i in (1..2) -%}
+            {%- assign k = 'image_' | append: i -%}{%- assign wk = 'width_' | append: i -%}{%- assign hk = 'height_' | append: i -%}{%- assign ck = 'caption_' | append: i -%}
+            {%- if block.settings[k] != blank -%}
+              {%- assign src = block.settings[k] | escape -%}{%- assign sep = '?' -%}{%- if src contains '?' -%}{%- assign sep = '&amp;' -%}{%- endif -%}
+              <figure>
+                <img src="{{ src }}{{ sep }}width=600" srcset="{{ src }}{{ sep }}width=360 360w, {{ src }}{{ sep }}width=600 600w" sizes="(min-width: 760px) 352px, 50vw" width="{{ block.settings[wk] | default: 928 }}" height="{{ block.settings[hk] | default: 1152 }}" loading="lazy" decoding="async" alt="{{ block.settings[ck] | default: product.title | escape }}">
+                {%- if block.settings[ck] != blank -%}<figcaption>{{ block.settings[ck] | escape }}</figcaption>{%- endif -%}
+              </figure>
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
       {%- when 'text' -%}
-        <section class="erp-lp__block{% if block.settings.tone == 'soft' %} erp-lp__block--soft{% endif %}" {{ block.shopify_attributes }}>
+        <section class="erp-lp__block{% if block.settings.tone == 'soft' %} erp-lp__block--soft{% elsif block.settings.tone == 'alert' %} erp-lp__block--alert{% endif %}" {{ block.shopify_attributes }}>
           {%- if block.settings.heading != blank -%}<h2 class="erp-lp__h2">{{ block.settings.heading | escape }}</h2>{%- endif -%}
           <div class="erp-lp__rte">{{ block.settings.body }}</div>
         </section>
@@ -570,9 +766,13 @@ export function sectionLiquid() {
   {%- endfor -%}
 </div>
 <style>
-  .erp-lp{max-width:720px;margin-inline:auto;padding:24px 16px 8px;display:grid;gap:20px;color:var(--text)}
+  .erp-lp{--lp-a:var(--btn,#141821);--lp-t:color-mix(in srgb,var(--lp-a) 8%,var(--card,#fff));--lp-no:#b42318;max-width:720px;margin-inline:auto;padding:24px 16px 8px;display:grid;gap:20px;color:var(--text)}
+  .erp-lp--gift{--lp-a:#be185d}.erp-lp--problem{--lp-a:#0f766e}.erp-lp--daily{--lp-a:#0369a1}.erp-lp--value{--lp-a:#a16207}.erp-lp--family{--lp-a:#7c3aed}
   .erp-lp__hero{display:grid;gap:12px;text-align:center}
-  .erp-lp__eyebrow{margin:0;font-size:.85em;font-weight:600;color:var(--ochre,currentColor)}
+  .erp-lp--gift .erp-lp__hero,.erp-lp--family .erp-lp__hero{background:var(--lp-t);border-radius:var(--radius-lg,20px);padding:14px 14px 18px}
+  .erp-lp--gift .erp-lp__hero .erp-lp__media,.erp-lp--daily .erp-lp__hero .erp-lp__media,.erp-lp--value .erp-lp__hero .erp-lp__media,.erp-lp--family .erp-lp__hero .erp-lp__media{order:-1}
+  .erp-lp--value .erp-lp__price{font-size:1.7em}
+  .erp-lp__eyebrow{margin:0;justify-self:center;padding:4px 12px;border-radius:999px;background:var(--lp-t);font-size:.85em;font-weight:700;color:var(--lp-a)}
   .erp-lp__h1{margin:0;font-family:var(--font-h,inherit);font-size:clamp(1.5rem,6vw,2.2rem);line-height:1.3}
   .erp-lp__lead{margin:0;font-size:1.05em;opacity:.85;line-height:1.7}
   .erp-lp__media img,.erp-lp__images img{display:block;width:100%;height:auto;border-radius:var(--radius,12px)}
@@ -591,12 +791,39 @@ export function sectionLiquid() {
   .erp-lp__rte p{margin:0 0 .6em}
   .erp-lp__ticks,.erp-lp__grid,.erp-lp__steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;text-align:start}
   .erp-lp__ticks li{position:relative;padding-inline-start:28px;line-height:1.7}
-  .erp-lp__ticks li::before{content:"✓";position:absolute;inset-inline-start:0;top:0;color:var(--ok,#0f766e);font-weight:700}
+  .erp-lp__ticks li::before{content:"✓";position:absolute;inset-inline-start:0;top:0;color:var(--lp-a);font-weight:700}
+  .erp-lp__trust{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .erp-lp__trust li{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:var(--radius,12px);background:var(--lp-t);font-weight:600;font-size:.9em;line-height:1.4}
+  .erp-lp__trust li::before{content:"✓";flex:0 0 22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--lp-a);color:#fff;font-size:.8em}
+  .erp-lp__block--tint{background:var(--lp-t);border-radius:var(--radius-lg,16px);padding:18px}
+  .erp-lp__block--alert{background:color-mix(in srgb,var(--lp-no) 7%,var(--card,#fff));border-inline-start:4px solid var(--lp-no);border-radius:var(--radius,12px);padding:16px 18px}
+  .erp-lp__chips--big li{padding:8px 14px;background:var(--card,#fff);color:var(--lp-a);font-size:.95em}
+  .erp-lp__compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .erp-lp__col{display:grid;align-content:start;gap:8px;border-radius:var(--radius,12px);padding:12px}
+  .erp-lp__col h3{margin:0;font-size:1em}
+  .erp-lp__col ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+  .erp-lp__col li{position:relative;padding-inline-start:22px;font-size:.92em;line-height:1.6}
+  .erp-lp__col--no{background:color-mix(in srgb,var(--lp-no) 6%,var(--card,#fff))}.erp-lp__col--no h3{color:var(--lp-no)}
+  .erp-lp__col--no li::before{content:"✕";position:absolute;inset-inline-start:0;color:var(--lp-no);font-weight:700}
+  .erp-lp__col--yes{background:var(--lp-t);box-shadow:inset 0 0 0 2px var(--lp-a)}.erp-lp__col--yes h3{color:var(--lp-a)}
+  .erp-lp__col--yes li::before{content:"✓";position:absolute;inset-inline-start:0;color:var(--lp-a);font-weight:700}
+  .erp-lp__timeline{margin:0;padding:0;list-style:none;display:grid;gap:14px;border-inline-start:2px solid var(--lp-t)}
+  .erp-lp__timeline li{position:relative;display:grid;gap:2px;padding-inline-start:20px;line-height:1.7}
+  .erp-lp__timeline li::before{content:"";position:absolute;inset-inline-start:-7px;top:.45em;width:12px;height:12px;border-radius:50%;background:var(--lp-a)}
+  .erp-lp__timeline b{color:var(--lp-a)}
+  .erp-lp__specs{margin:0;display:grid}
+  .erp-lp__specs div{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid color-mix(in srgb,currentColor 10%,transparent)}
+  .erp-lp__specs div:last-child{border-bottom:0}
+  .erp-lp__specs dt{opacity:.75}.erp-lp__specs dd{margin:0;font-weight:700;text-align:end}
+  .erp-lp__gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .erp-lp__gallery figure{margin:0;display:grid;gap:6px}
+  .erp-lp__gallery img{display:block;width:100%;height:auto;border-radius:var(--radius,12px)}
+  .erp-lp__gallery figcaption{font-weight:600;font-size:.9em;line-height:1.5;text-align:center}
   .erp-lp__grid li{display:grid;gap:4px;background:var(--card,#fff);border-radius:var(--radius,12px);padding:14px}
   .erp-lp__grid span{opacity:.8;font-size:.95em}
   .erp-lp__steps{counter-reset:s}
   .erp-lp__steps li{counter-increment:s;display:flex;gap:12px;align-items:flex-start;line-height:1.7}
-  .erp-lp__steps li::before{content:counter(s);flex:0 0 30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--btn,#141821);color:var(--btntx,#fff);font-weight:700}
+  .erp-lp__steps li::before{content:counter(s);flex:0 0 30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--lp-a);color:#fff;font-weight:700}
   .erp-lp__faq{background:var(--card,#fff);border-radius:var(--radius,12px);padding:14px 16px}
   .erp-lp__faq summary{cursor:pointer;font-weight:600;line-height:1.6}
   .erp-lp__faq p{margin:10px 0 0;line-height:1.8;opacity:.85}
@@ -622,7 +849,45 @@ export function sectionLiquid() {
   "tag": "section",
   "class": "erp-lp-s",
   "enabled_on": { "templates": ["product"] },
+  "settings": [
+    { "type": "select", "id": "style", "label": "التصميم", "default": "classic", "options": [
+      { "value": "classic", "label": "كلاسيكي" }, { "value": "gift", "label": "هدية" }, { "value": "problem", "label": "المشكلة والحل" },
+      { "value": "daily", "label": "الاستعمال اليومي" }, { "value": "value", "label": "الجودة مقابل السعر" }, { "value": "family", "label": "الأطفال والعائلة" }
+    ] }
+  ],
   "blocks": [
+    { "type": "trust", "name": "شريط الثقة", "settings": [
+      { "type": "textarea", "id": "items", "label": "سطر لكل نقطة" }
+    ] },
+    { "type": "occasions", "name": "المناسبات / لمن", "settings": [
+      { "type": "text", "id": "heading", "label": "العنوان" },
+      { "type": "textarea", "id": "items", "label": "سطر لكل مناسبة" }
+    ] },
+    { "type": "compare", "name": "بدونه / معه", "settings": [
+      { "type": "text", "id": "heading", "label": "العنوان" },
+      { "type": "text", "id": "without_label", "label": "عنوان العمود الأول", "default": "بدونه" },
+      { "type": "text", "id": "with_label", "label": "عنوان العمود الثاني", "default": "معه" },
+      { "type": "textarea", "id": "without", "label": "سطر لكل نقطة (بدونه)" },
+      { "type": "textarea", "id": "with", "label": "سطر لكل نقطة (معه)" }
+    ] },
+    { "type": "moments", "name": "يوم مع المنتج", "settings": [
+      { "type": "text", "id": "heading", "label": "العنوان" },
+      { "type": "textarea", "id": "items", "label": "سطر لكل لحظة: الوقت | النص" }
+    ] },
+    { "type": "specs", "name": "الخصائص", "settings": [
+      { "type": "text", "id": "heading", "label": "العنوان" },
+      { "type": "textarea", "id": "items", "label": "سطر لكل خاصية: الخاصية | القيمة" }
+    ] },
+    { "type": "gallery", "name": "صورتان متجاورتان", "settings": [
+      { "type": "text", "id": "image_1", "label": "الصورة 1 (رابط Fichiers)" },
+      { "type": "number", "id": "width_1", "label": "عرض 1", "default": 928 },
+      { "type": "number", "id": "height_1", "label": "ارتفاع 1", "default": 1152 },
+      { "type": "text", "id": "caption_1", "label": "تعليق 1" },
+      { "type": "text", "id": "image_2", "label": "الصورة 2 (رابط Fichiers)" },
+      { "type": "number", "id": "width_2", "label": "عرض 2", "default": 928 },
+      { "type": "number", "id": "height_2", "label": "ارتفاع 2", "default": 1152 },
+      { "type": "text", "id": "caption_2", "label": "تعليق 2" }
+    ] },
     { "type": "hero", "name": "العنوان الرئيسي", "limit": 1, "settings": [
       { "type": "text", "id": "eyebrow", "label": "سطر صغير فوق العنوان" },
       { "type": "textarea", "id": "headline", "label": "العنوان الرئيسي" },
@@ -654,7 +919,7 @@ export function sectionLiquid() {
     { "type": "text", "name": "فقرة", "settings": [
       { "type": "text", "id": "heading", "label": "العنوان" },
       { "type": "richtext", "id": "body", "label": "النص" },
-      { "type": "select", "id": "tone", "label": "الخلفية", "options": [{ "value": "plain", "label": "بدون" }, { "value": "soft", "label": "بطاقة" }], "default": "plain" }
+      { "type": "select", "id": "tone", "label": "الخلفية", "options": [{ "value": "plain", "label": "بدون" }, { "value": "soft", "label": "بطاقة" }, { "value": "alert", "label": "تنبيه (المشكلة)" }], "default": "plain" }
     ] },
     { "type": "images", "name": "صور وصفية", "settings": [
       { "type": "range", "id": "offset", "label": "ابدأ بعد الصورة رقم", "min": 0, "max": 20, "step": 1, "default": 1 },
@@ -705,7 +970,7 @@ export async function publishLanding(id) {
     const [layoutFile] = await shopify.themeFiles(cfg, theme.id, ['layout/theme.liquid']);
     // الصور بعد التأكد من صلاحية القالب، وقبل كتابة القالب الذي يعرض روابطها
     const visuals = await uploadVisuals(cfg, l, p.title);
-    const template = buildTemplate(l.copy, tpl, { visuals: readyVisuals(visuals), delivery: deliveryBlock(getDelivery(l.project_id)) });
+    const template = buildTemplate(l.copy, tpl, { visuals: readyVisuals(visuals), delivery: deliveryBlock(getDelivery(l.project_id)), layout: layoutFor(l.angle, l.framework, l.copy.layout) });
     await shopify.upsertThemeFiles(cfg, theme.id, [
       { filename: 'layout/erp-landing.liquid', content: landingLayout(layoutFile?.content) },
       { filename: 'sections/erp-lp.liquid', content: sectionLiquid() },

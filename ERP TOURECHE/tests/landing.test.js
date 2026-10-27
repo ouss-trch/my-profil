@@ -122,6 +122,12 @@ test('landing: Claude writes by the rules, with the store’s real offers and po
   assert.ok(facts.store_policies.includes('حق المعاينة مكفول: افحص الطلبية قبل الدفع.'));
   assert.equal(facts.product.real_low_stock, null, '40 in stock is not scarcity');
   assert.match(facts.framework.story_plan, /المشكلة/);
+  // زاوية «هدية» ← تصميم الهدية: أقسامه وأجواء صوره تُرسل مع المعطيات، ويُحفظ مع النص
+  assert.equal(facts.layout.id, 'gift');
+  assert.match(facts.layout.brief, /occasions/);
+  assert.match(facts.layout.shots, /gift/i);
+  assert.equal(l.copy.layout, 'gift');
+  for (const k of ['trust', 'occasions', 'compare', 'moments', 'specs']) assert.ok(sent.output_config.format.schema.required.includes(k), k);
   // نفس الزاوية مرة ثانية: رابط مختلف
   const again = await landing.generateLanding(project.id, { product_id: product.id, angle: 'هدية', framework: 'aida' });
   assert.equal(again.slug, 'thermos-mickey-cadeau-2');
@@ -151,8 +157,13 @@ test('landing: publish = layout without header/footer + section + product templa
   assert.equal(tpl.sections.main.blocks.media.blocks.description.disabled, true);
   assert.equal(tpl.sections.main.blocks.info.blocks.form.blocks.offer_2.settings.title, 'قطعتان', 'same offers as the product page');
   const top = tpl.sections.lp_top;
-  assert.equal(top.blocks[top.block_order[0]].type, 'hero');
-  assert.match(top.blocks.text_2.settings.body, /^<p>ماذا يأخذ معه اليوم؟<\/p><p>/);
+  assert.equal(top.settings.style, 'gift', 'the gift design');
+  assert.equal(tpl.sections.lp_bottom.settings.style, 'gift');
+  const types = top.block_order.map((k) => top.blocks[k].type);
+  assert.deepEqual(types.slice(0, 3), ['hero', 'trust', 'images'], 'hero, trust strip right under it, then the photos (no drawn visuals yet)');
+  assert.match(top.blocks.trust_2.settings.items, /الدفع عند الاستلام/);
+  // القصة بعد النموذج في تصميم الهدية: الشاشات الأولى للعنوان والثقة والمناسبات والفوائد
+  assert.match(Object.values(tpl.sections.lp_bottom.blocks).find((b) => b.type === 'text').settings.body, /^<p>ماذا يأخذ معه اليوم؟<\/p><p>/);
   assert.equal(Object.values(top.blocks).find((b) => b.type === 'benefits').settings.items, 'دافئ / حتى الاستراحة | المشروب يبقى ساخناً', 'a | inside a title cannot break the title | text split');
   assert.equal(Object.values(tpl.sections.lp_bottom.blocks).filter((b) => b.type === 'faq').length, 6);
 

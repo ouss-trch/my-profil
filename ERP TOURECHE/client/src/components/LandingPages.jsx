@@ -122,6 +122,7 @@ function VisualCard({ v, busy, disabled, onDraw, onPatch }) {
           </div>
         )}
         <span className="absolute start-2 top-2 rounded-full bg-surface/90 px-2 py-0.5 text-[11px] font-medium text-ink">{t(KINDS[v.kind] || KINDS.feature)}</span>
+        {v.image && v.drawn_with_text && <span className="absolute end-2 top-2 rounded-full bg-warn px-2 py-0.5 text-[11px] font-medium text-white">{t(['بالكتابة', 'Avec texte'])}</span>}
         {drawing && (
           <div className="absolute inset-0 grid place-items-center bg-surface/70">
             <Loading />
@@ -146,6 +147,11 @@ function VisualCard({ v, busy, disabled, onDraw, onPatch }) {
         <div dir="rtl" lang="ar" className="flex-1 space-y-1 p-2.5">
           <p className="text-sm font-semibold leading-6 text-ink">{v.headline}</p>
           {v.points.length > 0 && <p className="text-xs leading-5 text-sub">{v.points.join(' · ')}</p>}
+          {v.kind !== 'hero' && (
+            <div dir="auto" className="pt-1 text-xs">
+              <Toggle checked={Boolean(v.with_text)} onChange={(on) => onPatch({ with_text: on })} label={t(['العنوان داخل الصورة (تجربة)', 'Titre dans l’image (essai)'])} />
+            </div>
+          )}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-1.5 border-t border-line p-2">
@@ -217,7 +223,10 @@ function VisualsPanel({ l, setL, onChanged }) {
         )}
       </div>
       <p className="text-xs leading-6 text-sub">
-        {t(['تُرسم من صور المنتج الحقيقية، بلا أي كتابة داخلها: العنوان والنقاط نص حيّ في الصفحة (الحروف العربية في الصور المولّدة تخرج بأخطاء). راجع كل صورة: إن غيّرت شكل المنتج أو لونه فأخفها أو أعد رسمها، لأن الزبون يرفض الطرد إن لم يطابق ما رآه.', 'Dessinés à partir des vraies photos, sans aucun texte dans l’image : titre et points restent du texte de la page. Vérifiez chaque visuel : un produit modifié = colis refusé.'])}
+        {t([
+          'تُرسم من الصورة الرئيسية للمنتج ووصف صفحته فقط، بأجواء تناسب الزاوية. افتراضياً بلا كتابة داخلها: العنوان والنقاط نص حيّ في الصفحة. لتجربة الكتابة فعّل «العنوان داخل الصورة» على لقطة واحدة وارسمها: إن خرجت الحروف العربية سليمة اعتمدها، وإن أخطأت فأطفئ الخيار وأعد الرسم. راجع كل صورة: إن غيّرت شكل المنتج أو لونه فأخفها أو أعد رسمها، لأن الزبون يرفض الطرد إن لم يطابق ما رآه.',
+          'Dessinés à partir de la photo principale et de la description du produit, dans l’ambiance de l’angle. Par défaut sans texte dans l’image. Pour essayer le texte : activez « titre dans l’image » sur un visuel et dessinez-le ; si l’arabe est faux, désactivez et redessinez. Un produit modifié = colis refusé.',
+        ])}
       </p>
       {noProvider && (
         <p className="flex flex-wrap items-center gap-2 rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
@@ -255,7 +264,7 @@ function GenerateModal({ onClose, onDone, base, meta }) {
   const { run, busy } = useAction();
   const products = useApi('/products');
   const list = useMemo(() => (products.data || []).filter((p) => p.handle && p.shopify_id && p.stage !== 'archived'), [products.data]);
-  const [f, setF] = useState({ product_id: '', angle: '', framework: 'aida', tone: 'ar', audience: '', slug: '', instructions: '' });
+  const [f, setF] = useState({ product_id: '', angle: '', framework: 'aida', layout: '', tone: 'ar', audience: '', slug: '', instructions: '' });
   const product = list.find((p) => String(p.id) === String(f.product_id));
   // نفس قاعدة الخادم: مقبض لاتيني + زاوية جاهزة؛ غير ذلك يقترحه Claude ويمكن تعديله قبل النشر
   const preset = (meta?.angles || []).find(([ar]) => ar === f.angle);
@@ -313,6 +322,12 @@ function GenerateModal({ onClose, onDone, base, meta }) {
           </div>
           {fw && <p className="mt-1 text-xs text-muted">{t(['القاعدة الثابتة في كل الأطر: لا أرقام ولا آراء ولا ندرة مختلقة؛ العروض والسياسات كما في صفحة المنتج.', 'Règle fixe : aucun chiffre, avis ou rareté inventés ; offres et politiques identiques à la fiche.'])}</p>}
         </Field>
+        <Field
+          label={t(['تصميم الصفحة', 'Design de la page'])}
+          hint={t(['لكل زاوية ترتيب أقسام وألوان وصور مختلفة. «تلقائي» يختاره من كلمات الزاوية (هدية، المشكلة والحل، الاستعمال اليومي…).', 'Chaque angle a ses sections, couleurs et visuels. « Auto » le choisit d’après l’angle.'])}
+        >
+          <Select value={f.layout} onChange={(e) => setF({ ...f, layout: e.target.value })} placeholder={t(['تلقائي حسب الزاوية', 'Auto selon l’angle'])} options={(meta?.layouts || []).map((x) => ({ value: x.id, label: t(x.label) }))} />
+        </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t(['اللغة', 'Langue'])}>
             <Segmented
@@ -344,7 +359,7 @@ function GenerateModal({ onClose, onDone, base, meta }) {
 }
 
 /** معاينة المسودة/الصفحة + النشر والسحب */
-function LandingModal({ item, base, onClose, onChanged }) {
+function LandingModal({ item, base, layouts = [], onClose, onChanged }) {
   const { t } = useI18n();
   const { run, busy } = useAction();
   const [l, setL] = useState(item);
@@ -389,6 +404,7 @@ function LandingModal({ item, base, onClose, onChanged }) {
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Badge tone={STATUS[l.status][2]}>{t(STATUS[l.status])}</Badge>
           <Badge>{l.framework.toUpperCase()}</Badge>
+          {l.copy?.layout && <Badge tone="info">{t(layouts.find((x) => x.id === l.copy.layout)?.label || [l.copy.layout, l.copy.layout])}</Badge>}
           <span className="ltr min-w-0 flex-1 truncate text-xs text-sub">{publicUrl}</span>
           <CopyButton text={publicUrl} />
           {l.status === 'published' && (
@@ -488,7 +504,7 @@ export default function LandingPages() {
             }}
           />
         )}
-        {open && <LandingModal item={open} base={data?.base} onClose={() => setOpen(null)} onChanged={() => reload(true)} />}
+        {open && <LandingModal item={open} base={data?.base} layouts={data?.layouts} onClose={() => setOpen(null)} onChanged={() => reload(true)} />}
       </Card>
     </>
   );

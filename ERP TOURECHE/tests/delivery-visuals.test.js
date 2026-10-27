@@ -407,10 +407,12 @@ test('visuals: drawn from the real product photos, portrait, no text; reviewed; 
   const call = geminiCalls.at(-1);
   assert.match(call.url, /models\/gemini-nano-banana-2\.1:generateContent/);
   const parts = call.body.contents[0].parts;
-  assert.equal(parts.filter((p) => p.inline_data).length, 2, 'both product photos as references');
+  assert.equal(parts.filter((p) => p.inline_data).length, 1, 'only the main product photo as reference');
+  assert.match(parts.at(-1).text, /main photo of the real product/);
+  assert.match(parts.at(-1).text, /Product fidelity must be 100%/);
   assert.ok(parts.at(-1).text, 'photos first, then the instructions');
   assert.match(parts.at(-1).text, /Do not write any text/);
-  assert.match(parts.at(-1).text, /same shape, proportions, colors/);
+  assert.match(parts.at(-1).text, /identical shape, proportions, colors/);
   assert.match(parts.at(-1).text, /school desk/);
   assert.deepEqual(call.body.generationConfig.imageConfig, {
     aspectRatio: '4:5',
@@ -475,7 +477,8 @@ test('visuals: drawn from the real product photos, portrait, no text; reviewed; 
   assert.equal(shopFiles.length, 2);
   const tpl2 = JSON.parse(files[`templates/product.lp-${l.slug}.json`]);
   const order = tpl2.sections.lp_top.block_order.map((k) => tpl2.sections.lp_top.blocks[k].type);
-  assert.deepEqual(order.slice(0, 3), ['hero', 'text', 'visual']);
+  assert.ok(order[0] === 'hero' && order[1] === 'trust', 'hero then the trust strip');
+  assert.ok(order.includes('visual') || order.includes('gallery'), 'the second visual is placed by the layout');
 });
 
 test('visuals: a draft from before visuals gets a plan on demand; no product photo = clear error', async () => {
@@ -510,4 +513,22 @@ test('gemini errors say what to do: free tier (limit 0) is a billing problem, a 
   await assert.rejects(landing.generateVisual(l.id, 'v4'), (e) => e.message === 'gemini: gemini_daily_quota');
   geminiFailures.push({ status: 400, body: { error: { code: 400, status: 'INVALID_ARGUMENT', message: 'API key not valid. Please pass a valid API key.', details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'API_KEY_INVALID' }] } } });
   await assert.rejects(landing.generateVisual(l.id, 'v4'), (e) => e.message === 'gemini: gemini_key_invalid');
+});
+
+test('visuals: the product page description guides the drawing; the Arabic headline only when trying text in the image', () => {
+  const p = { title: 'ترمس', description_html: '<p>ستانلس ستيل&nbsp;320 مل، <b>حزام كتف</b>.</p>' };
+  const plain = landing.visualPrompt(p, { scene: 'On a desk.', headline: 'رفيقه في المدرسة' });
+  assert.match(plain, /Product description from its page.*ستانلس ستيل 320 مل، حزام كتف/);
+  assert.match(plain, /Do not write any text/);
+  const withText = landing.visualPrompt(p, { scene: 'On a desk.', headline: 'رفيقه في المدرسة', with_text: true });
+  assert.match(withText, /Write exactly this Arabic headline once in the image.*«رفيقه في المدرسة»/);
+  assert.doesNotMatch(withText, /Do not write any text/);
+  // صورة كُتب عنوانها داخلها: لا يُكرَّر تحتها
+  const tpl = { sections: { main: { type: 'product-main', settings: {}, blocks: {} } } };
+  const copy = { hero: { eyebrow: '', headline: 'h', subheadline: '', bullets: [], cta: 'c', note: '' }, story: [{ heading: 'x', body: 'y' }], benefits: { heading: '', items: [] }, steps: { heading: '', items: [] }, guarantee: { heading: '', items: [] }, faq: [], final_cta: { headline: '', cta: 'c', note: '' } };
+  const shot = (id, extra = {}) => ({ id, kind: id === 'v1' ? 'hero' : 'feature', headline: `t-${id}`, points: [], shopify_url: `https://cdn/${id}.png`, ...extra });
+  const out = landing.buildTemplate(copy, tpl, { visuals: [shot('v1'), shot('v2', { drawn_with_text: true }), shot('v3')], layout: 'classic' });
+  const visuals = [...Object.values(out.sections.lp_top.blocks), ...Object.values(out.sections.lp_bottom.blocks)].filter((b) => b.type === 'visual');
+  assert.deepEqual(visuals.map((b) => b.settings.headline), ['', 't-v3']);
+  assert.equal(visuals[0].settings.alt, 't-v2', 'alt text kept');
 });
