@@ -20,7 +20,7 @@ adsRouter.get('/platform-history', (req, res) => res.json(ads.platformHistory(pi
 // ——— مستكشف Business Manager ———
 adsRouter.get('/businesses', async (req, res) => res.json(await ads.explorer(pid(req), { refresh: req.query.refresh === '1' })));
 
-adsRouter.put('/businesses/selected', (req, res) => {
+adsRouter.put('/businesses/selected', requireRole('admin', 'manager'), (req, res) => {
   ads.selectBusiness(pid(req), v.str(req.body.business_id, { max: 40 }));
   res.json({ ok: true });
 });
@@ -58,11 +58,11 @@ adsRouter.put('/launch-defaults', requireRole('admin', 'manager'), (req, res) =>
 
 adsRouter.get('/drafts', (req, res) => res.json(ads.listDrafts(pid(req), req.query.product_id ? Number(req.query.product_id) : null)));
 
-adsRouter.post('/drafts', (req, res) =>
+adsRouter.post('/drafts', requireRole('admin', 'manager'), (req, res) =>
   res.json(ads.saveDraft(pid(req), { id: req.body.id ? Number(req.body.id) : null, productId: req.body.product_id ? Number(req.body.product_id) : null, name: v.str(req.body.name, { max: 200 }), payload: req.body.payload || {} })),
 );
 
-adsRouter.delete('/drafts/:id', (req, res) => {
+adsRouter.delete('/drafts/:id', requireRole('admin', 'manager'), (req, res) => {
   ads.deleteDraft(pid(req), Number(req.params.id));
   res.json({ ok: true });
 });
@@ -100,12 +100,12 @@ adsRouter.post('/campaigns/:id/budget', requireRole('admin', 'manager'), require
   res.json({ ok: true });
 });
 
-adsRouter.post('/campaigns/:id/link', (req, res) => {
+adsRouter.post('/campaigns/:id/link', requireRole('admin', 'manager'), (req, res) => {
   ads.linkCampaign(pid(req), req.params.id, v.int(req.body.product_id, { required: true, name: 'product_id' }));
   res.json({ ok: true });
 });
 
-adsRouter.delete('/campaigns/:id/link', (req, res) => {
+adsRouter.delete('/campaigns/:id/link', requireRole('admin', 'manager'), (req, res) => {
   ads.unlinkCampaign(req.params.id);
   res.json({ ok: true });
 });

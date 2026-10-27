@@ -201,6 +201,8 @@ export function createOrder(projectId, input, { source = 'manual', userId = null
   const ref = input.ref || genRef();
   const existing = db.prepare('SELECT id FROM orders WHERE project_id = ? AND ref = ?').get(projectId, ref);
   if (existing) return { id: existing.id, created: false };
+  // طلبية حذفها المستخدم: لا تعيدها مزامنة Shopify ولا الجدول ولا n8n
+  if (source !== 'manual' && wasDeleted(projectId, ref, input.external_id)) return { id: null, created: false, deleted: true };
   const now = nowIso();
   const status = STATUSES[input.status] ? input.status : 'new';
   const tags = Array.isArray(input.tags) ? input.tags.map(String) : [];
@@ -464,9 +466,55 @@ export function addNote(id, note, userId) {
   return getOrder(id);
 }
 
-export function deleteOrder(id) {
-  const info = db.prepare('DELETE FROM orders WHERE id = ?').run(id);
-  if (!info.changes) throw new HttpError(404, 'order_not_found');
+function wasDeleted(projectId, ref, externalId) {
+  return Boolean(
+    db.prepare('SELECT 1 FROM deleted_orders WHERE project_id = ? AND ref = ?').get(projectId, ref) ||
+      (externalId && db.prepare('SELECT 1 FROM deleted_orders WHERE project_id = ? AND external_id = ?').get(projectId, String(externalId))),
+  );
+}
+
+/**
+ * حذف نهائي من الـ ERP (الطلبية في Shopify لا تُمس) مع تذكّر مرجعها حتى لا تعيدها المزامنة.
+ * projectIds يحصر الحذف في المشاريع المختارة.
+ */
+export function deleteOrders(ids, { projectIds = null, userId = null } = {}) {
+  const list = [...new Set((ids || []).map(Number).filter((x) => Number.isInteger(x) && x > 0))];
+  if (!list.length) return { deleted: 0, rows: [] };
+  let where = `id IN (${inList(list)})`;
+  const args = [...list];
+  if (projectIds) {
+    where += ` AND project_id IN (${inList(projectIds)})`;
+    args.push(...projectIds);
+  }
+  const rows = db.prepare(`SELECT id, project_id, ref, external_id, shopify_name, customer_name, total FROM orders WHERE ${where}`).all(...args);
+  const at = nowIso();
+  const remember = db.prepare('INSERT OR REPLACE INTO deleted_orders (project_id, ref, external_id, deleted_at, deleted_by) VALUES (?, ?, ?, ?, ?)');
+  const remove = db.prepare('DELETE FROM orders WHERE id = ?');
+  db.transaction(() => {
+    for (const o of rows) {
+      remember.run(o.project_id, o.ref, o.external_id ? String(o.external_id) : null, at, userId);
+      remove.run(o.id);
+    }
+  })();
+  return { deleted: rows.length, rows };
+}
+
+export function deleteOrder(id, opts = {}) {
+  const r = deleteOrders([id], opts);
+  if (!r.deleted) throw new HttpError(404, 'order_not_found');
+  return r.rows[0];
+}
+
+/** حذف زبائن = حذف كل طلبياتهم في المشاريع المختارة. القائمة السوداء تبقى (تحمي المتجر إن عاد) */
+export function deleteCustomers(phones, { projectIds, userId = null } = {}) {
+  const list = [...new Set((phones || []).map((p) => String(p || '').trim()).filter(Boolean))].slice(0, 1000);
+  if (!list.length) return { customers: 0, deleted: 0 };
+  const ids = db
+    .prepare(`SELECT id FROM orders WHERE phone IN (${inList(list)}) AND project_id IN (${inList(projectIds)})`)
+    .all(...list, ...projectIds)
+    .map((r) => r.id);
+  const r = deleteOrders(ids, { projectIds, userId });
+  return { customers: list.length, deleted: r.deleted };
 }
 
 // ——— الزبائن ———

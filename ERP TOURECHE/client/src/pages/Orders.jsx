@@ -33,6 +33,7 @@ import { CARRIER_NAMES, StatusBadge, useStatusLabel } from '../components/status
 import { DeliveryContacts } from './Contacts.jsx';
 import { ReturnCard, ReturnsBar } from '../components/Returns.jsx';
 import { Advice, LEVELS, ReasonChips, RiskBadge, pTone } from '../components/CustomerRisk.jsx';
+import BulkDelete from '../components/BulkDelete.jsx';
 import { Badge, Button, Card, Drawer, Empty, ErrorBox, Field, Input, Loading, Modal, Pagination, Select, Tabs, Textarea, Toggle, cx, useAction, useToast } from '../components/ui.jsx';
 
 export const TABS = {
@@ -178,6 +179,23 @@ export default function Orders() {
                 {t(['إرسال لشركة التوصيل', 'Envoyer au transporteur'])}
               </Button>
             )}
+            <BulkDelete
+              count={selected.size}
+              all={allSel}
+              label={t(['حذف {n} طلبية', 'Supprimer {n} commande(s)'], { n: selected.size })}
+              allLabel={t(['ستحذف كل الطلبيات المعروضة', 'Vous allez supprimer toutes les commandes affichées'])}
+              points={[
+                t(['تُحذف من الـ ERP نهائياً مع سجلها (الحالات، الملاحظات، المرتجع).', 'Supprimées définitivement de l’ERP avec leur historique (statuts, notes, retour).']),
+                t(['في Shopify تبقى كما هي، ولن تعيدها المزامنة (Shopify ولا الجدول ولا n8n).', 'Dans Shopify elles restent intactes, et aucune synchro (Shopify, Sheet, n8n) ne les fera revenir.']),
+                t(['النسخة الاحتياطية الليلية تحفظ ما قبل الحذف.', 'La sauvegarde de la nuit garde l’état d’avant.']),
+              ]}
+              run={() => api.post('/orders/bulk/delete', { ids: [...selected] }, { reason: t(['أدخل كلمة المرور الحساسة لحذف {n} طلبية', 'Mot de passe sensible pour supprimer {n} commande(s)'], { n: selected.size }) })}
+              done={(r) => t(['حُذفت {n} طلبية', '{n} commande(s) supprimée(s)'], { n: r.deleted })}
+              onDone={() => {
+                setSelected(new Set());
+                refreshAll();
+              }}
+            />
           </div>
         )}
       </div>

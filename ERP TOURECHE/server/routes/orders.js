@@ -105,10 +105,18 @@ ordersRouter.post('/bulk/status', (req, res) => {
 ordersRouter.post('/:id/note', (req, res) => res.json(orders.addNote(Number(req.params.id), v.str(req.body.note, { required: true, max: 2000, name: 'note' }), req.user.id)));
 
 ordersRouter.delete('/:id', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
-  const o = orders.getOrder(Number(req.params.id));
-  orders.deleteOrder(o.id);
+  const o = orders.deleteOrder(Number(req.params.id), { userId: req.user.id });
   audit(req, 'order_deleted', { entity: 'order', entityId: o.id, projectId: o.project_id, details: { ref: o.ref, customer: o.customer_name, total: o.total } });
   res.json({ ok: true });
+});
+
+// حذف جماعي (المدير فقط): من الـ ERP نهائياً، ولا تعيده المزامنة
+ordersRouter.post('/bulk/delete', requireRole('admin'), requireSensitive, (req, res) => {
+  const ids = (req.body.ids || []).map(Number).filter(Boolean).slice(0, 1000);
+  if (!ids.length) throw badRequest('ids_required');
+  const r = orders.deleteOrders(ids, { projectIds: projectScope(req).ids, userId: req.user.id });
+  audit(req, 'orders_bulk_deleted', { entity: 'order', details: { requested: ids.length, deleted: r.deleted, refs: r.rows.map((o) => o.shopify_name || o.ref).slice(0, 200) } });
+  res.json({ deleted: r.deleted });
 });
 
 // ——— الشحن ———
@@ -177,6 +185,15 @@ customersRouter.get('/:phone', (req, res) => {
   const summary = orders.customerSummary(req.params.phone);
   if (!summary) throw new HttpError(404, 'customer_not_found');
   res.json({ ...summary, orders: orders.listOrders({ projectIds: scope.ids, q: req.params.phone, statuses: Object.keys(STATUSES), limit: 100 }).rows });
+});
+
+// حذف زبائن (المدير فقط) = حذف كل طلبياتهم في المشروع المختار؛ القائمة السوداء تبقى
+customersRouter.post('/bulk/delete', requireRole('admin'), requireSensitive, (req, res) => {
+  const phones = (req.body.phones || []).map((p) => String(p || '').trim()).filter(Boolean).slice(0, 1000);
+  if (!phones.length) throw badRequest('phones_required');
+  const r = orders.deleteCustomers(phones, { projectIds: projectScope(req).ids, userId: req.user.id });
+  audit(req, 'customers_bulk_deleted', { entity: 'customer', details: { customers: r.customers, orders: r.deleted } });
+  res.json(r);
 });
 
 customersRouter.put('/:phone/flag', (req, res) => {

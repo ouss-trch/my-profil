@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Ban, PhoneOff, ShieldCheck, Truck, Users } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi, useDebounced } from '../lib/hooks.js';
@@ -9,6 +9,8 @@ import { StatusBadge } from '../components/status.jsx';
 import { Advice, CallLessons, LEVEL_KEYS, LEVELS, ReasonChips, RiskBadge, pTone } from '../components/CustomerRisk.jsx';
 import { Button, Card, Drawer, Empty, ErrorBox, Input, Loading, Pagination, Select, Stat, cx, useAction } from '../components/ui.jsx';
 import { OrderDrawer } from './Orders.jsx';
+import BulkDelete from '../components/BulkDelete.jsx';
+import { useApp } from '../components/ProjectContext.jsx';
 
 const LIMIT = 100;
 
@@ -20,9 +22,23 @@ export default function Customers() {
   const [sort, setSort] = useState('recent');
   const [offset, setOffset] = useState(0);
   const [phone, setPhone] = useState(null);
-  const { data, error, loading, reload } = useApi(`/customers${qs({ q: dq, risk, sort, limit: LIMIT, offset })}`);
+  const [selected, setSelected] = useState(new Set());
+  const { auth, isAll } = useApp();
+  const admin = auth.user?.role === 'admin';
+  const path = `/customers${qs({ q: dq, risk, sort, limit: LIMIT, offset })}`;
+  const { data, error, loading, reload } = useApi(path);
+  useEffect(() => setSelected(new Set()), [path]);
   const rows = data?.rows || [];
   const counts = data?.counts || {};
+  const allSel = rows.length > 0 && rows.every((r) => selected.has(r.phone));
+  const picked = rows.filter((r) => selected.has(r.phone));
+  const pickedOrders = picked.reduce((s, r) => s + r.orders + r.abandoned, 0);
+  const toggle = (p) => {
+    const s = new Set(selected);
+    if (s.has(p)) s.delete(p);
+    else s.add(p);
+    setSelected(s);
+  };
   const filter = (level) => {
     setRisk(risk === level ? '' : level);
     setOffset(0);
@@ -72,6 +88,30 @@ export default function Customers() {
           ]}
         />
       </div>
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-sm">
+          <span className="font-medium">{t(['{n} محددون · {o} طلبية', '{n} sélectionnés · {o} commandes'], { n: selected.size, o: pickedOrders })}</span>
+          <BulkDelete
+            count={selected.size}
+            all={allSel}
+            label={t(['حذف {n} زبون', 'Supprimer {n} client(s)'], { n: selected.size })}
+            allLabel={t(['ستحذف كل الزبائن المعروضين', 'Vous allez supprimer tous les clients affichés'])}
+            points={[
+              isAll
+                ? t(['تُحذف كل طلبياتهم في كل المشاريع: {o} طلبية مع سجلها.', 'Toutes leurs commandes, dans tous les projets, sont supprimées : {o} commandes avec leur historique.'], { o: pickedOrders })
+                : t(['تُحذف كل طلبياتهم في هذا المشروع: {o} طلبية مع سجلها.', 'Toutes leurs commandes de ce projet sont supprimées : {o} commandes avec leur historique.'], { o: pickedOrders }),
+              t(['القائمة السوداء تبقى: إن عاد رقم محظور يُنبَّه عليه.', 'La liste noire est conservée : un numéro bloqué qui revient reste signalé.']),
+              t(['في Shopify تبقى الطلبيات كما هي، ولن تعيدها المزامنة.', 'Dans Shopify les commandes restent intactes, et la synchro ne les fera pas revenir.']),
+            ]}
+            run={() => api.post('/customers/bulk/delete', { phones: [...selected] }, { reason: t(['أدخل كلمة المرور الحساسة لحذف {n} زبون', 'Mot de passe sensible pour supprimer {n} client(s)'], { n: selected.size }) })}
+            done={(r) => t(['حُذف {n} زبون ({o} طلبية)', '{n} client(s) supprimé(s) ({o} commandes)'], { n: r.customers, o: r.deleted })}
+            onDone={() => {
+              setSelected(new Set());
+              reload(true);
+            }}
+          />
+        </div>
+      )}
       <Card pad={false}>
         {loading && !data ? (
           <Loading />
@@ -85,6 +125,11 @@ export default function Customers() {
               <table className="table">
                 <thead>
                   <tr>
+                    {admin && (
+                      <th className="w-8">
+                        <input type="checkbox" checked={allSel} onChange={() => setSelected(allSel ? new Set() : new Set(rows.map((r) => r.phone)))} aria-label={t(['تحديد الكل', 'Tout sélectionner'])} />
+                      </th>
+                    )}
                     <th>{t(['الزبون', 'Client'])}</th>
                     <th>{t(['التقييم', 'Évaluation'])}</th>
                     <th className="text-end" title={t(['احتمال أن يستلم طلبيته القادمة', 'Probabilité qu’il reçoive sa prochaine commande'])}>
@@ -108,7 +153,12 @@ export default function Customers() {
                   {rows.map((c) => {
                     const fails = Math.max(c.delivery_failed, c.carrier_unreachable);
                     return (
-                      <tr key={c.phone}>
+                      <tr key={c.phone} className={selected.has(c.phone) ? 'bg-brand/5' : undefined}>
+                        {admin && (
+                          <td>
+                            <input type="checkbox" checked={selected.has(c.phone)} onChange={() => toggle(c.phone)} aria-label={c.name || c.phone} />
+                          </td>
+                        )}
                         <td>
                           <button type="button" className="link font-medium" onClick={() => setPhone(c.phone)}>
                             {c.name || '—'}

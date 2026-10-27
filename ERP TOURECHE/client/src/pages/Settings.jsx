@@ -579,7 +579,7 @@ function UsersTab() {
   const { data, error, loading, reload } = useApi('/users');
   const { run, busy } = useAction();
   const [edit, setEdit] = useState(null);
-  const ROLES = { admin: ['مدير', 'Admin'], manager: ['مسؤول', 'Manager'], agent: ['موظف تأكيد', 'Agent'] };
+  const ROLES = { admin: ['مدير', 'Admin'], manager: ['مسؤول', 'Manager'], agent: ['موظف تأكيد', 'Agent'], viewer: ['مشاهد (قراءة فقط)', 'Lecture seule'] };
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
   return (
@@ -613,7 +613,13 @@ function UsersTab() {
           </tbody>
         </table>
       </Card>
-      <p className="text-xs text-muted">{t(['الموظف (Agent) يؤكد ويشحن فقط؛ المسؤول يعدّل المنتجات والإعلانات؛ المدير يملك كل شيء. العمليات الحساسة تتطلب كلمة المرور الحساسة دائماً.', 'Agent : confirmation et expédition ; Manager : produits et pubs ; Admin : tout. Les actions sensibles exigent toujours le mot de passe sensible.'])}</p>
+      <ul className="list-disc space-y-1 ps-5 text-xs text-muted">
+        <li>{t(['المدير: كل شيء، بما فيه الإعدادات والمستخدمون والحذف الجماعي.', 'Admin : tout, y compris paramètres, utilisateurs et suppression en masse.'])}</li>
+        <li>{t(['المسؤول: المنتجات، إنشاء صفحات الهبوط، الإعلانات والمالية؛ دون الإعدادات والمستخدمين ونشر الصفحات والحذف الجماعي.', 'Manager : produits, création des pages, pubs et finances ; sans paramètres, utilisateurs, publication des pages ni suppression en masse.'])}</li>
+        <li>{t(['موظف التأكيد: الطلبيات فقط (تأكيد، لا يرد، شحن، ملاحظات) والقائمة السوداء؛ لا يعدّل المنتجات ولا الإعلانات ولا ينفق على الذكاء الاصطناعي.', 'Agent : commandes uniquement (confirmation, sans réponse, expédition, notes) et liste noire ; pas de produits, pubs ni dépenses IA.'])}</li>
+        <li>{t(['المشاهد: يرى كل الأقسام ولا يغيّر أي شيء.', 'Lecture seule : voit tout, ne modifie rien.'])}</li>
+        <li>{t(['العمليات الحساسة (الحذف، الأسعار، الميزانيات، الإعدادات) تتطلب كلمة المرور الحساسة كل مرة، حتى للمدير. لا تعطها لأحد.', 'Les actions sensibles (suppression, prix, budgets, paramètres) exigent le mot de passe sensible à chaque fois, même pour l’admin. Ne le donnez à personne.'])}</li>
+      </ul>
       {edit && (
         <Modal
           open

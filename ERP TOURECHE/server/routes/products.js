@@ -89,12 +89,12 @@ productsRouter.get('/:id', (req, res) => {
   res.json({ ...p, break_even: breakEven(p, p.project_id) });
 });
 
-productsRouter.post('/', (req, res) => {
+productsRouter.post('/', requireRole('admin', 'manager'), (req, res) => {
   const scope = projectScope(req, { allowAll: false });
   res.json(products.createProduct(scope.id, req.body));
 });
 
-productsRouter.patch('/:id', (req, res, next) => {
+productsRouter.patch('/:id', requireRole('admin', 'manager'), (req, res, next) => {
   const id = Number(req.params.id);
   const p = products.getProduct(id);
   const touchesPrice = PRICE_FIELDS.some((k) => req.body[k] !== undefined && JSON.stringify(req.body[k]) !== JSON.stringify(p[k]));
@@ -143,24 +143,24 @@ productsRouter.post('/:id/seo/check', (req, res) => {
   res.json(analyzeSeo({ ...p, ...req.body }, { otherSeoTitles: others.map((o) => o.seo_title).filter(Boolean), otherHandles: others.map((o) => o.handle).filter(Boolean) }));
 });
 
-productsRouter.post('/:id/seo/generate', async (req, res) => res.json(await products.generateSeo(Number(req.params.id), { instructions: v.str(req.body.instructions, { max: 1500 }) || '' })));
+productsRouter.post('/:id/seo/generate', requireRole('admin', 'manager'), async (req, res) => res.json(await products.generateSeo(Number(req.params.id), { instructions: v.str(req.body.instructions, { max: 1500 }) || '' })));
 
-productsRouter.post('/:id/seo/apply', (req, res) => res.json(products.applySeo(Number(req.params.id), req.body)));
+productsRouter.post('/:id/seo/apply', requireRole('admin', 'manager'), (req, res) => res.json(products.applySeo(Number(req.params.id), req.body)));
 
-productsRouter.post('/:id/publish', requireSensitive, async (req, res) => {
+productsRouter.post('/:id/publish', requireRole('admin', 'manager'), requireSensitive, async (req, res) => {
   const status = req.body.status === 'DRAFT' ? 'DRAFT' : 'ACTIVE';
   const p = await products.publishProduct(Number(req.params.id), { status });
   audit(req, 'product_published', { entity: 'product', entityId: p.id, projectId: p.project_id, details: { status, shopify_id: p.shopify_id } });
   res.json(p);
 });
 
-productsRouter.post('/:id/social', async (req, res) => {
+productsRouter.post('/:id/social', requireRole('admin', 'manager'), async (req, res) => {
   const platforms = (req.body.platforms || ['facebook']).filter((x) => ['facebook', 'instagram'].includes(x));
   res.json(await products.postToSocial(Number(req.params.id), { platforms, message: v.str(req.body.message, { required: true, max: 2200, name: 'message' }) }));
 });
 
 /** «إرسال إلى تيليغرام» عبر سير «Toureche ERP · نشر المنتجات» في n8n */
-productsRouter.post('/:id/telegram', async (req, res) => {
+productsRouter.post('/:id/telegram', requireRole('admin', 'manager'), async (req, res) => {
   const p = products.getProduct(Number(req.params.id));
   const cfg = projectConfig(p.project_id);
   const opt = p.options?.[0];
@@ -182,14 +182,14 @@ productsRouter.post('/:id/stock', requireRole('admin', 'manager'), requireSensit
   res.json(p);
 });
 
-productsRouter.post('/:id/images', upload.array('images', 10), (req, res) => {
+productsRouter.post('/:id/images', requireRole('admin', 'manager'), upload.array('images', 10), (req, res) => {
   const p = products.getProduct(Number(req.params.id));
   if (!req.files?.length) throw badRequest('images_required');
   const added = req.files.map((f) => ({ ...saveUpload(p.project_id, f.buffer, f.mimetype.includes('png') ? 'png' : f.mimetype.includes('webp') ? 'webp' : 'jpg'), alt: '' }));
   res.json(products.updateProduct(p.id, { images: [...(p.images || []), ...added.map((a) => ({ url: a.url, alt: a.alt }))] }));
 });
 
-productsRouter.post('/:id/images/generate', async (req, res) => {
+productsRouter.post('/:id/images/generate', requireRole('admin', 'manager'), async (req, res) => {
   const p = products.getProduct(Number(req.params.id));
   const prompt = v.str(req.body.prompt, { required: true, max: 4000, name: 'prompt' });
   const sources = (req.body.source_urls || p.images.slice(0, 2).map((i) => i.url)).slice(0, 4);
@@ -198,7 +198,7 @@ productsRouter.post('/:id/images/generate', async (req, res) => {
   res.json({ images });
 });
 
-productsRouter.post('/:id/ad-copy', async (req, res) =>
+productsRouter.post('/:id/ad-copy', requireRole('admin', 'manager'), async (req, res) =>
   res.json(await products.generateAdCopy(Number(req.params.id), { languages: req.body.languages, count: req.body.count, instructions: v.str(req.body.instructions, { max: 1500 }) || '' })),
 );
 

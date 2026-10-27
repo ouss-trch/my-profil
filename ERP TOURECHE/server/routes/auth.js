@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { hashPassword, verifyPassword, passwordProblem } from '../lib/crypto.js';
-import { createSession, destroySession, requireAuth, requireRole, requireSensitive, checkLocked, recordFail, clearFails, usersCount, checkSetupToken, clearSetupToken, setupTokenRequired } from '../lib/auth.js';
+import { createSession, destroySession, requireAuth, requireRole, requireSensitive, checkLocked, recordFail, clearFails, usersCount, checkSetupToken, clearSetupToken, setupTokenRequired, roleOf, ROLES } from '../lib/auth.js';
 import { getSensitiveHash, setSensitiveHash } from '../lib/settings.js';
 import { audit } from '../lib/audit.js';
 import { HttpError, badRequest, v } from '../lib/util.js';
@@ -52,7 +52,7 @@ authRouter.post('/login', async (req, res) => {
   clearFails('login', req, username);
   createSession(req, res, user.id);
   audit({ ...req, user }, 'login');
-  res.json({ ok: true, user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role } });
+  res.json({ ok: true, user: { id: user.id, username: user.username, display_name: user.display_name, role: roleOf(user) } });
 });
 
 authRouter.post('/logout', (req, res) => {
@@ -87,16 +87,19 @@ export const usersRouter = Router();
 usersRouter.use(requireRole('admin'));
 
 usersRouter.get('/', (_req, res) => {
-  res.json(db.prepare('SELECT id, username, display_name, role, active, created_at, last_login_at FROM users ORDER BY id').all());
+  res.json(db.prepare('SELECT id, username, display_name, role, read_only, active, created_at, last_login_at FROM users ORDER BY id').all().map(({ read_only: ro, ...u }) => ({ ...u, role: roleOf({ ...u, read_only: ro }) })));
 });
 
 usersRouter.post('/', requireSensitive, async (req, res) => {
   const username = v.str(req.body.username, { required: true, max: 40, name: 'username' });
   const problem = passwordProblem(req.body.password);
   if (problem) throw badRequest(problem);
-  const role = v.oneOf(req.body.role || 'agent', ['admin', 'manager', 'agent'], { name: 'role' });
+  const role = v.oneOf(req.body.role || 'agent', ROLES, { name: 'role' });
   if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) throw new HttpError(409, 'username_taken');
-  const info = db.prepare('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)').run(username, v.str(req.body.display_name, { max: 80 }) || username, await hashPassword(req.body.password), role);
+  // «مشاهد» يُخزَّن موظفاً بعلامة القراءة فقط
+  const info = db
+    .prepare('INSERT INTO users (username, display_name, password_hash, role, read_only) VALUES (?, ?, ?, ?, ?)')
+    .run(username, v.str(req.body.display_name, { max: 80 }) || username, await hashPassword(req.body.password), role === 'viewer' ? 'agent' : role, role === 'viewer' ? 1 : 0);
   audit(req, 'user_created', { entity: 'user', entityId: info.lastInsertRowid, details: { username, role } });
   res.json({ id: Number(info.lastInsertRowid) });
 });
@@ -105,10 +108,16 @@ usersRouter.patch('/:id', requireSensitive, async (req, res) => {
   const id = Number(req.params.id);
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!u) throw new HttpError(404, 'user_not_found');
-  const role = req.body.role ? v.oneOf(req.body.role, ['admin', 'manager', 'agent'], { name: 'role' }) : u.role;
+  const role = req.body.role ? v.oneOf(req.body.role, ROLES, { name: 'role' }) : roleOf(u);
   const active = req.body.active === undefined ? u.active : req.body.active ? 1 : 0;
   if (id === req.user.id && (role !== 'admin' || !active)) throw badRequest('cannot_demote_self');
-  db.prepare('UPDATE users SET display_name = ?, role = ?, active = ? WHERE id = ?').run(v.str(req.body.display_name, { max: 80 }) ?? u.display_name, role, active, id);
+  db.prepare('UPDATE users SET display_name = ?, role = ?, read_only = ?, active = ? WHERE id = ?').run(
+    v.str(req.body.display_name, { max: 80 }) ?? u.display_name,
+    role === 'viewer' ? 'agent' : role,
+    role === 'viewer' ? 1 : 0,
+    active,
+    id,
+  );
   if (req.body.password) {
     const problem = passwordProblem(req.body.password);
     if (problem) throw badRequest(problem);

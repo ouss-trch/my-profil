@@ -4,7 +4,7 @@ import express from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
-import { loadUser, requireAuth } from './lib/auth.js';
+import { loadUser, requireAuth, blockReadOnly } from './lib/auth.js';
 import { HttpError } from './lib/util.js';
 import { IntegrationError } from './lib/http.js';
 import { authRouter, usersRouter } from './routes/auth.js';
@@ -70,6 +70,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/hooks', hooksRouter);
   app.use('/api', requireAuth);
+  app.use('/api', blockReadOnly);
   app.use('/api/users', usersRouter);
   app.use('/api', coreRouter);
   app.use('/api/orders', ordersRouter);

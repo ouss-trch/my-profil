@@ -380,6 +380,11 @@ export default function Layout() {
             <Languages className="h-4 w-4" />
             {lang === 'ar' ? 'FR' : 'ع'}
           </button>
+          {auth.user?.role === 'viewer' && (
+            <span className="chip hidden shrink-0 bg-info/10 text-info sm:inline-flex" title={t(['حسابك للاطلاع فقط', 'Compte en lecture seule'])}>
+              {t(['قراءة فقط', 'Lecture seule'])}
+            </span>
+          )}
           <IconButton icon={Lock} label={t('c.lock')} onClick={lock} />
           <span className="ms-1 hidden h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-sm font-semibold text-brand-ink sm:flex" title={auth.user?.display_name}>
             {(auth.user?.display_name || auth.user?.username || '?').slice(0, 1).toUpperCase()}

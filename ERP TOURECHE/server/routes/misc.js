@@ -149,7 +149,7 @@ contactsRouter.patch('/:id', (req, res) => {
   res.json(db.prepare('SELECT * FROM contacts WHERE id = ?').get(cur.id));
 });
 
-contactsRouter.delete('/:id', requireSensitive, (req, res) => {
+contactsRouter.delete('/:id', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
   const cur = db.prepare('SELECT * FROM contacts WHERE id = ?').get(Number(req.params.id));
   if (!cur) throw new HttpError(404, 'contact_not_found');
   db.prepare('DELETE FROM contacts WHERE id = ?').run(cur.id);
@@ -250,7 +250,7 @@ pagesRouter.post('/sync', async (req, res) => {
   res.json({ results: out });
 });
 
-pagesRouter.post('/', (req, res) => {
+pagesRouter.post('/', requireRole('admin', 'manager'), (req, res) => {
   const scope = projectScope(req, { allowAll: false });
   const ids = pages.addPages(scope.id, { urls: req.body.urls ?? req.body.url, title: v.str(req.body.title, { max: 200 }), product_id: req.body.product_id ? Number(req.body.product_id) : null, pinned: req.body.pinned !== false });
   audit(req, 'pages_added', { projectId: scope.id, details: { count: ids.length } });
@@ -337,9 +337,9 @@ pagesRouter.delete('/landing/leftovers/:suffix', requireRole('admin'), requireSe
   res.json({ ok: true });
 });
 
-pagesRouter.patch('/:id', (req, res) => res.json(pages.updatePage(Number(req.params.id), req.body)));
+pagesRouter.patch('/:id', requireRole('admin', 'manager'), (req, res) => res.json(pages.updatePage(Number(req.params.id), req.body)));
 
-pagesRouter.delete('/:id', requireSensitive, (req, res) => {
+pagesRouter.delete('/:id', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
   const cur = pages.deletePage(Number(req.params.id));
   audit(req, 'page_deleted', { projectId: cur.project_id, details: { url: cur.url } });
   res.json({ ok: true });

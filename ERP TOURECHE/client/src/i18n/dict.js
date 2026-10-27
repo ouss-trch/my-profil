@@ -173,6 +173,8 @@ export const DICT = {
   'err.too_many_attempts': ['محاولات كثيرة، انتظر قليلاً', 'Trop de tentatives, patientez'],
   'err.locked': ['تم الإيقاف مؤقتاً بعد محاولات خاطئة', 'Bloqué temporairement après des échecs'],
   'err.cancelled': ['أُلغيت العملية', 'Action annulée'],
+  'err.forbidden': ['هذه العملية ليست من صلاحيات حسابك (اطلبها من المدير)', 'Action non autorisée pour votre compte (demandez à l’admin)'],
+  'err.read_only': ['حسابك للاطلاع فقط: لا يمكنه تغيير شيء', 'Compte en lecture seule : aucune modification possible'],
   'err.project_required': ['اختر مشروعاً محدداً من الأعلى أولاً', 'Choisissez d’abord un projet en haut'],
   'err.sensitive_password_wrong': ['كلمة مرور العمليات الحساسة غير صحيحة', 'Mot de passe sensible incorrect'],
   'err.password_too_short': ['كلمة المرور قصيرة (8 أحرف على الأقل)', 'Mot de passe trop court (8 min.)'],

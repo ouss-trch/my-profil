@@ -607,6 +607,20 @@ ${STORE_PAGES_SQL}
     db.exec('CREATE INDEX IF NOT EXISTS idx_page_visits_page ON page_visits(project_id, page, day)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_page_visits_ab ON page_visits(project_id, ab, day) WHERE ab IS NOT NULL');
   },
+  // الحذف لا تلغيه المزامنة: مرجع كل طلبية حُذفت (مزامنة Shopify والجدول لا تعيدانها)
+  // + مستخدم «مشاهد» للقراءة فقط (عمود منفصل: تغيير قيد role يتطلب إعادة بناء جدول المستخدمين)
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS deleted_orders (
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      ref TEXT NOT NULL,
+      external_id TEXT,
+      deleted_at TEXT NOT NULL,
+      deleted_by INTEGER,
+      PRIMARY KEY (project_id, ref)
+    ) WITHOUT ROWID`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_deleted_orders_ext ON deleted_orders(project_id, external_id) WHERE external_id IS NOT NULL');
+    if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'read_only')) db.exec('ALTER TABLE users ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0');
+  },
 ];
 
 export function openDb(file = config.dbFile) {

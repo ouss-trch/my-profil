@@ -51,7 +51,7 @@ advisorRouter.patch('/journal/:id', (req, res) => {
   res.json(out);
 });
 
-advisorRouter.delete('/journal/:id', requireSensitive, (req, res) => {
+advisorRouter.delete('/journal/:id', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
   if (!advisor.deleteJournal(Number(req.params.id))) throw new HttpError(404, 'note_not_found');
   audit(req, 'journal_deleted', { entity: 'journal', entityId: req.params.id });
   res.json({ ok: true });

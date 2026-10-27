@@ -51,16 +51,20 @@ export function destroySession(req, res) {
 }
 
 const sessionStmt = db.prepare(
-  `SELECT s.id AS sid, s.expires_at, s.sensitive_until, u.id, u.username, u.display_name, u.role, u.active
+  `SELECT s.id AS sid, s.expires_at, s.sensitive_until, u.id, u.username, u.display_name, u.role, u.read_only, u.active
    FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
 );
+
+/** الدور كما تراه الواجهة والمسارات: «مشاهد» = حساب للقراءة فقط (عمود read_only) */
+export const roleOf = (u) => (u?.read_only ? 'viewer' : u?.role);
+export const ROLES = ['admin', 'manager', 'agent', 'viewer'];
 
 export function loadUser(req, _res, next) {
   const token = parseCookies(req.headers.cookie)[COOKIE];
   if (token) {
     const row = sessionStmt.get(sha256(token));
     if (row && row.active && row.expires_at > nowIso()) {
-      req.user = { id: row.id, username: row.username, display_name: row.display_name, role: row.role };
+      req.user = { id: row.id, username: row.username, display_name: row.display_name, role: roleOf(row) };
       req.session = { id: row.sid, sensitive_until: row.sensitive_until };
     }
   }
@@ -69,6 +73,12 @@ export function loadUser(req, _res, next) {
 
 export function requireAuth(req, _res, next) {
   if (!req.user) return next(new HttpError(401, 'unauthorized'));
+  next();
+}
+
+/** «مشاهد»: يرى كل شيء ولا يغيّر شيئاً (الدخول والخروج وتغيير كلمة مروره في /api/auth قبل هذا الحاجز) */
+export function blockReadOnly(req, _res, next) {
+  if (req.user?.role === 'viewer' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next(new HttpError(403, 'read_only'));
   next();
 }
 
