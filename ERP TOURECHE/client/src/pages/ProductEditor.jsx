@@ -29,6 +29,7 @@ import { da, money, n0, pct } from '../lib/format.js';
 import { useApp } from '../components/ProjectContext.jsx';
 import { Badge, Bar, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Select, Stat, Tabs, Textarea, Toggle, cx, useAction } from '../components/ui.jsx';
 import LaunchCampaign from '../components/LaunchCampaign.jsx';
+import VariantsEditor from '../components/VariantsEditor.jsx';
 import { STAGES, TEST_STAGES, seoTone } from './Products.jsx';
 
 const SEO_LABELS = {
@@ -59,7 +60,9 @@ const SEO_LABELS = {
   collection: ['داخل مجموعة', 'Dans une collection'],
   price_logic: ['السعر قبل التخفيض أكبر', 'Prix barré cohérent'],
 };
-const EDIT_KEYS = ['title', 'handle', 'stage', 'product_type', 'vendor', 'description_html', 'seo_title', 'seo_description', 'focus_keyword', 'price', 'compare_at_price', 'cost_price', 'packaging_cost', 'low_stock', 'sku', 'notes', 'audience', 'tags', 'collections', 'images', 'specs', 'angles', 'test_stage', 'test_budget_da', 'decision_note', 'supplier', 'supplier_url', 'supplier_id', 'category_id', 'category_name'];
+const EDIT_KEYS = ['title', 'handle', 'stage', 'product_type', 'vendor', 'description_html', 'seo_title', 'seo_description', 'focus_keyword', 'price', 'compare_at_price', 'cost_price', 'packaging_cost', 'low_stock', 'sku', 'notes', 'audience', 'tags', 'collections', 'images', 'specs', 'angles', 'options', 'variants', 'test_stage', 'test_budget_da', 'decision_note', 'supplier', 'supplier_url', 'supplier_id', 'category_id', 'category_name'];
+const LIST_KEYS = ['tags', 'collections', 'images', 'specs', 'angles', 'options', 'variants'];
+const num = (x) => (x === '' || x === null || x === undefined ? null : Number(x));
 
 export default function ProductEditor() {
   const { id } = useParams();
@@ -72,9 +75,9 @@ export default function ProductEditor() {
   const [remove, setRemove] = useState(false);
   const { run, busy } = useAction();
   useEffect(() => {
-    if (p) setF(Object.fromEntries(EDIT_KEYS.map((k) => [k, p[k] ?? (['tags', 'collections', 'images', 'specs', 'angles'].includes(k) ? [] : '')])));
+    if (p) setF(Object.fromEntries(EDIT_KEYS.map((k) => [k, p[k] ?? (LIST_KEYS.includes(k) ? [] : '')])));
   }, [p]);
-  const dirty = useMemo(() => (p && f ? EDIT_KEYS.filter((k) => JSON.stringify(f[k] ?? '') !== JSON.stringify(p[k] ?? (['tags', 'collections', 'images', 'specs', 'angles'].includes(k) ? [] : ''))) : []), [p, f]);
+  const dirty = useMemo(() => (p && f ? EDIT_KEYS.filter((k) => JSON.stringify(f[k] ?? '') !== JSON.stringify(p[k] ?? (LIST_KEYS.includes(k) ? [] : ''))) : []), [p, f]);
   if (loading && !p) return <Loading />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
   if (!f) return <Loading />;
@@ -82,6 +85,8 @@ export default function ProductEditor() {
   const save = async () => {
     const body = {};
     for (const k of dirty) body[k] = ['price', 'compare_at_price', 'cost_price', 'packaging_cost', 'low_stock', 'test_budget_da'].includes(k) ? (f[k] === '' ? null : Number(f[k])) : f[k];
+    // المتغيرات: أرقام حقيقية (السعر الفارغ = سعر المنتج، المخزون الفارغ = غير محدد)
+    if (body.variants) body.variants = body.variants.map((v) => ({ ...v, price: num(v.price) ?? num(f.price), compare_at_price: num(v.compare_at_price), stock: num(v.stock) }));
     const r = await run('save', () => api.patch(`/products/${p.id}`, body, { project: p.project_id }));
     if (r) setData({ ...p, ...r, break_even: p.break_even });
   };
@@ -178,7 +183,7 @@ export default function ProductEditor() {
         <div className="sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-xl border border-brand/40 bg-surface/95 px-4 py-2 shadow-pop backdrop-blur">
           <span className="text-sm text-sub">{t(['تعديلات غير محفوظة: {n}', 'Modifications non enregistrées : {n}'], { n: dirty.length })}</span>
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => setF(Object.fromEntries(EDIT_KEYS.map((k) => [k, p[k] ?? (['tags', 'collections', 'images', 'specs', 'angles'].includes(k) ? [] : '')])))}>
+            <Button size="sm" onClick={() => setF(Object.fromEntries(EDIT_KEYS.map((k) => [k, p[k] ?? (LIST_KEYS.includes(k) ? [] : '')])))}>
               {t('c.cancel')}
             </Button>
             <Button size="sm" variant="primary" icon={Save} loading={busy === 'save'} onClick={save}>
@@ -197,6 +202,8 @@ function ProductTab({ p, f, set, reload }) {
   const fileRef = useRef(null);
   const [stockDelta, setStockDelta] = useState('');
   const [stockReason, setStockReason] = useState('');
+  const multi = (p.variants || []).length > 1;
+  const [stockVariant, setStockVariant] = useState('');
   const collections = useApi('/products/collections', { deps: [p.project_id] });
   const suppliers = useApi(`/contacts${qs({ kind: 'supplier' })}`);
   const [catQ, setCatQ] = useState('');
@@ -211,7 +218,7 @@ function ProductTab({ p, f, set, reload }) {
   const margin = f.price ? Number(f.price) - Number(f.cost_price || 0) - Number(f.packaging_cost || 0) : null;
   return (
     <div className="grid gap-4 xl:grid-cols-3">
-      <div className="space-y-4 xl:col-span-2">
+      <div className="min-w-0 space-y-4 xl:col-span-2">
         <Card title={t(['المعلومات الأساسية', 'Informations'])}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t(['اسم المنتج', 'Nom du produit'])} className="sm:col-span-2">
@@ -325,7 +332,7 @@ function ProductTab({ p, f, set, reload }) {
         </Card>
       </div>
 
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <Card title={t(['السعر والهامش', 'Prix & marge'])} subtitle={p.shopify_id ? t(['تغيير سعر منتج منشور يتطلب كلمة المرور الحساسة', 'Modifier le prix d’un produit publié demande le mot de passe sensible']) : null}>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t(['سعر البيع', 'Prix'])}>
@@ -356,21 +363,18 @@ function ProductTab({ p, f, set, reload }) {
               {p.break_even && <p className="mt-1 text-[11px] text-muted">{t(['محسوب بنسبة تسليم {d}% وتكلفة المرتجع', 'Calculé avec {d} % de livraison et le coût de retour'], { d: p.break_even.delivery_rate })}</p>}
             </div>
           )}
-          {p.variants?.length > 1 && (
-            <div className="mt-3">
-              <div className="label">{t(['النسخ (من Shopify)', 'Variantes (Shopify)'])}</div>
-              <ul className="space-y-1 text-xs">
-                {p.variants.map((v) => (
-                  <li key={v.id || v.title} className="flex justify-between gap-2 rounded bg-raised px-2 py-1">
-                    <span>{v.title}</span>
-                    <span className="num">
-                      {da(v.price)} {v.inventory !== undefined && v.inventory !== null ? `· ${v.inventory}` : ''}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+        </Card>
+
+        <Card title={t(['الخيارات والمتغيرات', 'Options et variantes'])} subtitle={t(['اللون، المقاس، الموديل… لكل تركيبة سعرها ومخزونها', 'Couleur, taille, modèle… prix et stock par combinaison'])}>
+          <VariantsEditor
+            key={p.id}
+            options={f.options}
+            variants={f.variants}
+            price={f.price}
+            compare={f.compare_at_price}
+            onShopify={Boolean(p.shopify_id)}
+            onChange={({ options, variants }) => set({ options, variants })}
+          />
         </Card>
 
         <Card title={t('c.stock')}>
@@ -380,14 +384,38 @@ function ProductTab({ p, f, set, reload }) {
               <Input type="number" className="w-24" value={f.low_stock ?? ''} onChange={(e) => set({ low_stock: e.target.value })} />
             </Field>
           </div>
-          <div className="mt-3 flex gap-2">
-            <Input type="number" className="w-24" value={stockDelta} onChange={(e) => setStockDelta(e.target.value)} placeholder="+/-" />
-            <Input value={stockReason} onChange={(e) => setStockReason(e.target.value)} placeholder={t(['السبب (وصول سلعة، جرد…)', 'Motif (réception, inventaire…)'])} />
+          {multi && (
+            <ul className="mt-2 grid grid-cols-2 gap-1 text-xs">
+              {p.variants.map((v) => (
+                <li key={v.id || v.title} className="flex justify-between gap-2 rounded bg-raised px-2 py-1">
+                  <span className="truncate" dir="auto">
+                    {v.title}
+                  </span>
+                  <span className="num font-semibold">{v.stock === null || v.stock === undefined ? '∞' : n0(v.stock)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {multi && (
+              <Select
+                className="w-auto"
+                aria-label={t(['المتغير', 'Variante'])}
+                value={stockVariant}
+                onChange={(e) => setStockVariant(e.target.value)}
+                placeholder={t(['اختر المتغير', 'Choisir la variante'])}
+                options={p.variants.filter((v) => v.id).map((v) => ({ value: v.id, label: v.title }))}
+              />
+            )}
+            <Input type="number" className="w-24" aria-label={t(['الفرق (+/-)', 'Écart (+/-)'])} value={stockDelta} onChange={(e) => setStockDelta(e.target.value)} placeholder="+/-" />
+            <Input className="min-w-0 flex-1" aria-label={t(['السبب', 'Motif'])} value={stockReason} onChange={(e) => setStockReason(e.target.value)} placeholder={t(['السبب (وصول سلعة، جرد…)', 'Motif (réception, inventaire…)'])} />
             <Button
-              disabled={!Number(stockDelta)}
+              disabled={!Number(stockDelta) || (multi && p.shopify_id && !stockVariant)}
               loading={busy === 'stock'}
               onClick={async () => {
-                const r = await run('stock', () => api.post(`/products/${p.id}/stock`, { delta: Number(stockDelta), reason: stockReason }, { project: p.project_id }));
+                const r = await run('stock', () => api.post(`/products/${p.id}/stock`, { delta: Number(stockDelta), reason: stockReason, variant_id: stockVariant || null }, { project: p.project_id }), {
+                  success: p.shopify_id ? t(['عُدّل المخزون في الـ ERP وفي المتجر', 'Stock ajusté dans l’ERP et la boutique']) : undefined,
+                });
                 if (r) {
                   setStockDelta('');
                   setStockReason('');
@@ -398,7 +426,7 @@ function ProductTab({ p, f, set, reload }) {
               {t(['تعديل', 'Ajuster'])}
             </Button>
           </div>
-          {p.shopify_id && <p className="mt-2 text-[11px] text-muted">{t(['المخزون يُزامَن من Shopify كل ساعة.', 'Le stock est synchronisé depuis Shopify chaque heure.'])}</p>}
+          {p.shopify_id && <p className="mt-2 text-[11px] text-muted">{t(['التعديل يصل إلى المتجر فوراً (ملصق «متوفر / باقي N» في صفحة المنتج)، ويُفعَّل تتبّع المخزون.', 'L’ajustement part tout de suite vers la boutique (étiquette « en stock / il en reste N ») et le suivi du stock est activé.'])}</p>}
         </Card>
 
         <Card title={t(['المجموعات والوسوم', 'Collections & tags'])}>
@@ -499,7 +527,7 @@ function SeoTab({ p, f, set, onApplied }) {
   })();
   return (
     <div className="grid gap-4 xl:grid-cols-3">
-      <div className="space-y-4 xl:col-span-2">
+      <div className="min-w-0 space-y-4 xl:col-span-2">
         <Card title={t(['توليد صفحة SEO احترافية بالذكاء الاصطناعي', 'Générer une fiche SEO professionnelle (IA)'])} icon={Wand2}>
           <p className="mb-3 text-xs leading-5 text-sub">
             {t(
@@ -732,9 +760,18 @@ function MarketingTab({ p, onImagesAdded }) {
   );
 }
 
+const PUBLISH_WARNINGS = {
+  online_store_scope_missing: [
+    'نُشر المنتج لكنه غير ظاهر في الموقع: ينقص تطبيق Shopify الإذن write_publications. أضفه في Dev Dashboard ← التطبيق ← Versions ← Release، ثم وافق عليه في المتجر (افتح التطبيق من «Applications»)، ثم اضغط «تحديث على المتجر» مرة أخرى.',
+    'Produit publié mais invisible sur le site : l’app Shopify n’a pas l’autorisation write_publications. Ajoutez-la (Dev Dashboard → app → Versions → Release), approuvez-la dans la boutique, puis « Mettre à jour » à nouveau.',
+  ],
+  online_store_not_found: ['لم يُعثر على قناة «المتجر الإلكتروني» في المتجر.', 'Canal « Boutique en ligne » introuvable.'],
+};
+
 function PublishTab({ p, dirty, onDone }) {
   const { t } = useI18n();
   const { run, busy } = useAction();
+  const [warnings, setWarnings] = useState([]);
   const [msg, setMsg] = useState('');
   const [platforms, setPlatforms] = useState(['facebook']);
   return (
@@ -749,13 +786,36 @@ function PublishTab({ p, dirty, onDone }) {
           {dirty > 0 && <p className="text-xs text-warn">{t(['احفظ التعديلات أولاً.', 'Enregistrez d’abord vos modifications.'])}</p>}
           {(p.seo_score ?? 0) < 70 && <p className="text-xs text-sub">{t(['نصيحة: ارفع تقييم SEO إلى 80+ قبل النشر (تبويب SEO).', 'Conseil : visez un SEO ≥ 80 avant de publier.'])}</p>}
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" icon={Send} disabled={dirty > 0} loading={busy === 'pub'} onClick={() => run('pub', () => api.post(`/products/${p.id}/publish`, { status: 'ACTIVE' }, { project: p.project_id }), { success: t(['نُشر على المتجر', 'Publié sur la boutique']) }).then((r) => r && onDone(true))}>
+            <Button
+              variant="primary"
+              icon={Send}
+              disabled={dirty > 0}
+              loading={busy === 'pub'}
+              onClick={() =>
+                run('pub', () => api.post(`/products/${p.id}/publish`, { status: 'ACTIVE' }, { project: p.project_id }), { success: t(['نُشر على المتجر', 'Publié sur la boutique']) }).then((r) => {
+                  if (!r) return;
+                  setWarnings(r.warnings || []);
+                  onDone(true);
+                })
+              }
+            >
               {p.shopify_id ? t(['تحديث على المتجر (نشط)', 'Mettre à jour (actif)']) : t(['نشر على المتجر', 'Publier sur la boutique'])}
             </Button>
             <Button disabled={dirty > 0} loading={busy === 'draft'} onClick={() => run('draft', () => api.post(`/products/${p.id}/publish`, { status: 'DRAFT' }, { project: p.project_id }), { success: t(['أُرسل كمسودة', 'Envoyé en brouillon']) }).then((r) => r && onDone(true))}>
               {t(['إرسال كمسودة', 'Envoyer en brouillon'])}
             </Button>
           </div>
+          {warnings.map((w) => (
+            <p key={w} className="rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
+              {PUBLISH_WARNINGS[w.split(':')[0]] ? t(PUBLISH_WARNINGS[w.split(':')[0]]) : w}
+            </p>
+          ))}
+          <p className="text-[11px] leading-5 text-muted">
+            {t([
+              'النشر يطابق المتجر مع الـ ERP: الصور المحذوفة تُزال من المنتج، الصورة الأولى هي الرئيسية، الخيارات والمتغيرات كما هنا، والمنتج النشط يظهر في «المتجر الإلكتروني».',
+              'La publication aligne la boutique sur l’ERP : images supprimées retirées, la première est la principale, options et variantes identiques, et le produit actif apparaît dans la « Boutique en ligne ».',
+            ])}
+          </p>
           {p.online_url && (
             <a className="link inline-flex items-center gap-1 text-xs" href={p.online_url} target="_blank" rel="noreferrer">
               <ExternalLink className="h-3.5 w-3.5" />

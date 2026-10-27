@@ -98,14 +98,23 @@ productsRouter.patch('/:id', (req, res, next) => {
   const id = Number(req.params.id);
   const p = products.getProduct(id);
   const touchesPrice = PRICE_FIELDS.some((k) => req.body[k] !== undefined && JSON.stringify(req.body[k]) !== JSON.stringify(p[k]));
-  const run = () => {
-    const out = products.updateProduct(id, req.body);
+  // مخزون متغيرات منتج في Shopify عُدّل في الجدول: يصل إلى المتجر فوراً (لا ينتظر «إعادة النشر»)
+  const stockChanges = p.shopify_id && Array.isArray(req.body.variants)
+    ? req.body.variants
+        .filter((x) => x?.id && x.stock !== undefined && x.stock !== null && x.stock !== '')
+        .map((x) => ({ variant_id: x.id, quantity: Math.max(0, Math.round(Number(x.stock))) }))
+        .filter((c) => Number.isFinite(c.quantity) && Number(p.variants.find((v) => v.id === c.variant_id)?.stock) !== c.quantity)
+    : [];
+  const run = async () => {
+    let out = products.updateProduct(id, req.body);
+    if (stockChanges.length) out = await products.setVariantStock(id, stockChanges);
     if (touchesPrice) audit(req, 'product_price_changed', { entity: 'product', entityId: id, projectId: p.project_id, details: { price: out.price, compare_at_price: out.compare_at_price, cost: out.cost_price } });
+    if (stockChanges.length) audit(req, 'stock_set', { entity: 'product', entityId: id, projectId: p.project_id, details: { variants: stockChanges } });
     res.json(out);
   };
-  // تعديل أسعار منتج منشور = عملية حساسة
-  if (touchesPrice && p.shopify_id) return requireSensitive(req, res, (err) => (err ? next(err) : run()));
-  run();
+  // تعديل أسعار أو مخزون منتج منشور = عملية حساسة
+  if (touchesPrice && p.shopify_id) return requireSensitive(req, res, (err) => (err ? next(err) : run().catch(next)));
+  run().catch(next);
 });
 
 productsRouter.delete('/:id', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
@@ -166,10 +175,10 @@ productsRouter.post('/:id/telegram', async (req, res) => {
   );
 });
 
-productsRouter.post('/:id/stock', requireRole('admin', 'manager'), requireSensitive, (req, res) => {
+productsRouter.post('/:id/stock', requireRole('admin', 'manager'), requireSensitive, async (req, res) => {
   const delta = v.int(req.body.delta, { required: true, min: -100000, max: 100000, name: 'delta' });
-  const p = products.adjustStock(Number(req.params.id), delta, { reason: v.str(req.body.reason, { max: 200 }), userId: req.user.id });
-  audit(req, 'stock_adjusted', { entity: 'product', entityId: p.id, projectId: p.project_id, details: { delta, stock: p.stock } });
+  const p = await products.adjustStock(Number(req.params.id), delta, { reason: v.str(req.body.reason, { max: 200 }), userId: req.user.id, variantId: v.str(req.body.variant_id, { max: 120 }) || null });
+  audit(req, 'stock_adjusted', { entity: 'product', entityId: p.id, projectId: p.project_id, details: { delta, stock: p.stock, variant: req.body.variant_id || null, shopify: p.stock_synced } });
   res.json(p);
 });
 

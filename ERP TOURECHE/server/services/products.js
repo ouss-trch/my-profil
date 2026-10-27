@@ -155,12 +155,70 @@ export async function archiveProduct(id) {
   return getProduct(id);
 }
 
-/** تحريك المخزون محلياً (للمشاريع دون Shopify أو للتعديل اليدوي) */
-export function adjustStock(id, delta, { reason, orderId, userId } = {}) {
+/**
+ * تحريك المخزون (وصول سلعة، جرد، تالف). منتج في Shopify: يصل التعديل إلى المتجر فوراً (فرق نسبي، فلا يضيع بيع حدث للتو)،
+ * ويُفعَّل تتبّع المخزون للمتغير، ثم تُقرأ الكميات من Shopify. متغير بعينه (variantId) لمنتج بعدة ألوان/مقاسات.
+ */
+export async function adjustStock(id, delta, { reason, orderId, userId, variantId = null } = {}) {
   const p = getProduct(id);
-  db.prepare('UPDATE products SET stock = COALESCE(stock, 0) + ?, updated_at = ? WHERE id = ?').run(delta, nowIso(), id);
+  const cfg = projectConfig(p.project_id);
+  let synced = false;
+  if (p.shopify_id && shopify.isConfigured(cfg)) {
+    const target = variantId ? p.variants.find((v) => v.id === variantId) : p.variants.length === 1 ? p.variants[0] : null;
+    if (!target?.id) throw badRequest(p.variants.length > 1 ? 'stock_variant_required' : 'stock_variant_unknown');
+    const inv = await shopify.variantInventory(cfg, [target.id]);
+    const item = inv.variants[0];
+    if (!item?.inventoryItemId || !inv.locationId) throw badRequest('stock_variant_unknown');
+    await shopify.adjustAvailable(cfg, {
+      locationId: inv.locationId,
+      changes: [{ inventoryItemId: item.inventoryItemId, delta }],
+      reason: delta > 0 ? 'received' : 'correction',
+      reference: `gid://toureche/StockAdjust/${id}-${Date.now()}`,
+      key: `erp-stock-${id}-${target.id.split('/').pop()}-${Date.now()}-${delta}`,
+    });
+    if (!item.tracked) await shopify.trackInventory(cfg, [item.inventoryItemId]);
+    await refreshFromShopify(id);
+    synced = true;
+  } else db.prepare('UPDATE products SET stock = COALESCE(stock, 0) + ?, updated_at = ? WHERE id = ?').run(delta, nowIso(), id);
   db.prepare('INSERT INTO stock_movements (project_id, product_id, delta, reason, order_id, user_id, at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(p.project_id, id, delta, reason || null, orderId || null, userId || null, nowIso());
+  return { ...getProduct(id), stock_synced: synced };
+}
+
+/** كميات مطلقة لمتغيرات منتج في Shopify (جدول المتغيرات في الـ ERP): تصل فوراً، ثم تُقرأ من Shopify */
+export async function setVariantStock(id, changes) {
+  const p = getProduct(id);
+  const cfg = projectConfig(p.project_id);
+  if (!changes.length || !p.shopify_id || !shopify.isConfigured(cfg)) return getProduct(id);
+  const inv = await shopify.variantInventory(cfg, changes.map((c) => c.variant_id));
+  const quantities = changes
+    .map((c) => ({ ...c, item: inv.variants.find((v) => v.id === c.variant_id) }))
+    .filter((c) => c.item?.inventoryItemId && c.item.quantity !== c.quantity)
+    .map((c) => ({ inventoryItemId: c.item.inventoryItemId, quantity: c.quantity, tracked: c.item.tracked }));
+  if (quantities.length && inv.locationId) {
+    await shopify.setAvailable(cfg, { locationId: inv.locationId, quantities, key: `erp-stock-set-${id}-${Date.now()}` });
+    const untracked = quantities.filter((q) => !q.tracked).map((q) => q.inventoryItemId);
+    if (untracked.length) await shopify.trackInventory(cfg, untracked);
+  }
+  await refreshFromShopify(id);
   return getProduct(id);
+}
+
+/** بعد أي كتابة في Shopify: المتغيرات والمخزون والصور كما هي فعلاً في المتجر */
+async function refreshFromShopify(id) {
+  const p = getProduct(id);
+  const cfg = projectConfig(p.project_id);
+  const m = shopify.mapProduct(await shopify.getProduct(cfg, p.shopify_id));
+  db.prepare('UPDATE products SET variants = ?, options = ?, images = ?, stock = ?, shopify_status = ?, synced_at = ?, updated_at = ? WHERE id = ?').run(
+    JSON.stringify(m.variants),
+    JSON.stringify(m.options),
+    JSON.stringify(m.images),
+    m.stock ?? null,
+    m.shopify_status,
+    nowIso(),
+    nowIso(),
+    id,
+  );
+  return m;
 }
 
 // ——— Shopify ———
@@ -221,24 +279,45 @@ async function resolveImageSources(cfg, images) {
   return out;
 }
 
-/** نشر المنتج على Shopify (إنشاء أو تحديث) — status: ACTIVE أو DRAFT */
+const optionSig = (opts) => JSON.stringify((opts || []).filter((o) => o.name && o.values?.length).map((o) => [o.name, o.values]));
+const variantSig = (vs) =>
+  JSON.stringify(
+    (vs || [])
+      .map((v) => [JSON.stringify(Object.entries(v.options || {}).sort(([a], [b]) => a.localeCompare(b))), String(v.sku || '')])
+      .sort((a, b) => a[0].localeCompare(b[0])),
+  );
+
+/**
+ * نشر المنتج على Shopify (إنشاء أو تحديث) — status: ACTIVE أو DRAFT. الـ ERP هو المرجع:
+ *  - الصور: المحذوفة في الـ ERP تُفصل عن المنتج، الجديدة تُرفع، والترتيب نفسه (الأولى هي الرئيسية)؛
+ *  - الخيارات والمتغيرات (اللون، المقاس): تُطابَق، ومخزون كل متغير يصل مع الإنشاء؛
+ *  - المنتج النشط يُنشر على قناة «المتجر الإلكتروني» (كان يُنشأ نشطاً لكن غير ظاهر في الموقع).
+ * يُرجع warnings لما لم يتم (إذن ناقص) دون إفشال النشر كله.
+ */
 export async function publishProduct(id, { status = 'ACTIVE' } = {}) {
   const p = getProduct(id);
   const cfg = projectConfig(p.project_id);
   if (!shopify.isConfigured(cfg)) throw new HttpError(400, 'shopify_not_configured');
   if (!p.price && !(p.variants || []).some((v) => v.price)) throw badRequest('price_required');
-  let node;
-  if (!p.shopify_id) {
+  const warnings = [];
+  let gid = p.shopify_id;
+  if (!gid) {
     const images = await resolveImageSources(cfg, p.images);
-    node = await shopify.createProduct(cfg, { ...p, images }, { status });
+    const locationId = await shopify.primaryLocation(cfg).catch(() => null);
+    const node = await shopify.createProduct(cfg, { ...p, images }, { status, locationId });
+    gid = node.id;
   } else {
-    const current = shopify.mapProduct(await shopify.getProduct(cfg, p.shopify_id));
+    const current = shopify.mapProduct(await shopify.getProduct(cfg, gid));
     const currentIds = new Set(current.collections.map((c) => c.id));
     const wanted = new Set((p.collections || []).map((c) => c.id).filter(Boolean));
     const fresh = await resolveImageSources(cfg, (p.images || []).filter((i) => !i.id));
-    node = await shopify.updateProduct(
+    // صور حذفها التاجر في الـ ERP: تُفصل عن المنتج في المتجر (كانت تبقى)
+    const kept = (p.images || []).filter((i) => i.id);
+    const removed = current.images.filter((c) => !kept.some((i) => i.id === c.id)).map((c) => c.id);
+    await shopify.detachProductMedia(cfg, gid, removed);
+    await shopify.updateProduct(
       cfg,
-      p.shopify_id,
+      gid,
       {
         title: p.title,
         handle: p.handle && p.handle !== current.handle ? p.handle : undefined,
@@ -253,19 +332,43 @@ export async function publishProduct(id, { status = 'ACTIVE' } = {}) {
       },
       { joinCollections: [...wanted].filter((c) => !currentIds.has(c)), leaveCollections: [...currentIds].filter((c) => !wanted.has(c)), newImages: fresh },
     );
-    const altChanges = (p.images || []).filter((i) => i.id && current.images.find((c) => c.id === i.id && c.alt !== i.alt));
+    const altChanges = kept.filter((i) => current.images.find((c) => c.id === i.id && c.alt !== i.alt));
     await shopify.updateImageAlt(cfg, altChanges);
-    const priceChanges = (p.variants || []).filter((v) => {
-      const cur = current.variants.find((c) => c.id === v.id);
-      return cur && (Number(cur.price) !== Number(v.price) || Number(cur.compare_at_price || 0) !== Number(v.compare_at_price || 0));
-    });
-    if (priceChanges.length) await shopify.updateVariantPrices(cfg, p.shopify_id, priceChanges);
-    node = await shopify.getProduct(cfg, p.shopify_id);
+    // الخيارات أو المتغيرات تغيّرت (لون أو مقاس أُضيف/حُذف): مزامنة كاملة بـ productSet؛ وإلا الأسعار وحدها
+    if (optionSig(current.options) !== optionSig(p.options) || (p.options?.length && variantSig(current.variants) !== variantSig(p.variants))) {
+      await shopify.setOptionsAndVariants(cfg, gid, p, { locationId: await shopify.primaryLocation(cfg).catch(() => null) });
+    } else {
+      // منتج بلا خيارات: سعره في حقل «سعر البيع» نفسه (كان تعديله لا يصل إلى المتغير الوحيد في Shopify)
+      const variants = p.options?.length ? p.variants || [] : current.variants.slice(0, 1).map((v) => ({ id: v.id, price: p.price ?? v.price, compare_at_price: p.compare_at_price ?? null }));
+      const priceChanges = variants.filter((v) => {
+        const cur = current.variants.find((c) => c.id === v.id);
+        return cur && (Number(cur.price) !== Number(v.price) || Number(cur.compare_at_price || 0) !== Number(v.compare_at_price || 0));
+      });
+      if (priceChanges.length) await shopify.updateVariantPrices(cfg, gid, priceChanges);
+    }
+    // الترتيب كما في الـ ERP: الصور الجديدة أُضيفت في آخر المنتج بنفس ترتيب إرسالها
+    const after = shopify.mapProduct(await shopify.getProduct(cfg, gid));
+    const added = after.images.filter((m) => !current.images.some((c) => c.id === m.id)).map((m) => m.id);
+    let n = 0;
+    const desired = (p.images || []).map((i) => (i.id ? i.id : added[n++])).filter((x) => x && after.images.some((m) => m.id === x));
+    for (const m of after.images) if (!desired.includes(m.id)) desired.push(m.id);
+    await shopify.reorderProductMedia(cfg, gid, desired, after.images.map((m) => m.id)).catch((e) => warnings.push(`media_order:${e.message}`));
   }
+  // قناة «المتجر الإلكتروني»: دون إذن write_publications يبقى المنتج غير ظاهر — يُقال بوضوح بدل أن يمر صامتاً
+  let onlineStore = null;
+  if (status === 'ACTIVE') {
+    try {
+      onlineStore = await shopify.publishToOnlineStore(cfg, gid);
+      if (!onlineStore.published) warnings.push(onlineStore.reason);
+    } catch (e) {
+      warnings.push(/access_denied/.test(e.message) ? 'online_store_scope_missing' : `online_store:${e.message}`);
+    }
+  }
+  const node = await shopify.getProduct(cfg, gid);
   const m = shopify.mapProduct(node);
   db.prepare(
-    `UPDATE products SET shopify_id = ?, shopify_status = ?, handle = ?, images = ?, variants = ?, online_url = ?, stage = ?, synced_at = ?, updated_at = ? WHERE id = ?`,
-  ).run(m.shopify_id, m.shopify_status, m.handle, JSON.stringify(m.images), JSON.stringify(m.variants), m.online_url, status === 'ACTIVE' ? 'published' : 'ready', nowIso(), nowIso(), id);
+    `UPDATE products SET shopify_id = ?, shopify_status = ?, handle = ?, images = ?, options = ?, variants = ?, stock = ?, online_url = ?, stage = ?, synced_at = ?, updated_at = ? WHERE id = ?`,
+  ).run(m.shopify_id, m.shopify_status, m.handle, JSON.stringify(m.images), JSON.stringify(m.options), JSON.stringify(m.variants), m.stock ?? p.stock ?? null, m.online_url, status === 'ACTIVE' ? 'published' : 'ready', nowIso(), nowIso(), id);
   const saved = refreshScore(id);
   if (status === 'ACTIVE') {
     const opt = m.options[0];
@@ -283,7 +386,7 @@ export async function publishProduct(id, { status = 'ACTIVE' } = {}) {
       }, p.project_id)
       .catch((e) => console.warn('[n8n] product.published', e.message));
   }
-  return saved;
+  return { ...saved, online_store: onlineStore, warnings };
 }
 
 /** نشر منشور على صفحة فيسبوك و/أو إنستغرام بصورة المنتج */

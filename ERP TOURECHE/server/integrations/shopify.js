@@ -398,9 +398,15 @@ function cartesian(opts) {
   return combos.map((options) => ({ options }));
 }
 
-/** إنشاء منتج كامل (نص، SEO، خيارات، صور بنص بديل، مجموعات) في طلب واحد */
-export async function createProduct(cfg, p, { status = 'DRAFT' } = {}) {
-  const { productOptions, variants } = optionsAndVariants(p);
+const qty = (x) => (x === null || x === undefined || x === '' || !Number.isFinite(Number(x)) ? null : Math.max(0, Math.round(Number(x))));
+
+/** إنشاء منتج كامل (نص، SEO، خيارات، صور بنص بديل، مجموعات، ومخزون كل متغير إن وُجد موقع) في طلب واحد */
+export async function createProduct(cfg, p, { status = 'DRAFT', locationId = null } = {}) {
+  const { productOptions, variants: base } = optionsAndVariants(p);
+  const hasOptions = (p.options || []).some((o) => o.name && o.values?.length);
+  const stocks = hasOptions ? (p.variants?.length ? p.variants.map((v) => qty(v.stock)) : []) : [qty(p.stock)];
+  // المخزون المكتوب في الـ ERP يصل مع الإنشاء، والمتغير يُتتبَّع (ملصق «باقي N» ومنع البيع عند النفاد)
+  const variants = base.map((v, i) => (locationId && stocks[i] !== null && stocks[i] !== undefined ? { ...v, inventoryItem: { tracked: true }, inventoryQuantities: [{ locationId, name: 'available', quantity: stocks[i] }] } : v));
   const input = {
     title: p.title,
     handle: p.handle || undefined,
@@ -453,6 +459,100 @@ export async function updateProduct(cfg, gid, changes, { joinCollections = [], l
   );
   userErrors(d.productUpdate);
   return d.productUpdate.product;
+}
+
+/**
+ * مزامنة الخيارات والمتغيرات (اللون، المقاس…) كما في الـ ERP: productSet يستبدل قائمة المتغيرات كلها،
+ * فالموجود يُرسل بمعرّفه (يحتفظ بمخزونه وطلبياته)، والجديد يُنشأ مُتتبَّع المخزون، وما حُذف في الـ ERP يُحذف.
+ * الصور والنصوص لا تُلمس (لا تُرسل).
+ */
+export async function setOptionsAndVariants(cfg, productGid, p, { locationId = null } = {}) {
+  const { productOptions, variants } = optionsAndVariants(p);
+  const stockOf = new Map((p.variants || []).map((v) => [JSON.stringify(Object.entries(v.options || {}).sort(([a], [b]) => a.localeCompare(b))), qty(v.stock)]));
+  const keyOf = (obj) => JSON.stringify(Object.entries(obj || {}).sort(([a], [b]) => a.localeCompare(b)));
+  const byKey = new Map((p.variants || []).filter((v) => v.id).map((v) => [keyOf(v.options), v.id]));
+  const input = {
+    id: productGid,
+    productOptions,
+    variants: variants.map((v) => {
+      const key = keyOf(Object.fromEntries(v.optionValues.map((o) => [o.optionName, o.name])));
+      const id = byKey.get(key);
+      if (id) return { ...v, id };
+      // متغير جديد (لون أُضيف): يُنشأ مُتتبَّعاً، وبمخزونه إن كُتب في الـ ERP
+      const q = stockOf.get(key);
+      return { ...v, inventoryItem: { tracked: true }, ...(locationId && q !== null && q !== undefined ? { inventoryQuantities: [{ locationId, name: 'available', quantity: q }] } : {}) };
+    }),
+  };
+  const d = await gql(cfg, `mutation($input: ProductSetInput!) { productSet(input: $input, synchronous: true) { product { ${PRODUCT_FIELDS} } userErrors { field message code } } }`, { input });
+  userErrors(d.productSet);
+  return d.productSet.product;
+}
+
+/** صور حذفها التاجر في الـ ERP: تُفصل عن المنتج (تبقى في «Fichiers» فلا يضيع ملف مستعمل في مكان آخر) */
+export async function detachProductMedia(cfg, productGid, mediaIds) {
+  if (!mediaIds.length) return;
+  const d = await gql(cfg, 'mutation($files: [FileUpdateInput!]!) { fileUpdate(files: $files) { userErrors { field message } } }', {
+    files: mediaIds.map((id) => ({ id, referencesToRemove: [productGid] })),
+  });
+  userErrors(d.fileUpdate);
+}
+
+/** ترتيب صور المنتج كما في الـ ERP (الأولى = الرئيسية في المتجر والمجموعات وجوجل) */
+export async function reorderProductMedia(cfg, productGid, orderedIds, currentIds) {
+  const moves = orderedIds.map((id, i) => ({ id, newPosition: String(i) })).filter((m, i) => currentIds[i] !== m.id);
+  if (!moves.length) return false;
+  const d = await gql(cfg, 'mutation($id: ID!, $moves: [MoveInput!]!) { productReorderMedia(id: $id, moves: $moves) { job { id } mediaUserErrors { field message } } }', { id: productGid, moves });
+  const errs = d.productReorderMedia.mediaUserErrors || [];
+  if (errs.length) throw new IntegrationError('shopify', 'invalid', errs.map((e) => e.message).join('; '));
+  return true;
+}
+
+// ——— الظهور في «المتجر الإلكتروني»: منتج نشط غير منشور على قناة البيع لا يراه أحد في الموقع ———
+export async function onlineStorePublication(cfg) {
+  const d = await gql(cfg, '{ publications(first: 20) { nodes { id supportsFuturePublishing catalog { title } } } }');
+  const nodes = d.publications.nodes || [];
+  return (nodes.find((x) => /online store|boutique en ligne/i.test(x.catalog?.title || '')) || nodes.find((x) => x.supportsFuturePublishing) || null)?.id || null;
+}
+
+/** يتأكد أن المنتج منشور على قناة المتجر الإلكتروني (write_publications)؛ لا يفعل شيئاً إن كان منشوراً */
+export async function publishToOnlineStore(cfg, productGid) {
+  const pub = await onlineStorePublication(cfg);
+  if (!pub) return { published: false, reason: 'online_store_not_found' };
+  const s = await gql(cfg, 'query($id: ID!, $pub: ID!) { product(id: $id) { publishedOnPublication(publicationId: $pub) } }', { id: productGid, pub });
+  if (s.product?.publishedOnPublication) return { published: true, changed: false };
+  const d = await gql(cfg, 'mutation($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { field message } } }', { id: productGid, input: [{ publicationId: pub }] });
+  userErrors(d.publishablePublish);
+  return { published: true, changed: true };
+}
+
+// ——— المخزون من الـ ERP: يصل إلى المتجر فوراً (ملصق «متوفر / باقي N» في صفحة المنتج) ———
+export async function primaryLocation(cfg) {
+  return (await gql(cfg, '{ location { id } }')).location?.id || null;
+}
+
+export async function variantInventory(cfg, variantIds) {
+  const d = await gql(cfg, 'query($ids: [ID!]!) { location { id } nodes(ids: $ids) { ... on ProductVariant { id inventoryQuantity inventoryItem { id tracked } } } }', { ids: variantIds });
+  return {
+    locationId: d.location?.id || null,
+    variants: (d.nodes || []).filter(Boolean).map((n) => ({ id: n.id, quantity: n.inventoryQuantity, inventoryItemId: n.inventoryItem?.id || null, tracked: Boolean(n.inventoryItem?.tracked) })),
+  };
+}
+
+/** كميات مطلقة (الـ ERP مرجع المخزون). المفتاح @idempotent إلزامي منذ 2026-04 */
+export async function setAvailable(cfg, { locationId, quantities, reason = 'correction', key }) {
+  const d = await gql(
+    cfg,
+    'mutation($input: InventorySetQuantitiesInput!, $key: String!) { inventorySetQuantities(input: $input) @idempotent(key: $key) { inventoryAdjustmentGroup { id } userErrors { field message } } }',
+    { input: { name: 'available', reason, quantities: quantities.map((q) => ({ inventoryItemId: q.inventoryItemId, locationId, quantity: q.quantity, changeFromQuantity: null })) }, key },
+  );
+  userErrors(d.inventorySetQuantities);
+}
+
+export async function trackInventory(cfg, inventoryItemIds) {
+  for (const id of inventoryItemIds) {
+    const d = await gql(cfg, 'mutation($id: ID!, $input: InventoryItemInput!) { inventoryItemUpdate(id: $id, input: $input) { userErrors { field message } } }', { id, input: { tracked: true } });
+    userErrors(d.inventoryItemUpdate);
+  }
 }
 
 export async function updateVariantPrices(cfg, productGid, variants) {
