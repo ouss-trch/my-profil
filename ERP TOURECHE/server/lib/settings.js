@@ -6,6 +6,16 @@ import { nowIso } from './util.js';
 export const AI_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1'];
 // «Claude Sonnet 5.5» أو «claude-sonnet 5.5» ← claude-sonnet-5-5
 const modelId = (v) => String(v).trim().toLowerCase().replace(/[\s._]+/g, '-');
+// النسخ واللصق يجلب مسافات وحروفاً خفية (اتجاه النص، عرض صفري): «1zDf…H_wQ » يرفضه جسر n8n بـ sheet_not_allowed
+const INVISIBLE = '\\s\\u200B-\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF';
+const EDGES = new RegExp(`^[${INVISIBLE}]+|[${INVISIBLE}]+$`, 'g');
+const ANYWHERE = new RegExp(`[${INVISIBLE}]+`, 'g');
+const clean = (v) => String(v).replace(EDGES, '');
+/** معرّف Google Sheet: يُقبل الرابط كاملاً (…/spreadsheets/d/<المعرّف>/edit) أو المعرّف وحده */
+export const sheetId = (v) => {
+  const s = String(v ?? '').replace(ANYWHERE, '');
+  return /\/spreadsheets\/d\/([\w-]+)/.exec(s)?.[1] || s;
+};
 
 /**
  * تعريف كل الإعدادات: النطاق (global أو project)، هل هي سرّية (تُشفَّر ولا تُعاد للواجهة)، والقيمة الافتراضية.
@@ -67,7 +77,7 @@ export const SETTINGS = {
   zr_key: { scope: 'project', type: 'string', secret: true },
   noest_api_token: { scope: 'project', type: 'string', secret: true },
   noest_user_guid: { scope: 'project', type: 'string', secret: true },
-  sheet_id: { scope: 'project', type: 'string', def: '' },
+  sheet_id: { scope: 'project', type: 'string', def: '', normalize: sheetId },
   sheet_tab: { scope: 'project', type: 'string', def: 'customer' },
   sheet_sync: { scope: 'project', type: 'bool', def: false },
   test_kill_spend_da: { scope: 'project', type: 'number', def: 3000 },
@@ -113,6 +123,10 @@ function coerce(def, val) {
       const fixed = def.normalize ? def.normalize(val) : val;
       return def.values.includes(fixed) ? fixed : def.def;
     }
+    case 'string':
+    case 'url':
+      // قيم حُفظت قبل التنظيف (بمسافة في آخرها) تُصحَّح عند القراءة دون إعادة إدخالها
+      return typeof val === 'string' ? (def.normalize ? def.normalize(val) : clean(val)) : val;
     default:
       return val;
   }
@@ -133,6 +147,7 @@ export function setSetting(key, value, projectId) {
     return;
   }
   let val = value;
+  if ((def.type === 'string' || def.type === 'url') && typeof val === 'string') val = def.normalize ? def.normalize(val) : clean(val);
   if (def.type === 'number') val = value === '' || value === null ? null : Number(value);
   if (def.type === 'bool') val = value === true || value === 'true' || value === 1 || value === '1';
   if (def.type === 'enum' && val !== null && def.normalize) val = def.normalize(val);

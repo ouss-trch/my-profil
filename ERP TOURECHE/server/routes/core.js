@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { config } from '../config.js';
 import { db } from '../db/index.js';
 import { requireRole, requireSensitive } from '../lib/auth.js';
 import { SETTINGS, publicSettings, setSetting, projectConfig, getSetting } from '../lib/settings.js';
@@ -78,7 +79,8 @@ coreRouter.delete('/projects/:id', requireRole('admin'), requireSensitive, (req,
 coreRouter.get('/settings/global', requireRole('admin'), (_req, res) => res.json(publicSettings('global')));
 coreRouter.get('/settings/project/:id', requireRole('admin', 'manager'), (req, res) => {
   if (!getProject(Number(req.params.id))) throw new HttpError(404, 'project_not_found');
-  res.json(publicSettings('project', Number(req.params.id)));
+  // _auto: ما يُستعمل حين يُترك الحقل فارغاً (عنوان الـ ERP على الـ VPS)
+  res.json({ ...publicSettings('project', Number(req.params.id)), _auto: { split_base_url: config.publicUrl || null } });
 });
 
 function saveSettings(req, scopeName, projectId) {

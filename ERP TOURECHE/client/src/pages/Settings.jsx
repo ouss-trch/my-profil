@@ -18,7 +18,16 @@ const PROJECT_GROUPS = [
       { k: 'brand_name', label: ['اسم العلامة', 'Nom de marque'] },
       { k: 'store_domain', label: ['دومين المتجر', 'Domaine'], ltr: true, hint: ['مثال: souqnna.com — يُستعمل في روابط المنتجات والإعلانات', 'Ex. souqnna.com — utilisé pour les liens'] },
       { k: 'low_stock_default', label: ['حد تنبيه المخزون الافتراضي', 'Seuil de stock par défaut'], type: 'number' },
-      { k: 'split_base_url', label: ['الرابط العام لاختبارات الصفحات', 'URL publique des tests de pages'], ltr: true, hint: ['مثال: https://go.souqnna.com — العنوان العام للـ ERP (Funnel/Cloudflare)', 'Ex. https://go.souqnna.com — URL publique de l’ERP'] },
+      {
+        k: 'split_base_url',
+        label: ['عنوان الـ ERP العام (لعدّ زوار الاختبارات)', 'Adresse publique de l’ERP (visiteurs des tests)'],
+        ltr: true,
+        auto: true,
+        hint: (v, t) =>
+          v._auto?.split_base_url
+            ? t(['اتركه فارغاً: يُستعمل عنوان الـ ERP تلقائياً (\u2066{auto}\u2069). غيّره فقط إن نقلت الـ ERP إلى عنوان آخر.', 'Laissez vide : l’adresse de l’ERP est utilisée automatiquement ({auto}). À changer seulement si l’ERP déménage.'], { auto: v._auto.split_base_url })
+            : t(['الـ ERP غير منشور على الإنترنت: ضع هنا عنوانه العام (مثلاً https://erp.example.com) حتى تُعدّ زيارات الاختبار.', 'L’ERP n’est pas publié sur Internet : indiquez son adresse publique (ex. https://erp.example.com) pour compter les visites des tests.']),
+      },
     ],
   },
   {
@@ -172,7 +181,7 @@ const GLOBAL_GROUPS = [
   },
 ];
 
-function SettingInput({ def, value, onChange, id }) {
+function SettingInput({ def, value, onChange, id, placeholder }) {
   const { t } = useI18n();
   if (def.type === 'bool') return <Toggle checked={Boolean(value)} onChange={onChange} label={t(def.label)} />;
   if (value && typeof value === 'object' && value.secret)
@@ -220,7 +229,7 @@ function SettingInput({ def, value, onChange, id }) {
       </div>
     );
   }
-  return <Input id={id} type={def.type === 'number' ? 'number' : 'text'} className={def.ltr ? 'ltr' : ''} value={value ?? ''} onChange={(e) => onChange(def.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />;
+  return <Input id={id} type={def.type === 'number' ? 'number' : 'text'} className={def.ltr ? 'ltr' : ''} value={value ?? ''} placeholder={placeholder} onChange={(e) => onChange(def.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />;
 }
 
 // ——— إعداد Meta بنقرة: اختيار الحسابات والبيكسل والصفحة بالأسماء بدل نسخ المعرّفات ———
@@ -473,8 +482,8 @@ function SettingsForm({ groups, load, save, projectId }) {
             {g.fields
               .filter((f) => f.k in vals)
               .map((f) => (
-                <Field key={f.k} label={f.type === 'bool' ? null : t(f.label)} hint={f.hint ? t(f.hint) : null} className={f.type === 'weights' ? 'md:col-span-2' : ''}>
-                  <SettingInput def={f} value={vals[f.k]} onChange={(v) => setVals({ ...vals, [f.k]: v })} />
+                <Field key={f.k} label={f.type === 'bool' ? null : t(f.label)} hint={typeof f.hint === 'function' ? f.hint(vals, t) : f.hint ? t(f.hint) : null} className={f.type === 'weights' ? 'md:col-span-2' : ''}>
+                  <SettingInput def={f} value={vals[f.k]} placeholder={f.auto ? vals._auto?.[f.k] || undefined : undefined} onChange={(v) => setVals({ ...vals, [f.k]: v })} />
                 </Field>
               ))}
           </div>
