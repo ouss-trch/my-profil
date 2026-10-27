@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CloudOff, ExternalLink, Eye, ImagePlus, Images, Pencil, Rocket, Settings, Sparkles, Split, Trash2, Wand2 } from 'lucide-react';
+import { AlertTriangle, CloudOff, ExternalLink, Eye, ImageOff, ImagePlus, Images, Pencil, Rocket, Settings, Sparkles, Split, Trash2, Wand2 } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
@@ -114,9 +114,12 @@ function VisualCard({ v, busy, disabled, onDraw, onPatch }) {
         {v.image ? (
           <img src={v.image} alt={v.headline} className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <p dir="ltr" className="h-full overflow-hidden p-3 pt-9 text-[11px] leading-5 text-muted">
-            {v.scene}
-          </p>
+          <div className="grid h-full place-items-center p-3 text-center text-xs text-muted">
+            <span className="grid justify-items-center gap-1.5">
+              <ImageOff className="h-6 w-6" aria-hidden />
+              {t(['لم تُرسم بعد', 'Pas encore dessiné'])}
+            </span>
+          </div>
         )}
         <span className="absolute start-2 top-2 rounded-full bg-surface/90 px-2 py-0.5 text-[11px] font-medium text-ink">{t(KINDS[v.kind] || KINDS.feature)}</span>
         {drawing && (
@@ -158,9 +161,11 @@ function VisualCard({ v, busy, disabled, onDraw, onPatch }) {
 
 /** الصور الوصفية: خطة Claude ← رسم من صور المنتج الحقيقية ← مراجعة ← تُرفع إلى Shopify عند النشر */
 function VisualsPanel({ l, setL, onChanged }) {
-  const { t } = useI18n();
+  const { t, err } = useI18n();
   const { run, busy } = useAction();
   const [progress, setProgress] = useState(null);
+  // خطأ الإعداد (المفتاح، الفوترة) يبقى ظاهراً داخل اللوحة حتى ينجح رسم، لا رسالة تختفي بعد ثوانٍ
+  const [failure, setFailure] = useState(null);
   const list = l.visuals || [];
   const noProvider = l.image_provider === 'none';
   const drawn = list.filter((v) => v.image).length;
@@ -168,7 +173,16 @@ function VisualsPanel({ l, setL, onChanged }) {
     if (r) setL(r);
     return r;
   };
-  const draw = (vid) => run(`v-${vid}`, () => api.post(`/pages/landing/${l.id}/visuals/${vid}/generate`, {}), { success: false }).then(done);
+  const draw = (vid) =>
+    run(
+      `v-${vid}`,
+      () =>
+        api.post(`/pages/landing/${l.id}/visuals/${vid}/generate`, {}).then(
+          (r) => (setFailure(null), r),
+          (e) => (setFailure(e), Promise.reject(e)),
+        ),
+      { success: false },
+    ).then(done);
   const patch = (vid, body) => run(`p-${vid}`, () => api.patch(`/pages/landing/${l.id}/visuals/${vid}`, body), { success: false }).then(done);
   const drawAll = async () => {
     const todo = list.filter((v) => !v.image);
@@ -211,6 +225,12 @@ function VisualsPanel({ l, setL, onChanged }) {
           <Link to="/settings" className="inline-flex items-center gap-1 font-semibold text-brand underline">
             <Settings className="h-3.5 w-3.5" aria-hidden /> {t(['الإعدادات', 'Paramètres'])}
           </Link>
+        </p>
+      )}
+      {failure && (
+        <p role="alert" className="flex gap-2 rounded-lg border border-bad/30 bg-bad/10 p-3 text-xs leading-6 text-ink">
+          <AlertTriangle className="mt-1 h-4 w-4 shrink-0 text-bad" aria-hidden />
+          <span className="min-w-0 break-words">{err(failure)}</span>
         </p>
       )}
       {pending && <p className="rounded-lg bg-brand/10 p-2.5 text-xs text-sub">{t(['صور جديدة لم تُنشر بعد: اضغط «إعادة النشر».', 'Nouveaux visuels pas encore publiés : republiez.'])}</p>}

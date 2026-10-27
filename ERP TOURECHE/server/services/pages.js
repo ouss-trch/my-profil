@@ -30,7 +30,8 @@ function parse(url, base) {
 
 export function storeBase(projectId) {
   const d = projectConfig(projectId).store_domain || getProject(projectId)?.domain;
-  return d ? `https://${String(d).replace(/^https?:\/\//, '').replace(/\/+$/, '')}` : null;
+  // الدومين بأحرف صغيرة: «Souqnna.com» في الإعدادات لا يظهر هكذا في روابط الإعلانات
+  return d ? `https://${String(d).trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase()}` : null;
 }
 
 const canonical = (u) => {

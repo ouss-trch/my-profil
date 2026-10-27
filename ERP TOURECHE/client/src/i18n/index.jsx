@@ -42,7 +42,9 @@ export function I18nProvider({ children }) {
   const err = useCallback(
     (e) => {
       if (!e) return '';
-      const code = String(e.code || e.message || e);
+      let code = String(e.code || e.message || e);
+      // أخطاء التكاملات تصل «gemini: gemini_free_tier»: الرمز بعد اسم الخدمة هو ما يُترجم
+      if (e.service && code.startsWith(`${e.service}: `)) code = code.slice(e.service.length + 2);
       const base = code.split(':')[0];
       const known = DICT[`err.${code}`] || DICT[`err.${base}`];
       if (known) return fill(known[i], { x: code.split(':')[1] || '' });

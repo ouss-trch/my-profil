@@ -108,6 +108,22 @@ const files = {
 const redirects = [];
 const shopFiles = [];
 const geminiCalls = [];
+const geminiFailures = [];
+// أجسام أخطاء Gemini كما يرسلها Google (429 RESOURCE_EXHAUSTED مع QuotaFailure وRetryInfo)
+const quota = (metric, quotaId, limit, retry) => ({
+  status: 429,
+  body: {
+    error: {
+      code: 429,
+      status: 'RESOURCE_EXHAUSTED',
+      message: `You exceeded your current quota, please check your plan and billing details.\n* Quota exceeded for metric: generativelanguage.googleapis.com/${metric}, limit: ${limit}, model: gemini-nano-banana-2.1`,
+      details: [
+        { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaMetric: `generativelanguage.googleapis.com/${metric}`, quotaId }] },
+        ...(retry ? [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: retry }] : []),
+      ],
+    },
+  },
+});
 const denied = () => ({
   errors: [{ message: 'Access denied', extensions: { code: 'ACCESS_DENIED' } }],
 });
@@ -150,6 +166,8 @@ globalThis.fetch = async (url, init = {}) => {
     });
   if (u.startsWith('https://generativelanguage.googleapis.com/')) {
     geminiCalls.push({ url: u, body: JSON.parse(init.body) });
+    const fail = geminiFailures.shift();
+    if (fail) return new Response(JSON.stringify(fail.body), { status: fail.status, headers: { 'content-type': 'application/json' } });
     return json({
       candidates: [
         {
@@ -474,4 +492,22 @@ test('visuals: a draft from before visuals gets a plan on demand; no product pho
   const planned = await landing.planVisuals(l.id);
   assert.equal(planned.visuals.length, 2);
   await assert.rejects(landing.generateVisual(l.id, 'v1'), /visual_needs_product_photos/);
+});
+
+test('gemini errors say what to do: free tier (limit 0) is a billing problem, a per-minute limit is retried once', async () => {
+  const l = landing.listLandings([project.id]).find((x) => x.product_id === product.id);
+  geminiFailures.push(quota('generate_content_free_tier_requests', 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 0, '30s'));
+  const calls = geminiCalls.length;
+  await assert.rejects(landing.generateVisual(l.id, 'v3'), (e) => e.message === 'gemini: gemini_free_tier' && e.kind === 'config');
+  assert.equal(geminiCalls.length, calls + 1, 'a free-tier zero limit is never retried');
+
+  geminiFailures.push(quota('generate_content_paid_tier_requests', 'GenerateRequestsPerMinutePerProjectPerModel', 10, '1s'));
+  const ok = await landing.generateVisual(l.id, 'v3');
+  assert.equal(geminiCalls.length, calls + 3, 'per-minute limit: waits retryDelay, then one retry');
+  created.push(ok.visuals.find((v) => v.id === 'v3').image);
+
+  geminiFailures.push(quota('generate_content_paid_tier_requests', 'GenerateRequestsPerDayPerProjectPerModel', 250, null));
+  await assert.rejects(landing.generateVisual(l.id, 'v4'), (e) => e.message === 'gemini: gemini_daily_quota');
+  geminiFailures.push({ status: 400, body: { error: { code: 400, status: 'INVALID_ARGUMENT', message: 'API key not valid. Please pass a valid API key.', details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'API_KEY_INVALID' }] } } });
+  await assert.rejects(landing.generateVisual(l.id, 'v4'), (e) => e.message === 'gemini: gemini_key_invalid');
 });

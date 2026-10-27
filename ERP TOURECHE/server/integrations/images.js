@@ -46,6 +46,31 @@ async function fetchImage(url) {
 // النسبة المطلوبة (4:5 لصور صفحات الهبوط) → أقرب مقاس يقبله gpt-image
 const OPENAI_SIZE = { '1:1': '1024x1024', '4:5': '1024x1536', '2:3': '1024x1536', '3:4': '1024x1536', '9:16': '1024x1536', '16:9': '1536x1024', '3:2': '1536x1024' };
 
+/**
+ * أخطاء Gemini بلغة التاجر (المصدر: ai.google.dev/gemini-api/docs/billing و rate-limits):
+ *  - free_tier + limit 0: مشروع المفتاح على الطبقة المجانية، ونماذج الصور غير متاحة فيها. الحدود للمشروع لا للمفتاح،
+ *    والطبقة المدفوعة تحتاج ربط الفوترة + رصيد Prepay (5$ على الأقل؛ رصيد تجربة Google Cloud لا يُقبل).
+ *  - PerDay: حصة اليوم انتهت (تتجدد منتصف الليل بتوقيت المحيط الهادئ). غير ذلك: حد الدقيقة، ينتهي بعد retryDelay.
+ */
+export function geminiError(e, model) {
+  const body = e?.details?.data?.error;
+  if (!body) return e;
+  const status = e.details.status;
+  const text = JSON.stringify(body);
+  const retry = (body.details || []).find((d) => /RetryInfo/.test(d['@type'] || ''))?.retryDelay;
+  const seconds = retry ? Math.ceil(parseFloat(retry)) : null;
+  if (status === 429 || body.status === 'RESOURCE_EXHAUSTED') {
+    if (/free_tier|FreeTier|limit: 0\b/.test(text)) return new IntegrationError('gemini', 'config', 'gemini_free_tier', { model });
+    if (/prepa(y|id)|credit balance|insufficient/i.test(text)) return new IntegrationError('gemini', 'config', 'gemini_no_credit', { model });
+    if (/PerDay|per.?day|daily/i.test(text)) return new IntegrationError('gemini', 'rate_limit', 'gemini_daily_quota', { model });
+    return new IntegrationError('gemini', 'rate_limit', `gemini_rate_limit:${seconds || 60}`, { model, retry_seconds: seconds });
+  }
+  if (/API_KEY_INVALID|API key not valid/i.test(text)) return new IntegrationError('gemini', 'config', 'gemini_key_invalid');
+  if (status === 403) return new IntegrationError('gemini', 'config', 'gemini_key_refused');
+  if (status === 404) return new IntegrationError('gemini', 'config', `gemini_model_not_found:${model}`);
+  return e;
+}
+
 export async function generateImages(projectId, { prompt, sourceUrls = [], count = 1, size = '1024x1024', aspect = null, product = null }) {
   if (aspect && OPENAI_SIZE[aspect]) size = OPENAI_SIZE[aspect];
   const provider = imageProvider();
@@ -105,13 +130,21 @@ export async function generateImages(projectId, { prompt, sourceUrls = [], count
     }
     parts.push({ text: prompt });
     const generationConfig = { responseModalities: ['IMAGE'], ...(aspect ? { imageConfig: { aspectRatio: aspect, imageSize: '1K' } } : {}) };
-    for (let i = 0; i < count; i++) {
-      const { data } = await request('gemini', `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    const call = () =>
+      request('gemini', `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
         headers: { 'x-goog-api-key': key },
         body: { contents: [{ parts }], generationConfig },
         timeoutMs: 300000,
         retries: 0,
+      }).catch((e) => Promise.reject(geminiError(e, model)));
+    for (let i = 0; i < count; i++) {
+      // حد الدقيقة وحده يزول بالانتظار: محاولة ثانية واحدة بعد المدة التي يطلبها Google (إن كانت قصيرة)
+      const { data } = await call().catch(async (e) => {
+        const wait = e.details?.retry_seconds;
+        if (!/^gemini_rate_limit/.test(e.message.replace(/^gemini: /, '')) || !wait || wait > 40) throw e;
+        await new Promise((r) => setTimeout(r, wait * 1000));
+        return call();
       });
       for (const p of data?.candidates?.[0]?.content?.parts || []) {
         const inline = p.inlineData || p.inline_data;
