@@ -29,7 +29,7 @@ export const SETTINGS = {
   openai_api_key: { scope: 'global', type: 'string', secret: true },
   openai_image_model: { scope: 'global', type: 'string', def: 'gpt-image-1' },
   gemini_api_key: { scope: 'global', type: 'string', secret: true },
-  gemini_image_model: { scope: 'global', type: 'string', def: 'gemini-2.5-flash-image' },
+  gemini_image_model: { scope: 'global', type: 'string', def: 'gemini-nano-banana-2.1' }, // gemini-2.5-flash-image يتوقف في 2027-03-15
   fx_usd_dza: { scope: 'global', type: 'number', def: 250 },
   fx_eur_dza: { scope: 'global', type: 'number', def: 270 },
   carrier_weights: { scope: 'global', type: 'json', def: { success: 0.45, speed: 0.25, contact: 0.15, cost: 0.15 } },

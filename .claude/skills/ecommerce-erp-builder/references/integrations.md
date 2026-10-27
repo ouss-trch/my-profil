@@ -31,6 +31,11 @@ General rules for every adapter:
   - On `access_denied`, ask `currentAppInstallation { accessScopes { handle } }` and name the missing scope instead of a generic error.
   - Always ship a manual fallback: show the snippet and the one render line to paste after `<head>` in `layout/theme.liquid`.
   - Back up `theme.liquid` before every automatic edit.
+- **Store facts for copy (delivery and policies):**
+  - Prices per wilaya live in the theme setting `config/settings_data.json` → `current.shipping_table` (`code|wilaya|home|desk|eta` per line; empty price = not served, never free). Without `read_themes`, parse the public `/pages/delivery` table.
+  - Policies: the public `/policies/shipping-policy` and `/policies/refund-policy` pages (`.shopify-policy__body`).
+  - In Liquid, compute "from X DA" and the served count from `settings.shipping_table` at render time, so copy never goes stale.
+- **Images for landing pages:** upload with `stagedUploadsCreate` → `fileCreate` (`write_files`), then poll `node(id)` until `image.url` exists; reference the CDN URL (`&width=` for srcset). Files stay out of the product gallery.
 - **Order numbers:** a Shopify order's ERP number is its Shopify number (`#1037` becomes `1037`).
   - The carrier label carries the same number (`orderNumber(o)`).
   - An order first seen in the sheet keeps its ERP ref but ships with its Shopify number.

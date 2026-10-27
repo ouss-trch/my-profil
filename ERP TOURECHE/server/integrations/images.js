@@ -43,7 +43,11 @@ async function fetchImage(url) {
   return { buffer: Buffer.from(await res.arrayBuffer()), mime: res.headers.get('content-type') || 'image/jpeg' };
 }
 
-export async function generateImages(projectId, { prompt, sourceUrls = [], count = 1, size = '1024x1024', product = null }) {
+// النسبة المطلوبة (4:5 لصور صفحات الهبوط) → أقرب مقاس يقبله gpt-image
+const OPENAI_SIZE = { '1:1': '1024x1024', '4:5': '1024x1536', '2:3': '1024x1536', '3:4': '1024x1536', '9:16': '1024x1536', '16:9': '1536x1024', '3:2': '1536x1024' };
+
+export async function generateImages(projectId, { prompt, sourceUrls = [], count = 1, size = '1024x1024', aspect = null, product = null }) {
+  if (aspect && OPENAI_SIZE[aspect]) size = OPENAI_SIZE[aspect];
   const provider = imageProvider();
   if (provider === 'none') throw new IntegrationError('images', 'config', 'image_provider_not_configured');
   const results = [];
@@ -51,7 +55,7 @@ export async function generateImages(projectId, { prompt, sourceUrls = [], count
   if (provider === 'n8n') {
     const url = getSetting('n8n_image_url');
     if (!url) throw new IntegrationError('images', 'config', 'n8n_image_url_missing');
-    const { data } = await request('n8n', url, { method: 'POST', body: { prompt, source_images: sourceUrls.filter((u) => /^https?:/.test(u)), count, size, product }, timeoutMs: 300000, retries: 0 });
+    const { data } = await request('n8n', url, { method: 'POST', body: { prompt, source_images: sourceUrls.filter((u) => /^https?:/.test(u)), count, size, aspect, product }, timeoutMs: 300000, retries: 0 });
     for (const img of data?.images || (data?.url ? [data] : [])) {
       if (img.base64) results.push(save(projectId, Buffer.from(img.base64, 'base64'), (img.mime || '').includes('jpeg') ? 'jpg' : 'png'));
       else if (img.url) {
@@ -92,17 +96,20 @@ export async function generateImages(projectId, { prompt, sourceUrls = [], count
   if (provider === 'gemini') {
     const key = getSetting('gemini_api_key');
     if (!key) throw new IntegrationError('images', 'config', 'gemini_key_missing');
-    const model = getSetting('gemini_image_model') || 'gemini-2.5-flash-image';
-    const parts = [{ text: prompt }];
-    for (const u of sourceUrls.slice(0, 3)) {
+    const model = getSetting('gemini_image_model') || 'gemini-nano-banana-2.1';
+    // صور المرجع أولاً ثم التعليمات (توصية Google لتعديل الصور والحفاظ على شكل المنتج)
+    const parts = [];
+    for (const u of sourceUrls.slice(0, 4)) {
       const { buffer, mime } = await fetchImage(u);
       parts.push({ inline_data: { mime_type: mime, data: buffer.toString('base64') } });
     }
+    parts.push({ text: prompt });
+    const generationConfig = { responseModalities: ['IMAGE'], ...(aspect ? { imageConfig: { aspectRatio: aspect, imageSize: '1K' } } : {}) };
     for (let i = 0; i < count; i++) {
       const { data } = await request('gemini', `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
         headers: { 'x-goog-api-key': key },
-        body: { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } },
+        body: { contents: [{ parts }], generationConfig },
         timeoutMs: 300000,
         retries: 0,
       });

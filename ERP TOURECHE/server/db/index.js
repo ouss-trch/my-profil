@@ -567,6 +567,21 @@ ${STORE_PAGES_SQL}
     )`);
     db.exec('CREATE INDEX IF NOT EXISTS idx_landing_product ON landing_pages(project_id, product_id)');
   },
+  // 6) أسعار التوصيل وسياسات المتجر (من قالب Shopify وصفحاته) + الصور الوصفية لصفحات الهبوط
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS store_delivery (
+      project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+      rates TEXT NOT NULL DEFAULT '[]',
+      policies TEXT NOT NULL DEFAULT '{}',
+      carriers TEXT,
+      free_from INTEGER,
+      delivery_time TEXT,
+      source TEXT,
+      imported_at TEXT,
+      updated_at TEXT
+    )`);
+    db.exec("ALTER TABLE landing_pages ADD COLUMN visuals TEXT NOT NULL DEFAULT '[]'");
+  },
 ];
 
 export function openDb(file = config.dbFile) {

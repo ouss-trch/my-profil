@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CloudOff, ExternalLink, Eye, Rocket, Sparkles, Split, Trash2, Wand2 } from 'lucide-react';
+import { CloudOff, ExternalLink, Eye, ImagePlus, Images, Pencil, Rocket, Settings, Sparkles, Split, Trash2, Wand2 } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
 import { useApp } from './ProjectContext.jsx';
-import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, cx, useAction } from './ui.jsx';
+import DeliveryCard from './DeliveryCard.jsx';
+import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, Toggle, cx, useAction } from './ui.jsx';
 
 const STATUS = { draft: ['مسودة', 'Brouillon', 'neutral'], published: ['منشورة', 'Publiée', 'good'], unpublished: ['مسحوبة', 'Retirée', 'warn'] };
 const latin = (s) =>
@@ -92,6 +93,142 @@ function CopyPreview({ copy }) {
   );
 }
 
+const KINDS = {
+  hero: ['الصورة الرئيسية', 'Visuel principal'],
+  design: ['التصميم', 'Design'],
+  detail: ['تفصيل قريب', 'Détail'],
+  feature: ['ميزة', 'Atout'],
+  in_use: ['أثناء الاستعمال', 'En utilisation'],
+  size: ['الحجم', 'Taille'],
+  variants: ['الألوان والموديلات', 'Coloris'],
+};
+
+/** لقطة واحدة: الصورة (أو مشهدها قبل الرسم)، عنوانها ونقاطها، الرسم/إعادة الرسم، الإظهار في الصفحة، التعديل */
+function VisualCard({ v, busy, disabled, onDraw, onPatch }) {
+  const { t } = useI18n();
+  const [edit, setEdit] = useState(null);
+  const drawing = busy === `v-${v.id}`;
+  return (
+    <li className={cx('flex flex-col overflow-hidden rounded-xl border bg-surface', v.image && !v.approved ? 'border-dashed border-line opacity-60' : 'border-line')}>
+      <div className="relative aspect-[4/5] bg-raised">
+        {v.image ? (
+          <img src={v.image} alt={v.headline} className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <p dir="ltr" className="h-full overflow-hidden p-3 pt-9 text-[11px] leading-5 text-muted">
+            {v.scene}
+          </p>
+        )}
+        <span className="absolute start-2 top-2 rounded-full bg-surface/90 px-2 py-0.5 text-[11px] font-medium text-ink">{t(KINDS[v.kind] || KINDS.feature)}</span>
+        {drawing && (
+          <div className="absolute inset-0 grid place-items-center bg-surface/70">
+            <Loading />
+          </div>
+        )}
+      </div>
+      {edit ? (
+        <div className="grid gap-2 p-2.5">
+          <Input value={edit.headline} maxLength={90} aria-label={t(['العنوان', 'Titre'])} onChange={(e) => setEdit({ ...edit, headline: e.target.value })} />
+          <Textarea className="min-h-[60px] text-xs" value={edit.points} aria-label={t(['النقاط (سطر لكل نقطة)', 'Points (un par ligne)'])} onChange={(e) => setEdit({ ...edit, points: e.target.value })} />
+          <Textarea dir="ltr" className="min-h-[70px] text-xs" value={edit.scene} aria-label={t(['المشهد (لمولّد الصور، بالإنجليزية)', 'Scène (pour le générateur, en anglais)'])} onChange={(e) => setEdit({ ...edit, scene: e.target.value })} />
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="primary" onClick={() => onPatch({ headline: edit.headline, points: edit.points, scene: edit.scene }).then((r) => r && setEdit(null))}>
+              {t('c.save')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEdit(null)}>
+              {t('c.cancel')}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div dir="rtl" lang="ar" className="flex-1 space-y-1 p-2.5">
+          <p className="text-sm font-semibold leading-6 text-ink">{v.headline}</p>
+          {v.points.length > 0 && <p className="text-xs leading-5 text-sub">{v.points.join(' · ')}</p>}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-line p-2">
+        <Button size="sm" icon={ImagePlus} loading={drawing} disabled={disabled || Boolean(busy)} onClick={onDraw}>
+          {v.image ? t(['أعد الرسم', 'Redessiner']) : t(['ارسم', 'Dessiner'])}
+        </Button>
+        {!edit && <Button size="sm" variant="ghost" icon={Pencil} aria-label={t(['تعديل', 'Modifier'])} title={t(['تعديل', 'Modifier'])} onClick={() => setEdit({ headline: v.headline, points: v.points.join('\n'), scene: v.scene })} />}
+        {v.image && <Toggle checked={v.approved} onChange={(on) => onPatch({ approved: on })} label={t(['في الصفحة', 'Dans la page'])} />}
+      </div>
+    </li>
+  );
+}
+
+/** الصور الوصفية: خطة Claude ← رسم من صور المنتج الحقيقية ← مراجعة ← تُرفع إلى Shopify عند النشر */
+function VisualsPanel({ l, setL, onChanged }) {
+  const { t } = useI18n();
+  const { run, busy } = useAction();
+  const [progress, setProgress] = useState(null);
+  const list = l.visuals || [];
+  const noProvider = l.image_provider === 'none';
+  const drawn = list.filter((v) => v.image).length;
+  const done = (r) => {
+    if (r) setL(r);
+    return r;
+  };
+  const draw = (vid) => run(`v-${vid}`, () => api.post(`/pages/landing/${l.id}/visuals/${vid}/generate`, {}), { success: false }).then(done);
+  const patch = (vid, body) => run(`p-${vid}`, () => api.patch(`/pages/landing/${l.id}/visuals/${vid}`, body), { success: false }).then(done);
+  const drawAll = async () => {
+    const todo = list.filter((v) => !v.image);
+    for (const [i, v] of todo.entries()) {
+      setProgress(`${i + 1}/${todo.length}`);
+      if (!(await draw(v.id))) break;
+    }
+    setProgress(null);
+    onChanged();
+  };
+  const plan = () => {
+    if (list.length && !window.confirm(t(['خطة جديدة تستبدل اللقطات الحالية (الصور المرسومة تبقى في صور المنتج). متابعة؟', 'Un nouveau plan remplace les visuels actuels. Continuer ?']))) return;
+    run('plan', () => api.post(`/pages/landing/${l.id}/visuals/plan`, {}), { success: false }).then(done);
+  };
+  const pending = l.status === 'published' && list.some((v) => v.approved && v.image && !v.shopify_url);
+  return (
+    <section className="space-y-3 rounded-xl border border-line p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Images className="h-4 w-4 text-brand" aria-hidden />
+        <b className="text-sm text-ink">{t(['الصور الوصفية', 'Visuels descriptifs'])}</b>
+        {list.length > 0 && <Badge>{t([`${drawn} من ${list.length} مرسومة`, `${drawn}/${list.length} dessinés`])}</Badge>}
+        <span className="flex-1" />
+        {list.length > 0 && (
+          <Button size="sm" variant="ghost" icon={Sparkles} loading={busy === 'plan'} disabled={Boolean(busy || progress)} onClick={plan}>
+            {t(['خطة جديدة', 'Nouveau plan'])}
+          </Button>
+        )}
+        {list.length > drawn && (
+          <Button size="sm" variant="primary" icon={ImagePlus} loading={Boolean(progress)} disabled={noProvider || Boolean(busy)} onClick={drawAll}>
+            {progress ? t([`الرسم ${progress}…`, `Dessin ${progress}…`]) : t([`ارسم الكل (${list.length - drawn})`, `Tout dessiner (${list.length - drawn})`])}
+          </Button>
+        )}
+      </div>
+      <p className="text-xs leading-6 text-sub">
+        {t(['تُرسم من صور المنتج الحقيقية، بلا أي كتابة داخلها: العنوان والنقاط نص حيّ في الصفحة (الحروف العربية في الصور المولّدة تخرج بأخطاء). راجع كل صورة: إن غيّرت شكل المنتج أو لونه فأخفها أو أعد رسمها، لأن الزبون يرفض الطرد إن لم يطابق ما رآه.', 'Dessinés à partir des vraies photos, sans aucun texte dans l’image : titre et points restent du texte de la page. Vérifiez chaque visuel : un produit modifié = colis refusé.'])}
+      </p>
+      {noProvider && (
+        <p className="flex flex-wrap items-center gap-2 rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
+          {t(['لرسم الصور: اختر مزوّد الصور (Gemini) وأدخل مفتاحه في الإعدادات.', 'Pour dessiner : choisissez un fournisseur d’images (Gemini) et sa clé dans Paramètres.'])}
+          <Link to="/settings" className="inline-flex items-center gap-1 font-semibold text-brand underline">
+            <Settings className="h-3.5 w-3.5" aria-hidden /> {t(['الإعدادات', 'Paramètres'])}
+          </Link>
+        </p>
+      )}
+      {pending && <p className="rounded-lg bg-brand/10 p-2.5 text-xs text-sub">{t(['صور جديدة لم تُنشر بعد: اضغط «إعادة النشر».', 'Nouveaux visuels pas encore publiés : republiez.'])}</p>}
+      {!list.length ? (
+        <Button icon={Sparkles} loading={busy === 'plan'} onClick={plan}>
+          {t(['اقترح صوراً وصفية لهذه الصفحة', 'Proposer des visuels pour cette page'])}
+        </Button>
+      ) : (
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {list.map((v) => (
+            <VisualCard key={v.id} v={v} busy={busy} disabled={noProvider || Boolean(progress)} onDraw={() => draw(v.id)} onPatch={(body) => patch(v.id, body)} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** المولّد: منتج + زاوية + إطار + لهجة → مسودة (Claude) */
 function GenerateModal({ onClose, onDone, base, meta }) {
   const { t } = useI18n();
@@ -119,11 +256,16 @@ function GenerateModal({ onClose, onDone, base, meta }) {
       title={t(['إنشاء صفحة هبوط', 'Créer une landing page'])}
       footer={
         <Button variant="primary" icon={Sparkles} loading={busy === 'gen'} disabled={!f.product_id || !f.angle.trim()} onClick={generate}>
-          {busy === 'gen' ? t(['Claude يكتب الصفحة… (دقيقة تقريباً)', 'Claude rédige… (≈ 1 min)']) : t(['توليد صفحة الهبوط', 'Générer la landing page'])}
+          {busy === 'gen' ? t(['Claude يكتب الصفحة ويخطط صورها… (دقيقة تقريباً)', 'Claude rédige et planifie les visuels… (≈ 1 min)']) : t(['توليد صفحة الهبوط', 'Générer la landing page'])}
         </Button>
       }
     >
       <div className="grid gap-4">
+        {meta?.delivery && !meta.delivery.imported_at && (
+          <p className="rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
+            {t(['أسعار التوصيل والسياسات لم تُستورد بعد (بطاقة «التوصيل والسياسات»): الصفحة ستُكتب دونها، وتظهر في «ما يحتاج منك».', 'Livraison et politiques pas encore importées : la page sera rédigée sans.'])}
+          </p>
+        )}
         <Field label={t(['المنتج', 'Produit'])} hint={t(['صفحة المنتج تبقى للإعلان الرئيسي؛ صفحة الهبوط لزاوية واحدة لجمهور محدد.', 'La fiche produit reste pour la pub principale ; la landing sert un angle précis.'])}>
           <Select value={f.product_id} onChange={(e) => setF({ ...f, product_id: e.target.value })} placeholder="—" options={list.map((p) => ({ value: p.id, label: p.title }))} />
         </Field>
@@ -252,6 +394,7 @@ function LandingModal({ item, base, onClose, onChanged }) {
             </Link>
           </p>
         )}
+        <VisualsPanel l={l} setL={setL} onChanged={onChanged} />
         {l.copy.owner_todo?.length > 0 && (
           <div className="rounded-lg border border-warn/40 bg-warn/10 p-3 text-xs leading-6">
             <b className="text-ink">{t(['ما يحتاج منك (لم يختلقه Claude):', 'À compléter (non inventé par Claude) :'])}</b>
@@ -277,54 +420,57 @@ export default function LandingPages() {
   const [open, setOpen] = useState(null);
   const rows = data?.rows || [];
   return (
-    <Card
-      icon={Wand2}
-      title={t(['صفحات الهبوط', 'Landing pages'])}
-      subtitle={t(['صفحة بيع لمنتج واحد وزاوية واحدة، دون قائمة ولا تذييل، بنموذج الطلب نفسه — لكل حملة زاويتها.', 'Une page de vente par produit et par angle, sans menu ni pied de page, avec le même formulaire.'])}
-      actions={
-        <Button variant="primary" icon={Sparkles} disabled={isAll} title={isAll ? t(['اختر مشروعاً أولاً', 'Choisissez un projet']) : undefined} onClick={() => setCreating(true)}>
-          {t(['إنشاء صفحة هبوط', 'Créer une landing'])}
-        </Button>
-      }
-    >
-      {loading && !data ? (
-        <Loading />
-      ) : error ? (
-        <ErrorBox error={error} onRetry={reload} />
-      ) : !rows.length ? (
-        <Empty icon={Wand2} title={t(['لا صفحات هبوط بعد', 'Aucune landing page'])}>
-          {t(['اختر منتجاً وزاوية (هدية، المشكلة والحل…) وإطاراً (AIDA، PAS…)، ويكتب Claude الصفحة بقواعد واضحة دون اختلاق.', 'Choisissez produit, angle et structure (AIDA, PAS…) : Claude rédige selon des règles strictes.'])}
-        </Empty>
-      ) : (
-        <ul className="divide-y divide-line">
-          {rows.map((l) => (
-            <li key={l.id} className="flex flex-wrap items-center gap-2 py-2.5">
-              <button type="button" className="min-w-0 flex-1 text-start" onClick={() => setOpen(l)}>
-                <span className="block truncate font-medium text-ink">
-                  {l.product_title} · {l.angle}
-                </span>
-                <span className="ltr block truncate text-xs text-muted">/pages/{l.slug}</span>
-              </button>
-              <Badge>{l.framework.toUpperCase()}</Badge>
-              <Badge tone={STATUS[l.status][2]}>{t(STATUS[l.status])}</Badge>
-              {l.public_url && l.status === 'published' && <CopyButton text={l.public_url} />}
-            </li>
-          ))}
-        </ul>
-      )}
-      {creating && (
-        <GenerateModal
-          base={data?.base}
-          meta={data}
-          onClose={() => setCreating(false)}
-          onDone={(l) => {
-            setCreating(false);
-            reload(true);
-            setOpen(l);
-          }}
-        />
-      )}
-      {open && <LandingModal item={open} base={data?.base} onClose={() => setOpen(null)} onChanged={() => reload(true)} />}
-    </Card>
+    <>
+      <DeliveryCard onChange={() => reload(true)} />
+      <Card
+        icon={Wand2}
+        title={t(['صفحات الهبوط', 'Landing pages'])}
+        subtitle={t(['صفحة بيع لمنتج واحد وزاوية واحدة، دون قائمة ولا تذييل، بنموذج الطلب نفسه — لكل حملة زاويتها.', 'Une page de vente par produit et par angle, sans menu ni pied de page, avec le même formulaire.'])}
+        actions={
+          <Button variant="primary" icon={Sparkles} disabled={isAll} title={isAll ? t(['اختر مشروعاً أولاً', 'Choisissez un projet']) : undefined} onClick={() => setCreating(true)}>
+            {t(['إنشاء صفحة هبوط', 'Créer une landing'])}
+          </Button>
+        }
+      >
+        {loading && !data ? (
+          <Loading />
+        ) : error ? (
+          <ErrorBox error={error} onRetry={reload} />
+        ) : !rows.length ? (
+          <Empty icon={Wand2} title={t(['لا صفحات هبوط بعد', 'Aucune landing page'])}>
+            {t(['اختر منتجاً وزاوية (هدية، المشكلة والحل…) وإطاراً (AIDA، PAS…)، ويكتب Claude الصفحة بقواعد واضحة دون اختلاق.', 'Choisissez produit, angle et structure (AIDA, PAS…) : Claude rédige selon des règles strictes.'])}
+          </Empty>
+        ) : (
+          <ul className="divide-y divide-line">
+            {rows.map((l) => (
+              <li key={l.id} className="flex flex-wrap items-center gap-2 py-2.5">
+                <button type="button" className="min-w-0 flex-1 text-start" onClick={() => setOpen(l)}>
+                  <span className="block truncate font-medium text-ink">
+                    {l.product_title} · {l.angle}
+                  </span>
+                  <span className="ltr block truncate text-xs text-muted">/pages/{l.slug}</span>
+                </button>
+                <Badge>{l.framework.toUpperCase()}</Badge>
+                <Badge tone={STATUS[l.status][2]}>{t(STATUS[l.status])}</Badge>
+                {l.public_url && l.status === 'published' && <CopyButton text={l.public_url} />}
+              </li>
+            ))}
+          </ul>
+        )}
+        {creating && (
+          <GenerateModal
+            base={data?.base}
+            meta={data}
+            onClose={() => setCreating(false)}
+            onDone={(l) => {
+              setCreating(false);
+              reload(true);
+              setOpen(l);
+            }}
+          />
+        )}
+        {open && <LandingModal item={open} base={data?.base} onClose={() => setOpen(null)} onChanged={() => reload(true)} />}
+      </Card>
+    </>
   );
 }

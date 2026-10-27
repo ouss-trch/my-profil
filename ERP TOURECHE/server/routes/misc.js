@@ -9,6 +9,7 @@ import * as assistant from '../services/assistant.js';
 import * as contacts from '../services/contacts.js';
 import * as pages from '../services/pages.js';
 import * as landing from '../services/landing.js';
+import * as delivery from '../services/delivery.js';
 import * as collections from '../services/collections.js';
 
 export const dashboardRouter = Router();
@@ -248,6 +249,23 @@ pagesRouter.post('/', (req, res) => {
   res.json({ ids });
 });
 
+// ——— التوصيل والسياسات كما في المتجر (للنصوص: الأسعار، المعاينة، الاسترجاع، مدة التوصيل) ———
+pagesRouter.get('/delivery', (req, res) => res.json(delivery.getDelivery(projectScope(req, { allowAll: false }).id)));
+
+pagesRouter.post('/delivery/import', requireRole('admin', 'manager'), async (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const out = await delivery.importDelivery(scope.id);
+  audit(req, 'delivery_imported', { projectId: scope.id, details: { wilayas: out.rates.length, source: out.source } });
+  res.json(out);
+});
+
+pagesRouter.patch('/delivery', requireRole('admin', 'manager'), (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const out = delivery.updateDelivery(scope.id, { delivery_time: v.str(req.body?.delivery_time, { max: 200 }) ?? '' });
+  audit(req, 'delivery_time_set', { projectId: scope.id, details: { delivery_time: out.delivery_time } });
+  res.json(out);
+});
+
 // ——— صفحات الهبوط المولّدة (منتج + زاوية + إطار) ———
 pagesRouter.get('/landing', (req, res) => {
   const scope = projectScope(req);
@@ -256,6 +274,8 @@ pagesRouter.get('/landing', (req, res) => {
     base: scope.all ? null : pages.storeBase(scope.id),
     frameworks: Object.entries(landing.FRAMEWORKS).map(([id, f]) => ({ id, label: f.label, when: f.when })),
     angles: landing.ANGLE_PRESETS,
+    // هل بيانات التوصيل والسياسات جاهزة لكاتب الصفحة؟
+    delivery: scope.all ? null : (({ imported_at, delivery_time, summary }) => ({ imported_at, delivery_time, served: summary.served }))(delivery.getDelivery(scope.id)),
   });
 });
 
@@ -267,6 +287,17 @@ pagesRouter.post('/landing/generate', requireRole('admin', 'manager'), async (re
 });
 
 pagesRouter.patch('/landing/:id', requireRole('admin', 'manager'), (req, res) => res.json(landing.updateLanding(Number(req.params.id), req.body || {})));
+
+// الصور الوصفية: خطة (Claude) ← رسم لقطة لقطة (مولّد الصور، بتكلفة) ← مراجعة التاجر قبل النشر
+pagesRouter.post('/landing/:id/visuals/plan', requireRole('admin', 'manager'), async (req, res) => res.json(await landing.planVisuals(Number(req.params.id))));
+
+pagesRouter.post('/landing/:id/visuals/:vid/generate', requireRole('admin', 'manager'), async (req, res) => {
+  const out = await landing.generateVisual(Number(req.params.id), String(req.params.vid));
+  audit(req, 'landing_visual_generated', { projectId: out.project_id, details: { id: out.id, visual: req.params.vid } });
+  res.json(out);
+});
+
+pagesRouter.patch('/landing/:id/visuals/:vid', requireRole('admin', 'manager'), (req, res) => res.json(landing.updateVisual(Number(req.params.id), String(req.params.vid), req.body || {})));
 
 pagesRouter.post('/landing/:id/publish', requireRole('admin'), requireSensitive, async (req, res) => {
   const out = await landing.publishLanding(Number(req.params.id));

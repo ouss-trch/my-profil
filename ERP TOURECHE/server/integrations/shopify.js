@@ -458,6 +458,32 @@ export async function stagedUpload(cfg, { buffer, filename, mimeType }) {
   return target.resourceUrl;
 }
 
+/**
+ * رفع صورة إلى «Fichiers» في Shopify (write_files) وانتظار رابطها على CDN.
+ * للصور الوصفية في صفحات الهبوط: لا تدخل معرض المنتج، والقالب يعرضها برابطها.
+ */
+export async function uploadFile(cfg, { buffer, filename, mimeType, alt = '' }) {
+  const resourceUrl = await stagedUpload(cfg, { buffer, filename, mimeType });
+  const d = await gql(
+    cfg,
+    'mutation($files: [FileCreateInput!]!) { fileCreate(files: $files) { files { id fileStatus ... on MediaImage { image { url width height } } } userErrors { field message } } }',
+    { files: [{ originalSource: resourceUrl, contentType: 'IMAGE', alt: String(alt).slice(0, 500), filename }] },
+  );
+  userErrors(d.fileCreate);
+  let file = d.fileCreate.files?.[0];
+  // Shopify يعالج الصورة بعد الرفع: الرابط يظهر حين تصير READY (ثوانٍ عادة)
+  for (let i = 0; i < 20 && file && !file.image?.url; i++) {
+    if (file.fileStatus === 'FAILED') break;
+    await sleep(1500);
+    file = (await gql(cfg, 'query($id: ID!) { node(id: $id) { ... on MediaImage { id fileStatus image { url width height } } } }', { id: file.id })).node;
+  }
+  if (!file?.image?.url) throw new IntegrationError('shopify', 'invalid', file?.fileStatus === 'FAILED' ? 'file_processing_failed' : 'file_not_ready');
+  return { id: file.id, url: file.image.url, width: file.image.width, height: file.image.height };
+}
+
+/** ملفات JSON في القالب (config/settings_data.json، templates/*.json) تبدأ بتعليق /* … *\/ يضيفه Shopify */
+export const parseThemeJson = (content) => JSON.parse(String(content || '').replace(/^\s*\/\*[\s\S]*?\*\/\s*/, ''));
+
 /** تحديث النص البديل (alt) لصور منتج قائم — MediaImage هو ملف في Shopify ويُعدَّل عبر fileUpdate */
 export async function updateImageAlt(cfg, images) {
   if (!images.length) return;
