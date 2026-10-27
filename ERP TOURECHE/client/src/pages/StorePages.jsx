@@ -8,6 +8,7 @@ import { n0, pct } from '../lib/format.js';
 import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import AttributionNotice from '../components/AttributionNotice.jsx';
+import LandingPages from '../components/LandingPages.jsx';
 import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, cx, useAction } from '../components/ui.jsx';
 
 const KIND = {
@@ -126,6 +127,7 @@ export default function StorePages() {
         <p className="text-xs text-muted">{t(['الطلبيات تُنسب للصفحة من رابط الدخول (آخر 30 يوماً).', 'Commandes attribuées par page d’entrée (30 derniers jours).'])}</p>
       </div>
       <AttributionNotice health={data?.attribution} />
+      <LandingPages />
 
       {loading && !data ? (
         <Loading />

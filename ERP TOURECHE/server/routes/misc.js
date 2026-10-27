@@ -8,6 +8,7 @@ import * as analytics from '../services/analytics.js';
 import * as assistant from '../services/assistant.js';
 import * as contacts from '../services/contacts.js';
 import * as pages from '../services/pages.js';
+import * as landing from '../services/landing.js';
 import * as collections from '../services/collections.js';
 
 export const dashboardRouter = Router();
@@ -245,6 +246,44 @@ pagesRouter.post('/', (req, res) => {
   const ids = pages.addPages(scope.id, { urls: req.body.urls ?? req.body.url, title: v.str(req.body.title, { max: 200 }), product_id: req.body.product_id ? Number(req.body.product_id) : null, pinned: req.body.pinned !== false });
   audit(req, 'pages_added', { projectId: scope.id, details: { count: ids.length } });
   res.json({ ids });
+});
+
+// ——— صفحات الهبوط المولّدة (منتج + زاوية + إطار) ———
+pagesRouter.get('/landing', (req, res) => {
+  const scope = projectScope(req);
+  res.json({
+    rows: landing.listLandings(scope.ids),
+    base: scope.all ? null : pages.storeBase(scope.id),
+    frameworks: Object.entries(landing.FRAMEWORKS).map(([id, f]) => ({ id, label: f.label, when: f.when })),
+    angles: landing.ANGLE_PRESETS,
+  });
+});
+
+pagesRouter.post('/landing/generate', requireRole('admin', 'manager'), async (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const out = await landing.generateLanding(scope.id, req.body || {}, req.user.id);
+  audit(req, 'landing_generated', { projectId: scope.id, details: { id: out.id, slug: out.slug, framework: out.framework } });
+  res.json(out);
+});
+
+pagesRouter.patch('/landing/:id', requireRole('admin', 'manager'), (req, res) => res.json(landing.updateLanding(Number(req.params.id), req.body || {})));
+
+pagesRouter.post('/landing/:id/publish', requireRole('admin'), requireSensitive, async (req, res) => {
+  const out = await landing.publishLanding(Number(req.params.id));
+  audit(req, 'landing_published', { projectId: out.project_id, details: { id: out.id, path: out.public_path, target: out.target_url } });
+  res.json(out);
+});
+
+pagesRouter.post('/landing/:id/unpublish', requireRole('admin'), requireSensitive, async (req, res) => {
+  const out = await landing.unpublishLanding(Number(req.params.id));
+  audit(req, 'landing_unpublished', { projectId: out.project_id, details: { id: out.id } });
+  res.json(out);
+});
+
+pagesRouter.delete('/landing/:id', requireRole('admin'), requireSensitive, (req, res) => {
+  const out = landing.deleteLanding(Number(req.params.id));
+  audit(req, 'landing_deleted', { projectId: out.project_id, details: { id: out.id, slug: out.slug } });
+  res.json({ ok: true });
 });
 
 pagesRouter.patch('/:id', (req, res) => res.json(pages.updatePage(Number(req.params.id), req.body)));

@@ -523,3 +523,34 @@ export async function upsertThemeFiles(cfg, themeId, files) {
   userErrors(d.themeFilesUpsert);
   return d.themeFilesUpsert.upsertedThemeFiles.map((f) => f.filename);
 }
+
+/** حذف ملفات من القالب (قالب صفحة هبوط لم تعد مستعملة) */
+export async function deleteThemeFiles(cfg, themeId, filenames) {
+  const d = await gql(cfg, `mutation($id: ID!, $f: [String!]!) { themeFilesDelete(themeId: $id, files: $f) { deletedThemeFiles { filename } userErrors { field message } } }`, { id: themeId, f: filenames });
+  userErrors(d.themeFilesDelete);
+  return (d.themeFilesDelete.deletedThemeFiles || []).map((f) => f.filename);
+}
+
+// ——— تحويلات الروابط (write_online_store_navigation): ‎/pages/<slug>‎ → قالب صفحة الهبوط. Shopify يمرّر معاملات الرابط (fbclid، utm…) ———
+export async function findUrlRedirect(cfg, path) {
+  const d = await gql(cfg, 'query($q: String!) { urlRedirects(first: 5, query: $q) { nodes { id path target } } }', { q: `path:${path}` });
+  return d.urlRedirects.nodes.find((r) => decodeURIComponent(r.path).toLowerCase() === decodeURIComponent(path).toLowerCase()) || null;
+}
+
+export async function createUrlRedirect(cfg, path, target) {
+  const d = await gql(cfg, 'mutation($r: UrlRedirectInput!) { urlRedirectCreate(urlRedirect: $r) { urlRedirect { id path target } userErrors { field message } } }', { r: { path, target } });
+  userErrors(d.urlRedirectCreate);
+  return d.urlRedirectCreate.urlRedirect;
+}
+
+export async function updateUrlRedirect(cfg, id, path, target) {
+  const d = await gql(cfg, 'mutation($id: ID!, $r: UrlRedirectInput!) { urlRedirectUpdate(id: $id, urlRedirect: $r) { urlRedirect { id path target } userErrors { field message } } }', { id, r: { path, target } });
+  userErrors(d.urlRedirectUpdate);
+  return d.urlRedirectUpdate.urlRedirect;
+}
+
+export async function deleteUrlRedirect(cfg, id) {
+  const d = await gql(cfg, 'mutation($id: ID!) { urlRedirectDelete(id: $id) { deletedUrlRedirectId userErrors { field message } } }', { id });
+  userErrors(d.urlRedirectDelete);
+  return d.urlRedirectDelete.deletedUrlRedirectId;
+}

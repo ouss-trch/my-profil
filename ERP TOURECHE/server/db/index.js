@@ -540,6 +540,33 @@ ${STORE_PAGES_SQL}
     db.exec('CREATE INDEX IF NOT EXISTS idx_returns_project ON order_returns(project_id, shopify_state)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_stock_order ON stock_movements(order_id, product_id)');
   },
+
+  // 4 — صفحات الهبوط المولّدة: منتج + زاوية تسويقية + إطار (AIDA، PAS…) → قالب منتج دون قائمة/تذييل + رابط ‎/pages/<slug>‎
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS landing_pages (
+      id INTEGER PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      slug TEXT NOT NULL,
+      angle TEXT NOT NULL,
+      framework TEXT NOT NULL,
+      tone TEXT NOT NULL DEFAULT 'ar',
+      audience TEXT,
+      copy TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','unpublished')),
+      template_suffix TEXT,
+      redirect_id TEXT,
+      public_path TEXT,
+      target_url TEXT,
+      model TEXT,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      published_at TEXT,
+      UNIQUE (project_id, slug)
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_landing_product ON landing_pages(project_id, product_id)');
+  },
 ];
 
 export function openDb(file = config.dbFile) {

@@ -110,7 +110,7 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 
 | الخدمة | ما تحتاجه |
 |---|---|
-| **Shopify** | تطبيق من **Dev Dashboard** (لم يعد Shopify يسمح بإنشاء تطبيقات من لوحة المتجر) بالصلاحيات: `read/write_products`, `read/write_orders`, `read/write_inventory`, `read/write_themes`, `read/write_metafields`, `read_online_store_pages` (+ `read_customer_events` اختياري لمصدر الزيارة). ثبّته على متجرك، ثم ضع في الـ ERP: نطاق `xxxx.myshopify.com` (وليس دومين المتجر) + **Client ID** + **Client secret**. الـ ERP يجدد رمز الدخول كل 24 ساعة. يشترط أن يكون التطبيق والمتجر في نفس المؤسسة على Dev Dashboard. (تطبيق قديم برمز `shpat_…` ما زال مدعوماً) |
+| **Shopify** | تطبيق من **Dev Dashboard** (لم يعد Shopify يسمح بإنشاء تطبيقات من لوحة المتجر) بالصلاحيات: `read/write_products`, `read/write_orders`, `read/write_inventory`, `read/write_themes`, `write_online_store_navigation` (تحويلات روابط صفحات الهبوط), `read/write_metafields`, `read_online_store_pages` (+ `read_customer_events` اختياري لمصدر الزيارة). ثبّته على متجرك، ثم ضع في الـ ERP: نطاق `xxxx.myshopify.com` (وليس دومين المتجر) + **Client ID** + **Client secret**. الـ ERP يجدد رمز الدخول كل 24 ساعة. يشترط أن يكون التطبيق والمتجر في نفس المؤسسة على Dev Dashboard. (تطبيق قديم برمز `shpat_…` ما زال مدعوماً) |
 | **Meta** | رمز **System User** دائم من Business Manager بصلاحيات `ads_management`, `ads_read`, `business_management`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`. بعد حفظ الرمز اضغط **«اكتشاف من Meta»** في نفس البطاقة: تختار الـ BM والحسابات والبيكسل (يظهر آخر حدث وصله) والصفحة بالأسماء، ويجلب الـ ERP رمز الصفحة ومعرّف إنستغرام بنفسه. البيكسل نفسه الذي يرسل له n8n حدث `Purchase` عند كل طلبية |
 | **التوصيل** | Yalidine (API ID + token) · ZR Express (token + key) · NOEST (api_token + user_guid) |
 | **n8n** | روابط Webhook (الأحداث، المنتجات/تيليغرام، التقرير الصباحي، جسر Google Sheets) |
@@ -121,6 +121,17 @@ npm start          # يشغّل الـ ERP على http://localhost:3600
 الحقول المدعومة: `customer_name, phone, wilaya, commune, address, delivery_type, items[], total, utm_source, utm_campaign, utm_content, landing_url`.
 
 ---
+
+## صفحات الهبوط بالذكاء الاصطناعي (صفحات المتجر ← «إنشاء صفحة هبوط»)
+
+صفحة المنتج تبقى للإعلان والمنشور الرئيسيين. صفحة الهبوط لزاوية واحدة لجمهور واحد: منتج واحد، بلا قائمة ولا تذييل، بنفس نموذج الطلب والعروض.
+
+1. اختر المنتج، والزاوية (هدية، المشكلة والحل…)، وإطار الكتابة: **AIDA** (جمهور بارد)، **PAS** (يعرف المشكلة)، **BAB** (يغيّر روتيناً)، **FAB** (منتج تقني)، **4P** (جمهور متردد)، **FOMO الصادق** (عرض كمية حقيقي أو مخزون قليل فعلاً).
+2. Claude يكتب: عنوان يطابق الزاوية، فقرات الإطار، الفوائد، خطوات الطلب، الضمانات، 4–6 أسئلة شائعة، وزر الطلب. القواعد ثابتة: لا أرقام ولا آراء ولا ندرة ولا ادعاءات صحية مختلقة (سياسة Meta)، العروض والسياسات كما في صفحة المنتج بالضبط، وما ينقص يظهر في «ما يحتاج منك».
+3. **نشر على المتجر** (كلمة المرور الحساسة) يكتب في القالب المنشور: `layout/erp-landing.liquid` (theme.liquid دون الرأس والتذييل)، `sections/erp-lp.liquid` (النصوص، قابلة للتعديل من محرر القالب)، و`templates/product.lp-<slug>.json` (قسم المنتج نفسه بنموذج الطلب والعروض)، ثم تحويلة **`/pages/<المنتج>-<الزاوية>`** إلى `/products/<handle>?view=lp-<slug>`. Shopify لا يقبل «/» ثانية داخل اسم الصفحة، والتحويل يمرّر معاملات الإعلان.
+4. ضع الرابط في حملة الزاوية نفسها. الطلبيات تُنسب للصفحة في «صفحات المتجر»، ولمقارنتها بصفحة المنتج: اختبار A/B.
+
+يحتاج تطبيق Shopify: `read_themes` و`write_themes` و`write_online_store_navigation`، موافقاً عليها في المتجر.
 
 ## اختبار صفحات الهبوط A/B على نفس الدومين
 

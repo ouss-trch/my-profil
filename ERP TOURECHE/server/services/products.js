@@ -292,7 +292,7 @@ export async function postToSocial(id, { platforms = ['facebook'], message }) {
 }
 
 // ——— الذكاء الاصطناعي ———
-async function imageBlocks(images, max = 6) {
+export async function imageBlocks(images, max = 6) {
   const out = [];
   for (const img of (images || []).slice(0, max)) {
     if (/^https:\/\//.test(img.url || '')) out.push({ url: img.url });
