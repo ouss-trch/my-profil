@@ -13,7 +13,11 @@ import PageSuggest from '../components/PageSuggest.jsx';
 import AttributionNotice from '../components/AttributionNotice.jsx';
 
 const STATUS = { draft: ['مسودة', 'Brouillon', 'neutral'], running: ['يعمل', 'En cours', 'good'], paused: ['متوقف', 'En pause', 'warn'], ended: ['منتهٍ', 'Terminé', 'neutral'] };
-const GOALS = { orders: ['الطلبيات', 'Commandes'], confirmed: ['الطلبيات المؤكدة', 'Commandes confirmées'], delivered: ['الطلبيات المسلّمة (الأدق)', 'Commandes livrées (le plus juste)'] };
+const GOALS = {
+  orders: ['الطلبيات (معدل تحويل الصفحة)', 'Commandes (taux de conversion de la page)'],
+  confirmed: ['الطلبيات المؤكدة', 'Commandes confirmées'],
+  delivered: ['الطلبيات المسلّمة (تحتاج 14 يوماً على الأقل)', 'Commandes livrées (14 jours minimum)'],
+};
 const VERDICTS = {
   collecting: ['يجمع البيانات', 'Collecte en cours', 'info'],
   trending: ['يتجه نحو فائز — أكمل الاختبار', 'Tendance — continuez', 'info'],
@@ -196,7 +200,7 @@ function SplitList() {
       <PageHeader
         icon={Split}
         title={t('nav.splits')}
-        subtitle={t(['رابط إعلان واحد يوزّع الزوار على عدة صفحات هبوط لمعرفة أيها يجلب طلبيات مسلّمة أكثر', 'Un lien de pub qui répartit les visiteurs entre plusieurs landing pages pour trouver celle qui livre le plus'])}
+        subtitle={t(['رابط إعلان واحد يوزّع الزوار على عدة صفحات هبوط لمعرفة أيها يحوّل الزوار إلى طلبيات أكثر', 'Un lien de pub qui répartit les visiteurs entre plusieurs landing pages pour trouver celle qui convertit le mieux'])}
         actions={
           <Button variant="primary" icon={Plus} disabled={isAll} title={isAll ? t('c.selectProject') : undefined} onClick={() => setOpen(true)}>
             {t(['اختبار جديد', 'Nouveau test'])}
@@ -252,6 +256,88 @@ function SplitList() {
   );
 }
 
+const CUSTOM = '__custom';
+
+/**
+ * الصفحات التي يمكن اختبارها لمنتج: صفحة المنتج الأصلية، صفحات الهبوط المنشورة من الـ ERP (باسم الزاوية)،
+ * ثم باقي صفحات المتجر. القيمة دائماً الرابط النهائي (‎?view=lp-…‎) لا التحويلة ‎/pages/…‎
+ */
+function usePageChoices(open, productId, productInfo) {
+  const { t } = useI18n();
+  const pages = useApi('/pages', { skip: !open });
+  const landings = useApi('/pages/landing', { skip: !open });
+  const pid = productId ? Number(productId) : null;
+  const base = landings.data?.base || pages.data?.base || '';
+  const mine = (x) => !pid || x.product_id === pid;
+  const seen = new Set();
+  const take = (list) => list.filter((o) => o.value && !seen.has(o.value) && seen.add(o.value));
+  const product = take((pages.data?.rows || []).filter((p) => p.kind === 'product' && !p.gone && mine(p) && !/[?&]view=/.test(p.url)).map((p) => ({ value: p.url, label: p.title, path: p.path })));
+  // صفحات المتجر لم تُزامن بعد: صفحة المنتج من رابطه في Shopify
+  if (productInfo?.handle && base && !product.some((o) => o.path === `/products/${productInfo.handle}`)) {
+    const path = `/products/${productInfo.handle}`;
+    product.unshift(...take([{ value: `${base}${path}`, label: productInfo.title, path }]));
+  }
+  const lps = take(
+    (landings.data?.rows || [])
+      .filter((l) => l.status === 'published' && l.target_url && base && mine(l))
+      .map((l) => ({ value: `${base}${l.target_url}`, label: `${l.angle} · /pages/${l.slug}`, name: l.angle })),
+  );
+  const others = take((pages.data?.rows || []).filter((p) => !p.gone && p.published && (p.kind !== 'product' || /[?&]view=/.test(p.url)) && (p.pinned || mine(p))).map((p) => ({ value: p.url, label: p.title || p.path })));
+  return {
+    base,
+    product,
+    groups: [
+      { label: t(['صفحة المنتج الأصلية', 'Page produit d’origine']), items: product },
+      { label: t(['صفحات الهبوط من الـ ERP (الزاوية)', 'Landing pages de l’ERP (angle)']), items: lps },
+      { label: t(['صفحات أخرى في المتجر', 'Autres pages de la boutique']), items: others },
+    ],
+  };
+}
+
+function PagePicker({ value, custom, groups, onPick, onCustom, mode }) {
+  const { t } = useI18n();
+  const known = groups.some((g) => g.items.some((o) => o.value === value));
+  const showInput = custom || (value && !known);
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <select
+        aria-label={t(['الصفحة', 'Page'])}
+        className="input pe-8"
+        value={showInput ? CUSTOM : value}
+        onChange={(e) => {
+          if (e.target.value === CUSTOM) return onCustom();
+          const o = groups.flatMap((g) => g.items).find((x) => x.value === e.target.value);
+          onPick(e.target.value, o);
+        }}
+      >
+        <option value="">{t(['اختر الصفحة…', 'Choisir la page…'])}</option>
+        {groups.map((g) =>
+          g.items.length ? (
+            <optgroup key={g.label} label={g.label}>
+              {g.items.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+          ) : null,
+        )}
+        <option value={CUSTOM}>{t(['رابط آخر (أكتبه بنفسي)…', 'Autre lien (saisie libre)…'])}</option>
+      </select>
+      {showInput && (
+        <Input
+          aria-label={t(['رابط الصفحة', 'URL de la page'])}
+          className="ltr"
+          list="pinned-urls"
+          value={value}
+          onChange={(e) => onPick(e.target.value)}
+          placeholder={mode === 'shopify' ? 'https://souqnna.com/products/thermos?view=angle-a' : 'https://souqnna.com/products/…'}
+        />
+      )}
+    </div>
+  );
+}
+
 function SplitForm({ open, onClose, initial }) {
   const { t } = useI18n();
   const { run, busy } = useAction();
@@ -262,14 +348,29 @@ function SplitForm({ open, onClose, initial }) {
       setF(
         initial
           ? { name: initial.name, goal: initial.goal, sticky: initial.sticky, entry_path: initial.entry_path || '', mode: initial.mode, variants: initial.variants.map((v) => ({ name: v.name || '', url: v.url, weight: v.weight, active: v.active })) }
-          : { name: '', product_id: '', mode: 'shopify', entry_path: '', goal: 'delivered', sticky: true, variants: [{ name: '', url: '', weight: 50, active: true }, { name: '', url: '', weight: 50, active: true }] },
+          : { name: '', product_id: '', mode: 'shopify', entry_path: '', goal: 'orders', sticky: true, variants: [{ name: '', url: '', weight: 50, active: true }, { name: '', url: '', weight: 50, active: true }] },
       );
   }, [open, initial]);
+  const pid = initial ? initial.product_id : f?.product_id;
+  const choices = usePageChoices(open, pid, (products.data || []).find((x) => String(x.id) === String(pid)));
   if (!f) return null;
   const setV = (k, patch) => setF({ ...f, variants: f.variants.map((v, j) => (j === k ? { ...v, ...patch } : v)) });
   const total = f.variants.filter((v) => v.active).reduce((s, v) => s + Number(v.weight || 0), 0);
+  // اختيار المنتج: رابط الدخول = صفحته، والنسخة A = صفحته الأصلية (ما لم تُملأ من قبل)
+  const pickProduct = (id) => {
+    const p = (products.data || []).find((x) => String(x.id) === String(id));
+    const path = p?.handle ? `/products/${p.handle}` : '';
+    const origin = path && choices.base ? `${choices.base}${path}` : '';
+    setF({
+      ...f,
+      product_id: id,
+      name: f.name || p?.handle || '',
+      entry_path: f.entry_path || path,
+      variants: f.variants.map((v, k) => (k === 0 && !v.url && origin ? { ...v, url: origin, name: v.name || t(['صفحة المنتج', 'Page produit']) } : v)),
+    });
+  };
   const save = async () => {
-    const body = { ...f, product_id: f.product_id ? Number(f.product_id) : undefined, variants: f.variants.map((v) => ({ ...v, weight: Number(v.weight) })) };
+    const body = { ...f, product_id: f.product_id ? Number(f.product_id) : undefined, variants: f.variants.map(({ custom, ...v }) => ({ ...v, weight: Number(v.weight) })) };
     const r = await run('save', () => (initial ? api.patch(`/splits/${initial.id}`, body) : api.post('/splits', body)));
     if (r) onClose(r);
   };
@@ -293,7 +394,7 @@ function SplitForm({ open, onClose, initial }) {
           </Field>
           {!initial && (
             <Field label={t('c.product')}>
-              <Select value={f.product_id} onChange={(e) => setF({ ...f, product_id: e.target.value })} placeholder={t('c.optional')} options={(products.data || []).map((p) => ({ value: p.id, label: p.title }))} />
+              <Select value={f.product_id} onChange={(e) => pickProduct(e.target.value)} placeholder={t('c.optional')} options={(products.data || []).map((p) => ({ value: p.id, label: p.title }))} />
             </Field>
           )}
           {!initial && (
@@ -324,22 +425,40 @@ function SplitForm({ open, onClose, initial }) {
           <div className="label">{t(['الصفحات (2 إلى 6)', 'Pages (2 à 6)'])}</div>
           {f.mode === 'shopify' && (
             <p className="text-xs leading-5 text-muted">
-              {t(['كل نسخة إما نفس المنتج بقالب مختلف (أنشئ القالب في محرر Shopify ثم استعمل ?view=اسم-القالب) أو صفحة هبوط على متجرك. مثال: /products/thermos?view=angle-gift · /pages/thermos-lp', 'Chaque version : même produit avec un autre template (créé dans l’éditeur Shopify, puis ?view=nom) ou une landing page de votre boutique. Ex. /products/thermos?view=angle-gift · /pages/thermos-lp'])}
+              {t([
+                'اختر لكل نسخة صفحة من القائمة: صفحة المنتج الأصلية، أو صفحة هبوط من الـ ERP (تظهر باسم زاويتها بعد «نشر على المتجر»)، أو صفحة أخرى من متجرك. كل الصفحات لنفس المنتج ونفس العرض.',
+                'Pour chaque version, choisissez une page : la page produit, une landing page de l’ERP (avec son angle, après « Publier »), ou une autre page de la boutique. Même produit et même offre partout.',
+              ])}
             </p>
           )}
+          <p className="rounded-lg bg-raised px-3 py-2 text-xs leading-6 text-sub">
+            <b className="text-ink">{t(['نسبة الزوار:', 'Part des visiteurs :'])}</b>{' '}
+            {t([
+              'من كل 100 زائر يفتح رابط الإعلان، كم يُرسل إلى هذه الصفحة. 50 و50 = نصف الزوار لكل صفحة. اتركها متساوية طوال الاختبار، فتغييرها في المنتصف يفسد المقارنة.',
+              'Sur 100 visiteurs du lien de pub, combien vont sur cette page. 50/50 = moitié chacune. Gardez-les égales pendant tout le test.',
+            ])}
+          </p>
           <PageSuggest id="pinned-paths" field="path" />
           <PageSuggest id="pinned-urls" />
           {f.variants.map((v, k) => (
-            <div key={k} className="grid gap-2 rounded-lg border border-line p-2 sm:grid-cols-[2rem_1fr_2fr_6rem_auto] sm:items-center">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: SERIES[k % 4] }}>
+            <div key={k} className="grid gap-2 rounded-lg border border-line p-2 sm:grid-cols-[2rem_1fr_2fr_7.5rem_auto] sm:items-start">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white sm:mt-1.5" style={{ background: SERIES[k % 4] }}>
                 {'ABCDEF'[k]}
               </span>
               <Input value={v.name} onChange={(e) => setV(k, { name: e.target.value })} placeholder={t(['اسم (اختياري)', 'Nom (facultatif)'])} />
-              <Input className="ltr" list="pinned-urls" value={v.url} onChange={(e) => setV(k, { url: e.target.value })} placeholder={f.mode === 'shopify' ? 'https://souqnna.com/products/thermos?view=angle-a' : 'https://souqnna.com/products/…'} />
-              <div className="flex items-center gap-1">
-                <Input type="number" min="0" max="100" value={v.weight} onChange={(e) => setV(k, { weight: e.target.value })} />
-                <span className="text-xs text-muted">{total ? `${Math.round((100 * Number(v.weight || 0)) / total)}%` : ''}</span>
-              </div>
+              <PagePicker
+                value={v.url}
+                custom={v.custom}
+                groups={choices.groups}
+                mode={f.mode}
+                onCustom={() => setV(k, { custom: true, url: '' })}
+                onPick={(url, o) => setV(k, { url, custom: o ? false : v.custom, name: v.name || o?.name || '' })}
+              />
+              <label className="flex items-center gap-1.5">
+                <span className="text-xs text-muted">{t(['النسبة', 'Part'])}</span>
+                <Input aria-label={t(['نسبة الزوار', 'Part des visiteurs'])} className="w-16" type="number" min="0" max="100" value={v.weight} onChange={(e) => setV(k, { weight: e.target.value })} />
+                <span className="num text-xs text-muted">{total && v.active ? `${Math.round((100 * Number(v.weight || 0)) / total)}%` : ''}</span>
+              </label>
               <div className="flex items-center gap-1">
                 <Toggle checked={v.active} onChange={(a) => setV(k, { active: a })} />
                 {f.variants.length > 2 && !initial && <Button aria-label={t(['إزالة النسخة', 'Retirer la variante'])} size="sm" variant="ghost" icon={XCircle} onClick={() => setF({ ...f, variants: f.variants.filter((_, j) => j !== k) })} />}

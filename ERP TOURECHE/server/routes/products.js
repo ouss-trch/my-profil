@@ -31,7 +31,24 @@ productsRouter.get('/', (req, res) => {
 
 productsRouter.get('/collections', async (req, res) => {
   const cfg = projectConfig(projectScope(req, { allowAll: false }).id);
-  res.json(shopify.isConfigured(cfg) ? await shopify.collections(cfg) : []);
+  if (!shopify.isConfigured(cfg)) return res.json([]);
+  const list = await shopify.collections(cfg);
+  // هل تظهر في قائمة المتجر؟ دون إذن القوائم تبقى غير معروفة (null) ولا تتوقف القائمة
+  const menu = await shopify.mainMenu(cfg).catch(() => null);
+  const ids = menu ? new Set(shopify.menuResourceIds(menu.items)) : null;
+  res.json(list.map((c) => ({ ...c, in_menu: ids ? ids.has(c.id) : null })));
+});
+
+// إظهار مجموعة في القائمة الرئيسية للمتجر (تغيير في واجهة المتجر = كلمة المرور الحساسة)
+productsRouter.post('/collections/menu', requireRole('admin', 'manager'), requireSensitive, async (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const cfg = projectConfig(scope.id);
+  const id = v.str(req.body.id, { required: true, max: 120, name: 'id' });
+  const c = (await shopify.collections(cfg)).find((x) => x.id === id);
+  if (!c) throw badRequest('collection_not_found');
+  const out = await shopify.addCollectionToMenu(cfg, c);
+  audit(req, 'collection_added_to_menu', { projectId: scope.id, details: { title: c.title, menu: out.menu } });
+  res.json(out);
 });
 
 productsRouter.post('/collections', requireRole('admin', 'manager'), async (req, res) => {
@@ -96,6 +113,12 @@ productsRouter.delete('/:id', requireRole('admin', 'manager'), requireSensitive,
   products.deleteProduct(p.id);
   audit(req, 'product_deleted', { entity: 'product', entityId: p.id, projectId: p.project_id, details: { title: p.title, shopify_id: p.shopify_id } });
   res.json({ ok: true });
+});
+
+productsRouter.post('/:id/archive', requireRole('admin', 'manager'), requireSensitive, async (req, res) => {
+  const p = await products.archiveProduct(Number(req.params.id));
+  audit(req, 'product_archived', { entity: 'product', entityId: p.id, projectId: p.project_id, details: { title: p.title, shopify_id: p.shopify_id } });
+  res.json(p);
 });
 
 productsRouter.get('/:id/seo', (req, res) => {

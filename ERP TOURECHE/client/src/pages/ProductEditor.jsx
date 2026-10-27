@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
+  Archive,
   ArrowRight,
   CheckCircle2,
   Copy,
@@ -68,6 +69,7 @@ export default function ProductEditor() {
   const [f, setF] = useState(null);
   const [tab, setTab] = useState('product');
   const [launch, setLaunch] = useState(false);
+  const [remove, setRemove] = useState(false);
   const { run, busy } = useAction();
   useEffect(() => {
     if (p) setF(Object.fromEntries(EDIT_KEYS.map((k) => [k, p[k] ?? (['tags', 'collections', 'images', 'specs', 'angles'].includes(k) ? [] : '')])));
@@ -107,7 +109,44 @@ export default function ProductEditor() {
         <Button variant="primary" icon={Save} loading={busy === 'save'} disabled={!dirty.length} onClick={save}>
           {t('c.save')} {dirty.length ? `(${dirty.length})` : ''}
         </Button>
+        {p.stage !== 'archived' && (
+          <Button size="sm" variant="ghost" icon={p.shopify_id ? Archive : Trash2} onClick={() => setRemove(true)}>
+            {p.shopify_id ? t(['أرشفة', 'Archiver']) : t('c.delete')}
+          </Button>
+        )}
       </div>
+      <Modal
+        open={remove}
+        onClose={() => setRemove(false)}
+        icon={p.shopify_id ? Archive : Trash2}
+        title={p.shopify_id ? t(['أرشفة «{x}»؟', 'Archiver « {x} » ?'], { x: p.title }) : t(['حذف «{x}»؟', 'Supprimer « {x} » ?'], { x: p.title })}
+        footer={
+          <Button
+            variant="danger"
+            icon={p.shopify_id ? Archive : Trash2}
+            loading={busy === 'remove'}
+            onClick={() =>
+              run('remove', () => (p.shopify_id ? api.post(`/products/${p.id}/archive`, {}, { project: p.project_id }) : api.del(`/products/${p.id}`, { project: p.project_id })), {
+                success: p.shopify_id ? t(['أُرشف المنتج', 'Produit archivé']) : t(['حُذف المنتج', 'Produit supprimé']),
+              }).then((r) => r && nav('/products'))
+            }
+          >
+            {p.shopify_id ? t(['أرشفة', 'Archiver']) : t(['حذف نهائي', 'Supprimer définitivement'])}
+          </Button>
+        }
+      >
+        <p className="text-sm leading-7 text-sub">
+          {p.shopify_id
+            ? t([
+                'المنتج موجود في Shopify، فحذفه من الـ ERP وحده يعيده مع أول مزامنة. الأرشفة تخفيه من المتجر ومن قائمة المنتجات، وتبقي طلبياته وأرقامه. تجده في فلتر «مؤرشف»، وتعيده من تبويب «النشر».',
+                'Le produit est sur Shopify : le supprimer de l’ERP seul le ferait revenir à la synchro. L’archiver le retire de la boutique et de la liste, en gardant commandes et chiffres. Filtre « Archivé » ; restauration depuis « Publication ».',
+              ])
+            : t([
+                'المنتج غير منشور في Shopify. الحذف يمحوه من الـ ERP نهائياً، والطلبيات القديمة تبقى باسمه. يُطلب منك كلمة المرور الحساسة.',
+                'Produit absent de Shopify. La suppression l’efface de l’ERP ; les anciennes commandes gardent son nom. Mot de passe sensible demandé.',
+              ])}
+        </p>
+      </Modal>
       <Tabs
         value={tab}
         onChange={setTab}
@@ -368,12 +407,31 @@ function ProductTab({ p, f, set, reload }) {
               {f.collections.map((c) => (
                 <Badge key={c.id || c.title} tone="brand">
                   {c.title}
-                  <button type="button" onClick={() => set({ collections: f.collections.filter((x) => x !== c) })}>
+                  <button type="button" aria-label={t(['إزالة من المجموعة', 'Retirer de la collection'])} onClick={() => set({ collections: f.collections.filter((x) => x !== c) })}>
                     ✕
                   </button>
                 </Badge>
               ))}
             </div>
+            {f.collections
+              .map((c) => collections.data?.find((x) => x.id === c.id))
+              .filter((c) => c && c.in_menu === false)
+              .map((c) => (
+                <div key={c.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-warn/10 px-3 py-2 text-xs leading-6 text-sub">
+                  <span className="min-w-0 flex-1">
+                    {t(['مجموعة «{x}» ليست في القائمة الرئيسية للمتجر، فلا يجدها الزبون في الشريط العلوي.', 'La collection « {x} » n’est pas dans le menu principal : invisible dans la barre du site.'], { x: c.title })}
+                  </span>
+                  <Button
+                    size="sm"
+                    loading={busy === `menu:${c.id}`}
+                    onClick={() =>
+                      run(`menu:${c.id}`, () => api.post('/products/collections/menu', { id: c.id }, { project: p.project_id }), { success: t(['أُضيفت إلى قائمة المتجر', 'Ajoutée au menu de la boutique']) }).then((r) => r && collections.reload(true))
+                    }
+                  >
+                    {t(['أظهرها في القائمة', 'L’afficher dans le menu'])}
+                  </Button>
+                </div>
+              ))}
             <Select
               value=""
               onChange={(e) => {
@@ -381,7 +439,7 @@ function ProductTab({ p, f, set, reload }) {
                 if (c && !f.collections.some((x) => x.id === c.id)) set({ collections: [...f.collections, { id: c.id, title: c.title, handle: c.handle }] });
               }}
               placeholder={t(['أضف إلى مجموعة…', 'Ajouter à une collection…'])}
-              options={(collections.data || []).map((c) => ({ value: c.id, label: `${c.title} (${c.count})` }))}
+              options={(collections.data || []).map((c) => ({ value: c.id, label: `${c.title} (${c.count})${c.in_menu === false ? ` · ${t(['ليست في القائمة', 'hors menu'])}` : ''}` }))}
             />
             <Field label={t(['الوسوم (افصل بفاصلة)', 'Tags (séparés par virgule)'])}>
               <Input value={f.tags.join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} />

@@ -328,6 +328,35 @@ export async function collections(cfg) {
   return d.collections.nodes.map((c) => ({ id: c.id, title: c.title, handle: c.handle, count: c.productsCount?.count ?? 0 }));
 }
 
+// ——— قائمة المتجر الرئيسية (الشريط العلوي): مجموعة لا تظهر فيها لا يجدها الزبون ———
+const MENU_ITEM = 'id title type resourceId url tags';
+const MENU_ITEMS = `items { ${MENU_ITEM} items { ${MENU_ITEM} items { ${MENU_ITEM} } } }`;
+
+export async function mainMenu(cfg) {
+  const d = await gql(cfg, `{ menus(first: 25) { nodes { id title handle isDefault ${MENU_ITEMS} } } }`);
+  const menus = d.menus.nodes;
+  return menus.find((m) => m.handle === 'main-menu') || menus.find((m) => m.isDefault && m.handle !== 'footer') || null;
+}
+
+export const menuResourceIds = (items = []) => items.flatMap((i) => [i.resourceId, ...menuResourceIds(i.items)]).filter(Boolean);
+
+// menuUpdate يستبدل القائمة كلها: نعيد كل عنصر كما هو (بمعرّفه) ونضيف الجديد في آخرها
+const menuInput = (items = []) =>
+  items.map((i) => ({ id: i.id, title: i.title, type: i.type, tags: i.tags, ...(i.resourceId ? { resourceId: i.resourceId } : { url: i.url }), items: menuInput(i.items) }));
+
+export async function addCollectionToMenu(cfg, { id, title }) {
+  const menu = await mainMenu(cfg);
+  if (!menu) throw new IntegrationError('shopify', 'invalid', 'main_menu_not_found');
+  if (menuResourceIds(menu.items).includes(id)) return { menu: menu.title, added: false };
+  const d = await gql(cfg, 'mutation($id: ID!, $title: String!, $items: [MenuItemUpdateInput!]!) { menuUpdate(id: $id, title: $title, items: $items) { menu { id } userErrors { field message } } }', {
+    id: menu.id,
+    title: menu.title,
+    items: [...menuInput(menu.items), { title, type: 'COLLECTION', resourceId: id }],
+  });
+  userErrors(d.menuUpdate);
+  return { menu: menu.title, added: true };
+}
+
 export async function createCollection(cfg, { title, handle, descriptionHtml, seoTitle, seoDescription }) {
   const d = await gql(
     cfg,

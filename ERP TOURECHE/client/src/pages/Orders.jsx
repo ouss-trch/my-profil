@@ -10,6 +10,7 @@ import {
   MapPin,
   MessageSquare,
   Phone,
+  Pencil,
   PhoneOff,
   Plus,
   RefreshCw,
@@ -18,6 +19,7 @@ import {
   Star,
   Trash2,
   Truck,
+  Undo2,
   User,
   XCircle,
 } from 'lucide-react';
@@ -611,6 +613,8 @@ export function OrderDrawer({ id, onClose, onChanged }) {
   const [ship, setShip] = useState(false);
   const [cb, setCb] = useState(false);
   const [cancel, setCancel] = useState(false);
+  const [del, setDel] = useState(false);
+  const [money, setMoney] = useState(null);
   const [track, setTrack] = useState({ carrier: '', tracking: '' });
 
   const load = async () => {
@@ -625,6 +629,7 @@ export function OrderDrawer({ id, onClose, onChanged }) {
   useEffect(() => {
     setO(null);
     setEdit(null);
+    setMoney(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -637,6 +642,16 @@ export function OrderDrawer({ id, onClose, onChanged }) {
     if (r) changed();
   };
   const next = useMemo(() => (o ? (meta?.transitions?.[o.status] || []).filter((s) => s !== o.status) : []), [o, meta]);
+  // حالة يُضغط عليها بالخطأ تُصحَّح من أعلى اللوحة (أزرار المكالمة في الأسفل تبقى لمرحلة التأكيد)
+  const pending = o && ['new', 'no_answer', 'callback', 'abandoned'].includes(o.status);
+  const pickStatus = (s) => (s === 'callback' ? setCb(true) : s === 'cancelled' ? setCancel(true) : setStatus(s));
+  const saveMoney = async () => {
+    const r = await run('money', () => api.patch(`/orders/${o.id}`, { items: money.items, shipping_fee: Number(money.shipping_fee) || 0, discount: Number(money.discount) || 0 }));
+    if (r) {
+      setMoney(null);
+      changed();
+    }
+  };
   if (!id) return null;
 
   return (
@@ -696,18 +711,9 @@ export function OrderDrawer({ id, onClose, onChanged }) {
               </a>
             )}
             <span className="flex-1" />
-            <Button aria-label={t('c.delete')}
-              variant="ghost"
-              icon={Trash2}
-              onClick={() =>
-                run('del', () => api.del(`/orders/${o.id}`), { success: t(['حُذفت', 'Supprimée']) }).then((r) => {
-                  if (r) {
-                    onChanged?.();
-                    onClose();
-                  }
-                })
-              }
-            />
+            <Button variant="ghost" icon={Trash2} onClick={() => setDel(true)}>
+              {t('c.delete')}
+            </Button>
           </>
         )
       }
@@ -716,6 +722,21 @@ export function OrderDrawer({ id, onClose, onChanged }) {
       {!o && !error && <Loading />}
       {o && (
         <div className="space-y-4">
+          {!pending && next.length > 0 && (
+            <div className="rounded-lg border border-line bg-raised/50 px-3 py-2.5">
+              <div className="mb-2 flex items-center gap-1.5 text-xs text-sub">
+                <Undo2 className="h-3.5 w-3.5" />
+                {t(['تصحيح الحالة (إن ضغطت بالخطأ):', 'Corriger le statut (clic par erreur) :'])}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {next.map((s) => (
+                  <Button key={s} size="sm" loading={busy === `st:${s}`} onClick={() => pickStatus(s)}>
+                    {statusLabel(s)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
           {o.customer && (o.customer.previous > 0 || o.customer.blacklisted) && (
             <div className={cx('rounded-lg border px-3 py-2 text-sm', o.customer.risk === 'high' ? 'border-bad/40 bg-bad/5' : o.customer.risk === 'medium' ? 'border-warn/40 bg-warn/5' : 'border-good/40 bg-good/5')}>
               <div className="flex flex-wrap items-center gap-2">
@@ -821,7 +842,60 @@ export function OrderDrawer({ id, onClose, onChanged }) {
             )}
           </Card>
 
-          <Card title={t('c.products')} pad={false}>
+          <Card
+            title={t('c.products')}
+            pad={false}
+            actions={
+              !money &&
+              !o.tracking && (
+                <Button size="sm" icon={Pencil} onClick={() => setMoney({ items: o.items.map((i) => ({ ...i })), shipping_fee: o.shipping_fee ?? 0, discount: o.discount ?? 0 })}>
+                  {t(['تعديل الكمية والمبالغ', 'Modifier quantités et montants'])}
+                </Button>
+              )
+            }
+          >
+            {money ? (
+              <div className="space-y-3 p-4">
+                {money.items.map((i, k) => (
+                  <div key={k} className="grid gap-2 sm:grid-cols-[1fr_6rem_8rem] sm:items-end">
+                    <div className="min-w-0 text-sm">
+                      <div className="truncate font-medium">{i.title}</div>
+                      {i.variant && <div className="truncate text-xs text-muted">{i.variant}</div>}
+                    </div>
+                    <Field label={t(['الكمية', 'Quantité'])}>
+                      <Input type="number" min="1" max="999" value={i.qty} onChange={(e) => setMoney({ ...money, items: money.items.map((x, j) => (j === k ? { ...x, qty: e.target.value } : x)) })} />
+                    </Field>
+                    <Field label={t(['سعر القطعة (دج)', 'Prix unitaire (DA)'])}>
+                      <Input type="number" min="0" value={i.price} onChange={(e) => setMoney({ ...money, items: money.items.map((x, j) => (j === k ? { ...x, price: e.target.value } : x)) })} />
+                    </Field>
+                  </div>
+                ))}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Field label={t(['سعر التوصيل (دج)', 'Livraison (DA)'])}>
+                    <Input type="number" min="0" value={money.shipping_fee} onChange={(e) => setMoney({ ...money, shipping_fee: e.target.value })} />
+                  </Field>
+                  <Field label={t(['التخفيض (دج)', 'Remise (DA)'])}>
+                    <Input type="number" min="0" value={money.discount} onChange={(e) => setMoney({ ...money, discount: e.target.value })} />
+                  </Field>
+                </div>
+                <p className="text-sm">
+                  {t(['المجموع الجديد:', 'Nouveau total :'])}{' '}
+                  <b className="num">{da(money.items.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.qty) || 0), 0) - (Number(money.discount) || 0) + (Number(money.shipping_fee) || 0))}</b>
+                </p>
+                <p className="text-xs leading-5 text-muted">
+                  {t([
+                    'يُطلب منك كلمة المرور الحساسة. يتغيّر المبلغ في الـ ERP وفي الطرد الذي يُرسل لشركة التوصيل، أما طلبية Shopify فتبقى كما هي.',
+                    'Mot de passe sensible demandé. Le montant change dans l’ERP et sur le colis envoyé au transporteur ; la commande Shopify reste inchangée.',
+                  ])}
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="primary" loading={busy === 'money'} onClick={saveMoney}>
+                    {t('c.save')}
+                  </Button>
+                  <Button onClick={() => setMoney(null)}>{t('c.cancel')}</Button>
+                </div>
+              </div>
+            ) : (
             <table className="table">
               <tbody>
                 {o.items.map((i, k) => (
@@ -859,6 +933,7 @@ export function OrderDrawer({ id, onClose, onChanged }) {
                 </tr>
               </tbody>
             </table>
+            )}
           </Card>
 
           {(o.carrier || o.status === 'confirmed') && (
@@ -902,11 +977,11 @@ export function OrderDrawer({ id, onClose, onChanged }) {
 
           <ReturnCard order={o} onChanged={changed} />
 
-          {next.length > 0 && (
+          {pending && next.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-sub">{t(['تغيير الحالة يدوياً:', 'Changer le statut :'])}</span>
               {next.map((s) => (
-                <Button key={s} size="sm" loading={busy === `st:${s}`} onClick={() => setStatus(s)}>
+                <Button key={s} size="sm" loading={busy === `st:${s}`} onClick={() => pickStatus(s)}>
                   {statusLabel(s)}
                 </Button>
               ))}
@@ -957,6 +1032,50 @@ export function OrderDrawer({ id, onClose, onChanged }) {
           />
           <CallbackModal open={cb} onClose={() => setCb(false)} onSave={(at, n) => setStatus('callback', { callback_at: at, note: n })} />
           <CancelModal open={cancel} onClose={() => setCancel(false)} onSave={(reason, fake) => setStatus(fake ? 'fake' : 'cancelled', { cancel_reason: reason })} />
+          <Modal
+            open={del}
+            onClose={() => setDel(false)}
+            title={t(['حذف الطلبية {n}؟', 'Supprimer la commande {n} ?'], { n: o.shopify_name || o.ref })}
+            icon={Trash2}
+            footer={
+              <>
+                {(meta?.transitions?.[o.status] || []).includes('fake') && (
+                  <Button
+                    loading={busy === 'st:fake'}
+                    onClick={async () => {
+                      setDel(false);
+                      await setStatus('fake', { cancel_reason: t(['تجربة أو مكررة', 'Test ou doublon']) });
+                    }}
+                  >
+                    {t(['تعليمها مزيفة / تجربة', 'Marquer fausse / test'])}
+                  </Button>
+                )}
+                <Button
+                  variant="danger"
+                  icon={Trash2}
+                  loading={busy === 'del'}
+                  onClick={() =>
+                    run('del', () => api.del(`/orders/${o.id}`), { success: t(['حُذفت', 'Supprimée']) }).then((r) => {
+                      if (r) {
+                        setDel(false);
+                        onChanged?.();
+                        onClose();
+                      }
+                    })
+                  }
+                >
+                  {t(['حذف نهائي', 'Supprimer définitivement'])}
+                </Button>
+              </>
+            }
+          >
+            <p className="text-sm leading-7 text-sub">
+              {t([
+                'الحذف يمحو الطلبية وسجلها من الـ ERP نهائياً (بكلمة المرور الحساسة). طلبية تجريبية أو مكررة؟ الأفضل «مزيفة»: تخرج من الإحصائيات وتبقى في السجل. الحذف لا يمسّ طلبية Shopify.',
+                'La suppression efface la commande et son historique de l’ERP (mot de passe sensible). Test ou doublon ? Préférez « fausse » : hors statistiques mais conservée. Shopify n’est pas modifié.',
+              ])}
+            </p>
+          </Modal>
         </div>
       )}
     </Drawer>

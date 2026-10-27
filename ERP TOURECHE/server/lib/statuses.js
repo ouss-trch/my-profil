@@ -34,9 +34,10 @@ export const MANUAL = {
   new: ['no_answer', 'callback', 'confirmed', 'cancelled', 'fake'],
   no_answer: ['no_answer', 'callback', 'confirmed', 'cancelled', 'fake'],
   callback: ['no_answer', 'callback', 'confirmed', 'cancelled', 'fake'],
-  confirmed: ['new', 'shipped', 'cancelled'],
-  cancelled: ['new', 'confirmed'],
-  fake: ['new'],
+  // تأكيد أو إلغاء بالخطأ يُصحَّح: الزبون لم يرد، أو يُعاد الاتصال به
+  confirmed: ['new', 'no_answer', 'callback', 'shipped', 'cancelled'],
+  cancelled: ['new', 'no_answer', 'callback', 'confirmed'],
+  fake: ['new', 'no_answer', 'callback', 'cancelled'],
   shipped: ['in_transit', 'at_office', 'out_for_delivery', 'attempt_failed', 'delivered', 'returning', 'returned', 'confirmed'],
   in_transit: ['at_office', 'out_for_delivery', 'attempt_failed', 'delivered', 'returning', 'returned'],
   at_office: ['out_for_delivery', 'attempt_failed', 'delivered', 'returning', 'returned'],

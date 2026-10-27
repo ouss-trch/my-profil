@@ -137,8 +137,22 @@ function refreshScore(id) {
 }
 
 export function deleteProduct(id) {
+  // منتج موجود في Shopify يعود مع أول مزامنة: يُؤرشف بدل الحذف
+  if (getProduct(id).shopify_id) throw new HttpError(409, 'product_on_shopify_archive');
   const info = db.prepare('DELETE FROM products WHERE id = ?').run(id);
   if (!info.changes) throw new HttpError(404, 'product_not_found');
+}
+
+/** أرشفة: يختفي من المتجر (Shopify ARCHIVED) ومن قائمة المنتجات، ويبقى سجله وطلبياته */
+export async function archiveProduct(id) {
+  const p = getProduct(id);
+  const cfg = projectConfig(p.project_id);
+  if (p.shopify_id) {
+    if (!shopify.isConfigured(cfg)) throw new HttpError(400, 'shopify_not_configured');
+    await shopify.updateProduct(cfg, p.shopify_id, { status: 'ARCHIVED' });
+  }
+  db.prepare("UPDATE products SET stage = 'archived', shopify_status = ?, updated_at = ? WHERE id = ?").run(p.shopify_id ? 'ARCHIVED' : p.shopify_status, nowIso(), id);
+  return getProduct(id);
 }
 
 /** تحريك المخزون محلياً (للمشاريع دون Shopify أو للتعديل اليدوي) */

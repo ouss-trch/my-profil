@@ -85,7 +85,8 @@ export function createTest(projectId, input) {
         mode,
         mode === 'shopify' ? entryPath(input.entry_path, variants) : null,
         input.sticky === false ? 0 : 1,
-        ['orders', 'confirmed', 'delivered'].includes(input.goal) ? input.goal : 'delivered',
+        // صفحة الهبوط تُقاس بمعدل تحويلها (الطلبيات)؛ التأكيد والتسليم يأتيان بعد أيام ويتأثران بالاتصال والتوصيل
+        ['orders', 'confirmed', 'delivered'].includes(input.goal) ? input.goal : 'orders',
         validUrl(input.fallback_url),
         input.notes || null,
       );
