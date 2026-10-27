@@ -10,6 +10,7 @@ import { useApp } from '../components/ProjectContext.jsx';
 import AttributionNotice from '../components/AttributionNotice.jsx';
 import LandingPages from '../components/LandingPages.jsx';
 import TrafficCard from '../components/Traffic.jsx';
+import BrokenLinks from '../components/BrokenLinks.jsx';
 import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, cx, useAction } from '../components/ui.jsx';
 
 const KIND = {
@@ -129,6 +130,7 @@ export default function StorePages() {
       </div>
       <AttributionNotice health={data?.attribution} />
       <TrafficCard />
+      <BrokenLinks />
       <LandingPages />
 
       {loading && !data ? (

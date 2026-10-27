@@ -9,6 +9,7 @@ import * as assistant from '../services/assistant.js';
 import * as contacts from '../services/contacts.js';
 import * as pages from '../services/pages.js';
 import * as landing from '../services/landing.js';
+import * as links from '../services/links.js';
 import * as delivery from '../services/delivery.js';
 import * as collections from '../services/collections.js';
 import * as tracking from '../services/tracking.js';
@@ -335,6 +336,18 @@ pagesRouter.delete('/landing/leftovers/:suffix', requireRole('admin'), requireSe
   const out = await landing.removeLeftover(scope.id, String(req.params.suffix));
   audit(req, 'landing_leftover_removed', { projectId: scope.id, details: { suffix: out.suffix, template: out.template, redirects: out.redirects.map((r) => r.path) } });
   res.json({ ok: true });
+});
+
+// الروابط المكسورة (404) وتحويلها إلى صفحات حية
+pagesRouter.get('/broken-links', requireRole('admin', 'manager'), async (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  res.json(await links.brokenLinks(scope.id, { days: req.query.days }));
+});
+pagesRouter.post('/redirects', requireRole('admin'), requireSensitive, async (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const r = await links.fixLink(scope.id, { path: req.body.path, target: req.body.target });
+  audit(req, 'url_redirect_saved', { entity: 'redirect', projectId: scope.id, details: { path: r.path, target: r.target } });
+  res.json(r);
 });
 
 pagesRouter.patch('/:id', requireRole('admin', 'manager'), (req, res) => res.json(pages.updatePage(Number(req.params.id), req.body)));

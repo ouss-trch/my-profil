@@ -107,6 +107,7 @@ export function recordVisit(projectSlug, body, userAgent = '') {
        source = CASE WHEN source IS NULL OR (source IN ('internal','direct') AND excluded.source IS NOT NULL) THEN excluded.source ELSE source END,
        campaign = COALESCE(campaign, excluded.campaign),
        ab = COALESCE(ab, excluded.ab),
+       page_type = COALESCE(page_type, excluded.page_type),
        last_at = excluded.last_at`,
   ).run({
     project_id: project.id,
@@ -119,7 +120,7 @@ export function recordVisit(projectSlug, body, userAgent = '') {
     source,
     campaign: params.get('utm_campaign') ? String(params.get('utm_campaign')).slice(0, 120) : null,
     ab,
-    page_type: /^[a-z_/-]{1,30}$/.test(String(b.t || '')) ? b.t : null,
+    page_type: /^[a-z0-9_/-]{1,30}$/.test(String(b.t || '')) ? b.t : null,
     at,
   });
   return true;
