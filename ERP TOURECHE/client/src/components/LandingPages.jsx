@@ -365,6 +365,8 @@ function LandingModal({ item, base, layouts = [], onClose, onChanged }) {
   const { run, busy } = useAction();
   const [l, setL] = useState(item);
   const [slug, setSlug] = useState(item.slug);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const onStore = l.status === 'published' || (l.visuals || []).some((x) => x.shopify_url);
   const publicUrl = l.public_url || `${base || ''}/pages/${l.slug}`;
   const act = (key, fn, success) =>
     run(key, fn, { success }).then((r) => {
@@ -384,11 +386,9 @@ function LandingModal({ item, base, layouts = [], onClose, onChanged }) {
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <div className="flex gap-2">
-            {l.status !== 'published' && (
-              <Button variant="ghost" icon={Trash2} loading={busy === 'del'} onClick={() => act('del', () => api.del(`/pages/landing/${l.id}`), t(['حُذفت المسودة', 'Brouillon supprimé'])).then((r) => r && onClose())}>
-                {t('c.delete')}
-              </Button>
-            )}
+            <Button variant="ghost" icon={Trash2} onClick={() => setConfirmDel(true)}>
+              {t('c.delete')}
+            </Button>
             {l.status === 'published' && (
               <Button variant="ghost" icon={CloudOff} loading={busy === 'off'} onClick={() => act('off', () => api.post(`/pages/landing/${l.id}/unpublish`, {}), t(['سُحبت الصفحة من المتجر', 'Page retirée']))}>
                 {t(['سحب من المتجر', 'Retirer'])}
@@ -401,6 +401,44 @@ function LandingModal({ item, base, layouts = [], onClose, onChanged }) {
         </div>
       }
     >
+      <Modal
+        open={confirmDel}
+        onClose={() => setConfirmDel(false)}
+        size="sm"
+        icon={Trash2}
+        title={onStore ? t(['حذف الصفحة من الـ ERP ومن المتجر؟', 'Supprimer la page de l’ERP et de la boutique ?']) : t(['حذف هذه المسودة؟', 'Supprimer ce brouillon ?'])}
+        footer={
+          <>
+            <Button onClick={() => setConfirmDel(false)}>{t(['تراجع', 'Annuler'])}</Button>
+            <Button
+              variant="danger"
+              icon={Trash2}
+              loading={busy === 'del'}
+              onClick={() =>
+                run('del', () => api.del(`/pages/landing/${l.id}`), { success: onStore ? t(['حُذفت من الـ ERP ومن المتجر', 'Supprimée de l’ERP et de la boutique']) : t(['حُذفت المسودة', 'Brouillon supprimé']) }).then((r) => {
+                  if (!r) return;
+                  setConfirmDel(false);
+                  onChanged();
+                  onClose();
+                })
+              }
+            >
+              {onStore ? t(['نعم، احذفها من الاثنين', 'Oui, supprimer partout']) : t(['نعم، احذف', 'Oui, supprimer'])}
+            </Button>
+          </>
+        }
+      >
+        {onStore ? (
+          <ul className="list-disc space-y-1.5 ps-5 text-sm leading-6 text-sub">
+            <li>{t(['تُحذف من المتجر: قالب الصفحة، رابطها', 'Supprimés de la boutique : le modèle, le lien'])} <span className="ltr">/pages/{l.slug}</span>{t(['، وصورها المرفوعة.', ' et ses visuels.'])}</li>
+            <li>{t(['إن كانت نسخة في اختبار A/B تُعطَّل، ويتوقف الاختبار إن لم تبقَ فيه صفحتان.', 'Si elle est une version d’un test A/B, elle est désactivée ; le test s’arrête s’il reste moins de deux pages.'])}</li>
+            <li>{t(['الطلبيات التي جاءت منها وزياراتها تبقى في الأرقام.', 'Ses commandes et ses visites restent dans les chiffres.'])}</li>
+            <li>{t(['لإيقافها مؤقتاً دون حذف: «سحب من المتجر».', 'Pour l’arrêter sans la supprimer : « Retirer ».'])}</li>
+          </ul>
+        ) : (
+          <p className="text-sm text-sub">{t(['المسودة لم تُنشر، فلا شيء في المتجر.', 'Le brouillon n’a pas été publié : rien dans la boutique.'])}</p>
+        )}
+      </Modal>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Badge tone={STATUS[l.status][2]}>{t(STATUS[l.status])}</Badge>
@@ -449,6 +487,49 @@ function LandingModal({ item, base, layouts = [], onClose, onChanged }) {
   );
 }
 
+/** بقايا صفحات هبوط في المتجر لا يعرفها الـ ERP، وصفحات منشورة اختفى قالبها: الـ ERP هو المرجع */
+function StoreCheck({ onChanged }) {
+  const { t } = useI18n();
+  const { data, reload } = useApi('/pages/landing/store-check');
+  const { run, busy } = useAction();
+  if (!data?.configured || (!data.leftovers.length && !data.missing.length)) return null;
+  return (
+    <div className="mb-3 space-y-2 rounded-lg border border-warn/40 bg-warn/5 p-3 text-sm">
+      {data.leftovers.length > 0 && (
+        <>
+          <p className="flex items-start gap-2 font-medium text-ink">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            {t(['في المتجر صفحات هبوط لم تعد في الـ ERP (بقايا صفحات حُذفت):', 'Des landing pages restent dans la boutique sans exister dans l’ERP :'])}
+          </p>
+          <ul className="space-y-1.5">
+            {data.leftovers.map((x) => (
+              <li key={x.suffix} className="flex flex-wrap items-center gap-2">
+                <span className="ltr text-xs text-sub">{[...x.redirects.map((r) => r.path), x.template].filter(Boolean).join(' · ')}</span>
+                {x.erp && <Badge tone="warn">{t(['مسحوبة في الـ ERP', 'Retirée dans l’ERP'])}</Badge>}
+                <Button
+                  size="sm"
+                  variant="danger"
+                  icon={Trash2}
+                  loading={busy === x.suffix}
+                  onClick={() => run(x.suffix, () => api.del(`/pages/landing/leftovers/${encodeURIComponent(x.suffix)}`), { success: t(['حُذفت من المتجر', 'Supprimée de la boutique']) }).then((r) => r && (reload(true), onChanged()))}
+                >
+                  {t(['احذفها من المتجر', 'Supprimer de la boutique'])}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {data.missing.length > 0 && (
+        <p className="text-xs leading-6 text-sub">
+          {t(['منشورة في الـ ERP لكن قالبها غير موجود في المتجر (حُذف من Shopify أو تغيّر القالب): افتحها واضغط «إعادة النشر»:', 'Publiées dans l’ERP mais absentes du thème (supprimées ou thème changé) : ouvrez-les et « Republier » :'])}{' '}
+          <b className="text-ink">{data.missing.map((x) => x.angle).join('، ')}</b>
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function LandingPages() {
   const { t } = useI18n();
   const { isAll } = useApp();
@@ -469,6 +550,7 @@ export default function LandingPages() {
           </Button>
         }
       >
+        {!isAll && <StoreCheck onChanged={() => reload(true)} />}
         {loading && !data ? (
           <Loading />
         ) : error ? (

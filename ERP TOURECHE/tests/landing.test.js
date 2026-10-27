@@ -60,6 +60,7 @@ const files = {
   'layout/theme.liquid': "<!doctype html><html><head>\n  {% render 'erp-split' %} %}\n  {{ content_for_header }}\n</head><body>\n  {% sections 'header-group' %}\n  <main>{{ content_for_layout }}</main>\n  {% sections 'footer-group' %}\n  {% render 'whatsapp-button' %}\n</body></html>",
 };
 const redirects = [];
+const shopFiles = [];
 const denied = () => ({ errors: [{ message: 'Access denied', extensions: { code: 'ACCESS_DENIED' } }] });
 globalThis.fetch = async (url, init) => {
   const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -71,7 +72,11 @@ globalThis.fetch = async (url, init) => {
   const { query, variables } = JSON.parse(init.body);
   if (query.includes('currentAppInstallation')) return json({ data: { currentAppInstallation: { accessScopes: granted.map((handle) => ({ handle })) } } });
   if (query.includes('themes(first: 1')) return json({ data: { themes: { nodes: [{ id: 'gid://shopify/OnlineStoreTheme/1', name: 'sou9na' }] } } });
-  if (query.includes('theme(id:')) return json({ data: { theme: { files: { nodes: variables.f.filter((f) => f in files).map((filename) => ({ filename, body: { content: files[filename] } })) } } } });
+  if (query.includes('theme(id:')) {
+    const match = (pat) => (pat.includes('*') ? new RegExp(`^${pat.replace(/[.]/g, '\\.').replace(/\*/g, '.*')}$`) : { test: (f) => f === pat });
+    const names = Object.keys(files).filter((f) => variables.f.some((pat) => match(pat).test(f)));
+    return json({ data: { theme: { files: { nodes: names.map((filename) => ({ filename, body: { content: files[filename] } })) } } } });
+  }
   if (query.includes('themeFilesUpsert')) {
     for (const f of variables.files) files[f.filename] = f.body.value;
     return json({ data: { themeFilesUpsert: { upsertedThemeFiles: variables.files.map((f) => ({ filename: f.filename })), userErrors: [] } } });
@@ -80,7 +85,12 @@ globalThis.fetch = async (url, init) => {
     for (const f of variables.f) delete files[f];
     return json({ data: { themeFilesDelete: { deletedThemeFiles: variables.f.map((filename) => ({ filename })), userErrors: [] } } });
   }
-  if (query.includes('urlRedirects(')) return json({ data: { urlRedirects: { nodes: redirects.filter((r) => variables.q === `path:${r.path}`) } } });
+  if (query.includes('urlRedirects(')) return json({ data: { urlRedirects: { nodes: redirects.filter((r) => !variables?.q || variables.q === `path:${r.path}`) } } });
+  if (query.includes('files(first')) return json({ data: { files: { nodes: shopFiles.filter((f) => variables.q.includes(`"${f.filename}"`)) } } });
+  if (query.includes('fileDelete')) {
+    for (const id of variables.ids) shopFiles.splice(shopFiles.findIndex((f) => f.id === id), 1);
+    return json({ data: { fileDelete: { deletedFileIds: variables.ids, userErrors: [] } } });
+  }
   if (query.includes('urlRedirectCreate')) {
     if (!granted.includes('write_online_store_navigation')) return json(denied());
     const r = { id: `gid://shopify/UrlRedirect/${redirects.length + 1}`, ...variables.r };
@@ -144,8 +154,8 @@ test('landing: Claude writes by the rules, with the store’s real offers and po
   // نفس الزاوية مرة ثانية: رابط مختلف
   const again = await landing.generateLanding(project.id, { product_id: product.id, angle: 'هدية', framework: 'aida' });
   assert.equal(again.slug, 'thermos-mickey-cadeau-2');
-  assert.throws(() => landing.deleteLanding(999999), /landing_not_found/);
-  landing.deleteLanding(again.id);
+  await assert.rejects(landing.deleteLanding(999999), /landing_not_found/);
+  await landing.deleteLanding(again.id);
 });
 
 test('landing: publish = layout without header/footer + section + product template with the same form and offers + /pages redirect', async () => {
@@ -202,4 +212,57 @@ test('landing: a missing Shopify permission is named (redirects need write_onlin
   await assert.rejects(landing.publishLanding(l.id), (e) => e.code === 'landing_scopes_missing:write_online_store_navigation');
   granted = ['write_themes', 'write_online_store_navigation'];
   assert.throws(() => landing.buildTemplate(l.copy, { sections: { main: { type: 'other' } } }), /landing_theme_unsupported/);
+});
+
+test('landing: deleting in the ERP deletes it from the store too (template, link, uploaded visuals, pinned page, A/B version)', async () => {
+  const { createTest, getTest } = await import('../server/services/splits.js');
+  const l = await landing.generateLanding(project.id, { product_id: product.id, angle: 'المشكلة والحل', framework: 'pas' });
+  await landing.publishLanding(l.id);
+  const target = `/products/thermos-mickey-320?view=lp-${l.slug}`;
+  assert.ok(files[`templates/product.lp-${l.slug}.json`]);
+  assert.ok(redirects.some((r) => r.target === target));
+  // صورة وصفية رُفعت سابقاً (قبل حفظ معرّف الملف): تُعرف من اسمها في رابطها
+  shopFiles.push({ id: 'gid://shopify/MediaImage/77', filename: `lp-${l.slug}-v1.png` });
+  db.prepare('UPDATE landing_pages SET visuals = ? WHERE id = ?').run(JSON.stringify([{ id: 'v1', kind: 'hero', headline: 'x', points: [], scene: 'y', approved: true, image: null, shopify_url: `https://cdn.shopify.com/s/files/1/files/lp-${l.slug}-v1.png?v=1` }]), l.id);
+  const t = createTest(project.id, {
+    name: 'two pages',
+    variants: [
+      { url: 'https://souqnna.example/products/thermos-mickey-320', weight: 1 },
+      { url: `https://souqnna.example${target}`, weight: 1 },
+    ],
+  });
+  db.prepare("UPDATE split_tests SET status = 'running' WHERE id = ?").run(t.id);
+
+  const out = await landing.deleteLanding(l.id);
+  assert.deepEqual(out.removed, ['redirect', 'template', 'files']);
+  assert.equal(files[`templates/product.lp-${l.slug}.json`], undefined);
+  assert.ok(!redirects.some((r) => r.target === target));
+  assert.equal(shopFiles.length, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM landing_pages WHERE id = ?').get(l.id).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM store_pages WHERE url LIKE ?').get(`%view=lp-${l.slug}%`).n, 0);
+  // الاختبار لم يبقَ فيه إلا صفحة المنتج: النسخة معطّلة والاختبار متوقف
+  const after = getTest(t.id);
+  assert.equal(after.variants.find((v) => v.label === 'B').active, false);
+  assert.equal(after.status, 'paused');
+  assert.deepEqual(out.tests, { tests: 1, paused: ['two pages'] });
+});
+
+test('landing: the store check lists leftovers the ERP no longer knows and removes them on demand', async () => {
+  // بقايا من صفحة حُذفت قبل هذا الإصلاح: قالب وتحويل في المتجر، لا صفحة في الـ ERP
+  files['templates/product.lp-old-quotidien.json'] = '{}';
+  redirects.push({ id: 'gid://shopify/UrlRedirect/90', path: '/pages/old-quotidien', target: '/products/thermos-mickey-320?view=lp-old-quotidien' });
+  const check = await landing.storeCheck(project.id);
+  const left = check.leftovers.find((x) => x.suffix === 'lp-old-quotidien');
+  assert.deepEqual(left, { suffix: 'lp-old-quotidien', template: 'templates/product.lp-old-quotidien.json', redirects: [{ id: 'gid://shopify/UrlRedirect/90', path: '/pages/old-quotidien' }], erp: null });
+  // الصفحة المسحوبة (unpublished) ليست في المتجر ولا تُعدّ بقايا
+  assert.ok(!check.leftovers.some((x) => x.suffix === 'lp-thermos-mickey-cadeau'));
+  await landing.removeLeftover(project.id, 'lp-old-quotidien');
+  assert.equal(files['templates/product.lp-old-quotidien.json'], undefined);
+  assert.ok(!redirects.some((r) => r.path === '/pages/old-quotidien'));
+  await assert.rejects(landing.removeLeftover(project.id, 'lp-old-quotidien'), /leftover_not_found/);
+  // صفحة منشورة اختفى قالبها من المتجر: تظهر «ناقصة» لإعادة نشرها
+  const [l] = landing.listLandings([project.id]).filter((x) => x.slug === 'thermos-mickey-cadeau');
+  await landing.publishLanding(l.id);
+  delete files['templates/product.lp-thermos-mickey-cadeau.json'];
+  assert.deepEqual((await landing.storeCheck(project.id)).missing.map((x) => x.slug), ['thermos-mickey-cadeau']);
 });

@@ -160,6 +160,39 @@ export function updateTest(id, input) {
   return after;
 }
 
+/**
+ * صفحة حُذفت (صفحة هبوط ‎?view=…‎): تُعطَّل نسختها في الاختبارات غير المنتهية حتى لا يُرسل زوار الإعلان إلى صفحة غير موجودة؛
+ * اختبار جارٍ بقيت له أقل من نسختين يتوقف مؤقتاً. يُرجع عدد الاختبارات المتأثرة وأسماء الموقوفة.
+ */
+export function detachPage(projectId, view) {
+  const v = String(view || '').toLowerCase();
+  const rows = db
+    .prepare("SELECT sv.id, sv.test_id, sv.url FROM split_variants sv JOIN split_tests t ON t.id = sv.test_id WHERE t.project_id = ? AND t.status != 'ended' AND sv.active = 1")
+    .all(projectId)
+    .filter((x) => {
+      try {
+        return (new URL(x.url, 'https://store.invalid').searchParams.get('view') || '').toLowerCase() === v;
+      } catch {
+        return false;
+      }
+    });
+  const touched = new Set(rows.map((x) => x.test_id));
+  const paused = [];
+  db.transaction(() => {
+    for (const x of rows) db.prepare('UPDATE split_variants SET active = 0 WHERE id = ?').run(x.id);
+    for (const id of touched) {
+      const t = db.prepare('SELECT name, status FROM split_tests WHERE id = ?').get(id);
+      const live = db.prepare('SELECT COUNT(*) AS n FROM split_variants WHERE test_id = ? AND active = 1 AND weight > 0').get(id).n;
+      if (t.status === 'running' && live < 2) {
+        db.prepare("UPDATE split_tests SET status = 'paused' WHERE id = ?").run(id);
+        paused.push(t.name);
+      }
+    }
+  })();
+  if (touched.size) syncShopifyQuiet(projectId);
+  return { tests: touched.size, paused };
+}
+
 export function deleteTest(id) {
   const t = getTest(id);
   db.prepare('DELETE FROM split_tests WHERE id = ?').run(id);

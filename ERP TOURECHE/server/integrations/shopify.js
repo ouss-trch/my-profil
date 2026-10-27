@@ -609,3 +609,31 @@ export async function deleteUrlRedirect(cfg, id) {
   userErrors(d.urlRedirectDelete);
   return d.urlRedirectDelete.deletedUrlRedirectId;
 }
+
+/** كل التحويلات (حتى 250) — لإيجاد بقايا صفحات هبوط حُذفت من الـ ERP */
+export async function listUrlRedirects(cfg) {
+  const d = await gql(cfg, '{ urlRedirects(first: 250) { nodes { id path target } } }');
+  return d.urlRedirects.nodes;
+}
+
+/** أسماء ملفات القالب بنمط (مثل ‎templates/product.lp-*‎) */
+export async function themeFileNames(cfg, themeId, pattern) {
+  const d = await gql(cfg, 'query($id: ID!, $f: [String!]) { theme(id: $id) { files(first: 250, filenames: $f) { nodes { filename } } } }', { id: themeId, f: [pattern] });
+  return (d.theme?.files?.nodes || []).map((n) => n.filename);
+}
+
+/** ملفات «Fichiers» بأسمائها الدقيقة (اسم الملف من آخر رابطه على CDN) */
+export async function findFilesByName(cfg, names) {
+  const list = [...new Set(names.filter(Boolean))];
+  if (!list.length) return [];
+  const q = list.map((n) => `filename:"${String(n).replace(/["\\]/g, '')}"`).join(' OR ');
+  const d = await gql(cfg, 'query($q: String!) { files(first: 50, query: $q) { nodes { id ... on MediaImage { image { url } } } } }', { q });
+  return d.files.nodes.filter((f) => f?.id);
+}
+
+export async function deleteFiles(cfg, ids) {
+  if (!ids.length) return [];
+  const d = await gql(cfg, 'mutation($ids: [ID!]!) { fileDelete(fileIds: $ids) { deletedFileIds userErrors { field message } } }', { ids });
+  userErrors(d.fileDelete);
+  return d.fileDelete.deletedFileIds || [];
+}

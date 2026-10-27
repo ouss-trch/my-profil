@@ -10,6 +10,7 @@ import { getProject, inList } from './projects.js';
 import { deliveryFacts, getDelivery } from './delivery.js';
 import { addPages, storeBase } from './pages.js';
 import { metricsByPage, pageKey } from './tracking.js';
+import { detachPage } from './splits.js';
 
 /**
  * صفحات الهبوط: منتج واحد + زاوية تسويقية + إطار كتابة (AIDA، PAS…) → صفحة بيع دون قائمة ولا تذييل،
@@ -315,7 +316,8 @@ function uniqueSlug(projectId, base, ignoreId = 0) {
   return slug;
 }
 
-const hydrate = (r) => (r ? { ...r, copy: parseJson(r.copy, {}), visuals: parseJson(r.visuals, []) } : null);
+// النص يُطبَّع عند القراءة: صفحة قديمة (قبل أقسام الزوايا) أو ناقصة تُعرض وتُنشر دون أن تنكسر الواجهة
+const hydrate = (r) => (r ? { ...r, copy: cleanCopy(parseJson(r.copy, {})), visuals: parseJson(r.visuals, []) } : null);
 
 export function getLanding(id) {
   const r = hydrate(db.prepare('SELECT l.*, p.title AS product_title, p.handle AS product_handle FROM landing_pages l JOIN products p ON p.id = l.product_id WHERE l.id = ?').get(id));
@@ -534,7 +536,7 @@ async function uploadVisuals(cfg, l, title) {
       mimeType: ext === 'jpg' ? 'image/jpeg' : `image/${ext}`,
       alt: [title, x.headline].filter(Boolean).join(' · '),
     });
-    list[i] = { ...x, shopify_url: up.url, width: up.width, height: up.height };
+    list[i] = { ...x, shopify_url: up.url, shopify_file_id: up.id || null, width: up.width, height: up.height };
     saveVisuals(l.id, list); // بعد كل صورة: فشلٌ في الوسط لا يعيد رفع ما نجح
   }
   return list;
@@ -1019,6 +1021,7 @@ export async function publishLanding(id) {
   const target = `/products/${p.handle}?view=${suffix}`;
   const needed = l.visuals.some((x) => x.approved && x.image && !x.shopify_url) ? [...LANDING_SCOPES, 'write_files'] : LANDING_SCOPES;
   let redirect;
+  let written = null;
   try {
     const { theme, tpl } = await mainTemplate(cfg);
     const [layoutFile] = await shopify.themeFiles(cfg, theme.id, ['layout/theme.liquid']);
@@ -1030,10 +1033,14 @@ export async function publishLanding(id) {
       { filename: 'sections/erp-lp.liquid', content: sectionLiquid() },
       { filename: `templates/product.${suffix}.json`, content: JSON.stringify(template, null, 2) },
     ]);
+    written = { themeId: theme.id, file: `templates/product.${suffix}.json` };
     // صفحة Shopify حقيقية بنفس الاسم تمنع التحويل: Shopify لا يحوّل رابطاً موجوداً
     const existing = await shopify.findUrlRedirect(cfg, publicPath);
     redirect = existing ? await shopify.updateUrlRedirect(cfg, existing.id, publicPath, target) : await shopify.createUrlRedirect(cfg, publicPath, target);
   } catch (e) {
+    // نشر أول فشل بعد كتابة القالب (إذن التحويلات ناقص مثلاً): يُحذف القالب حتى لا تبقى صفحة نصف منشورة في المتجر.
+    // إعادة نشر صفحة منشورة لا تُلمس: قالبها السابق يعمل
+    if (written && l.status !== 'published') await shopify.deleteThemeFiles(cfg, written.themeId, [written.file]).catch(() => null);
     throw await scopesError(cfg, e, needed);
   }
   db.prepare("UPDATE landing_pages SET status = 'published', template_suffix = ?, redirect_id = ?, public_path = ?, target_url = ?, published_at = ?, updated_at = ? WHERE id = ?").run(
@@ -1051,16 +1058,47 @@ export async function publishLanding(id) {
   return getLanding(id);
 }
 
-/** سحب الصفحة: حذف التحويل وملف القالب (النصوص تبقى في الـ ERP لإعادة النشر) */
+/**
+ * إزالة الصفحة من المتجر: التحويل ‎/pages/<slug>‎ (بمعرّفه أو بمساره)، ملف القالب، و(عند الحذف) صورها في «Fichiers».
+ * كل خطوة تُبلَّغ إن فشلت: كان فشل حذف القالب يُبتلع فتبقى الصفحة في المتجر وهي محذوفة من الـ ERP.
+ */
+async function removeFromStore(cfg, l, { files = false } = {}) {
+  const removed = [];
+  const redirect = l.redirect_id ? { id: l.redirect_id } : l.public_path ? await shopify.findUrlRedirect(cfg, l.public_path) : null;
+  if (redirect) {
+    const gone = await shopify.deleteUrlRedirect(cfg, redirect.id).catch((e) => (/not.?found|does not exist/i.test(e.message) ? null : Promise.reject(e)));
+    if (gone) removed.push('redirect');
+  }
+  const theme = await shopify.mainTheme(cfg);
+  const name = `templates/product.${l.template_suffix || `lp-${l.slug}`}.json`;
+  if (theme && (await shopify.themeFileNames(cfg, theme.id, name)).includes(name)) {
+    await shopify.deleteThemeFiles(cfg, theme.id, [name]);
+    removed.push('template');
+  }
+  if (files) {
+    const uploaded = l.visuals.filter((x) => x.shopify_url);
+    const names = uploaded.map((x) => {
+      try {
+        return decodeURIComponent(new URL(x.shopify_url).pathname.split('/').pop());
+      } catch {
+        return null;
+      }
+    });
+    const ids = [...new Set([...uploaded.map((x) => x.shopify_file_id).filter(Boolean), ...(await shopify.findFilesByName(cfg, names)).map((f) => f.id)])];
+    if (ids.length) {
+      await shopify.deleteFiles(cfg, ids);
+      removed.push('files');
+    }
+  }
+  return removed;
+}
+
+/** سحب الصفحة: حذف التحويل وملف القالب (النصوص والصور تبقى في الـ ERP لإعادة النشر) */
 export async function unpublishLanding(id) {
   const l = getLanding(id);
   const cfg = projectConfig(l.project_id);
   try {
-    if (l.redirect_id) await shopify.deleteUrlRedirect(cfg, l.redirect_id).catch((e) => (/not.?found|does not exist/i.test(e.message) ? null : Promise.reject(e)));
-    if (l.template_suffix) {
-      const theme = await shopify.mainTheme(cfg);
-      if (theme) await shopify.deleteThemeFiles(cfg, theme.id, [`templates/product.${l.template_suffix}.json`]).catch(() => null);
-    }
+    await removeFromStore(cfg, l);
   } catch (e) {
     throw await scopesError(cfg, e);
   }
@@ -1068,9 +1106,82 @@ export async function unpublishLanding(id) {
   return getLanding(id);
 }
 
-export function deleteLanding(id) {
+/**
+ * الحذف: الـ ERP هو المرجع — تُحذف الصفحة من المتجر أيضاً (القالب، الرابط، صورها المرفوعة)، وتُزال من «صفحات المتجر»،
+ * وتُعطَّل نسختها في اختبارات A/B. الطلبيات وزياراتها تبقى بأرقامها.
+ */
+export async function deleteLanding(id) {
   const l = getLanding(id);
-  if (l.status === 'published') throw badRequest('landing_unpublish_first');
+  const cfg = projectConfig(l.project_id);
+  const onStore = l.status === 'published' || l.redirect_id || l.visuals.some((x) => x.shopify_url);
+  let removed = [];
+  if (onStore && shopify.isConfigured(cfg)) {
+    try {
+      removed = await removeFromStore(cfg, l, { files: true });
+    } catch (e) {
+      throw await scopesError(cfg, e, l.visuals.some((x) => x.shopify_url) ? [...LANDING_SCOPES, 'write_files'] : LANDING_SCOPES);
+    }
+  }
+  const tests = detachPage(l.project_id, `lp-${l.slug}`);
+  const base = storeBase(l.project_id);
+  if (base && l.target_url) {
+    try {
+      db.prepare('DELETE FROM store_pages WHERE project_id = ? AND url = ?').run(l.project_id, new URL(`${base}${l.target_url}`).href);
+    } catch {
+      /* رابط غير صالح: لا صفحة مثبتة له */
+    }
+  }
   db.prepare('DELETE FROM landing_pages WHERE id = ?').run(id);
-  return l;
+  return { ...l, removed, tests };
+}
+
+/**
+ * التطابق بين الـ ERP والمتجر: قوالب ‎lp-…‎ وتحويلات ‎?view=lp-…‎ في المتجر لا تقابلها صفحة منشورة في الـ ERP (بقايا)،
+ * وصفحات منشورة في الـ ERP اختفى قالبها من المتجر.
+ */
+export async function storeCheck(projectId) {
+  const cfg = projectConfig(projectId);
+  if (!shopify.isConfigured(cfg)) return { configured: false, leftovers: [], missing: [] };
+  const theme = await shopify.mainTheme(cfg);
+  const templates = theme ? await shopify.themeFileNames(cfg, theme.id, 'templates/product.lp-*') : [];
+  const redirects = (await shopify.listUrlRedirects(cfg)).filter((r) => /[?&]view=lp-/i.test(r.target));
+  const rows = db.prepare('SELECT id, slug, angle, status, template_suffix FROM landing_pages WHERE project_id = ?').all(projectId);
+  const published = new Map(rows.filter((r) => r.status === 'published').map((r) => [(r.template_suffix || `lp-${r.slug}`).toLowerCase(), r]));
+  const byView = new Map(rows.map((r) => [(r.template_suffix || `lp-${r.slug}`).toLowerCase(), r]));
+  const leftovers = new Map();
+  const entry = (suffix) => leftovers.get(suffix) || leftovers.set(suffix, { suffix, template: null, redirects: [], erp: byView.get(suffix) ? { id: byView.get(suffix).id, angle: byView.get(suffix).angle, status: byView.get(suffix).status } : null }).get(suffix);
+  for (const f of templates) {
+    const suffix = f.replace(/^templates\/product\./, '').replace(/\.json$/, '').toLowerCase();
+    if (!published.has(suffix)) entry(suffix).template = f;
+  }
+  for (const r of redirects) {
+    let suffix = '';
+    try {
+      suffix = (new URL(r.target, 'https://store.invalid').searchParams.get('view') || '').toLowerCase();
+    } catch {
+      continue;
+    }
+    if (suffix && !published.has(suffix)) entry(suffix).redirects.push({ id: r.id, path: r.path });
+  }
+  const missing = [...published.entries()].filter(([suffix]) => !templates.some((f) => f.toLowerCase() === `templates/product.${suffix}.json`)).map(([, r]) => ({ id: r.id, slug: r.slug, angle: r.angle }));
+  return { configured: true, theme: theme?.name || null, leftovers: [...leftovers.values()], missing };
+}
+
+/** حذف بقايا صفحة هبوط من المتجر (قالبها وتحويلاتها) — لا تمسّ أي صفحة منشورة في الـ ERP */
+export async function removeLeftover(projectId, suffix) {
+  const check = await storeCheck(projectId);
+  const item = check.leftovers.find((x) => x.suffix === String(suffix || '').toLowerCase());
+  if (!item) throw new HttpError(404, 'leftover_not_found');
+  const cfg = projectConfig(projectId);
+  try {
+    for (const r of item.redirects) await shopify.deleteUrlRedirect(cfg, r.id);
+    if (item.template) {
+      const theme = await shopify.mainTheme(cfg);
+      await shopify.deleteThemeFiles(cfg, theme.id, [item.template]);
+    }
+  } catch (e) {
+    throw await scopesError(cfg, e);
+  }
+  detachPage(projectId, item.suffix);
+  return item;
 }

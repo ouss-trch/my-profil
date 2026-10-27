@@ -320,9 +320,20 @@ pagesRouter.post('/landing/:id/unpublish', requireRole('admin'), requireSensitiv
   res.json(out);
 });
 
-pagesRouter.delete('/landing/:id', requireRole('admin'), requireSensitive, (req, res) => {
-  const out = landing.deleteLanding(Number(req.params.id));
-  audit(req, 'landing_deleted', { projectId: out.project_id, details: { id: out.id, slug: out.slug } });
+// الحذف من الـ ERP يحذف من المتجر أيضاً (القالب، الرابط، الصور)؛ «سحب من المتجر» وحده يبقيها في الـ ERP
+pagesRouter.delete('/landing/:id', requireRole('admin'), requireSensitive, async (req, res) => {
+  const out = await landing.deleteLanding(Number(req.params.id));
+  audit(req, 'landing_deleted', { projectId: out.project_id, details: { id: out.id, slug: out.slug, removed: out.removed, tests: out.tests } });
+  res.json({ ok: true, removed: out.removed, tests: out.tests });
+});
+
+// تطابق الـ ERP والمتجر: بقايا صفحات هبوط في Shopify لم تعد في الـ ERP، وصفحات منشورة اختفى قالبها
+pagesRouter.get('/landing/store-check', async (req, res) => res.json(await landing.storeCheck(projectScope(req, { allowAll: false }).id)));
+
+pagesRouter.delete('/landing/leftovers/:suffix', requireRole('admin'), requireSensitive, async (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const out = await landing.removeLeftover(scope.id, String(req.params.suffix));
+  audit(req, 'landing_leftover_removed', { projectId: scope.id, details: { suffix: out.suffix, template: out.template, redirects: out.redirects.map((r) => r.path) } });
   res.json({ ok: true });
 });
 
