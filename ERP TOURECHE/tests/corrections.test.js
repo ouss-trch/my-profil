@@ -99,3 +99,13 @@ test('menu: a collection missing from the main menu is appended, the rest kept a
   assert.deepEqual(await addCollectionToMenu(cfg, { id: 'gid://shopify/Collection/4', title: 'إكسسوارات' }), { menu: 'Main menu', added: false });
   assert.equal(calls.filter((c) => c.query.includes('menuUpdate')).length, before);
 });
+
+test('orders: the page an order came from (landing angle, product page, A/B variant)', async () => {
+  const { pageOf } = await import('../server/services/orders.js');
+  const angles = new Map([['thermos-cadeau', 'هدية']]);
+  assert.deepEqual(pageOf('https://souqnna.com/products/t?view=lp-thermos-cadeau&variant=1', angles), { kind: 'landing', slug: 'thermos-cadeau', label: 'هدية', test: null });
+  assert.deepEqual(pageOf('https://souqnna.com/fr/products/t?erp_v=thermos.A&utm_content=thermos-a', angles), { kind: 'product', label: null, test: { slug: 'thermos', label: 'A' } });
+  assert.equal(pageOf('https://souqnna.com/products/t?view=lp-new&erp_v=thermos.C', angles).label, 'new');
+  assert.equal(pageOf(null), null);
+  assert.equal(pageOf('%%bad').kind, 'page');
+});

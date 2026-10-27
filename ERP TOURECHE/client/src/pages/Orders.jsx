@@ -200,6 +200,7 @@ export default function Orders() {
                   <th>{t(['الزبون', 'Client'])}</th>
                   <th>{t('c.wilaya')}</th>
                   <th>{t('c.products')}</th>
+                  <th>{t(['الصفحة', 'Page'])}</th>
                   <th className="text-end">{t('c.total')}</th>
                   <th>{t('c.status')}</th>
                   <th>{t('c.carrier')}</th>
@@ -245,6 +246,9 @@ export default function Orders() {
                     </td>
                     <td className="max-w-[16rem] truncate text-xs" title={itemsText(o.items)}>
                       {itemsText(o.items)}
+                    </td>
+                    <td className="max-w-[11rem] text-xs">
+                      <PageTag page={o.page} />
                     </td>
                     <td className="num text-end font-medium">{da(o.total)}</td>
                     <td>
@@ -600,6 +604,25 @@ function BulkShipModal({ open, orders, onClose }) {
   );
 }
 
+/** الصفحة التي جاءت منها الطلبية: صفحة هبوط باسم زاويتها، أو صفحة المنتج، ونسخة اختبار A/B إن وُجدت */
+export function PageTag({ page }) {
+  const { t } = useI18n();
+  if (!page) return <span className="text-muted">—</span>;
+  const label = page.kind === 'product' ? t(['صفحة المنتج', 'Page produit']) : page.label;
+  return (
+    <span className="block min-w-0">
+      <span className={cx('block truncate', page.kind === 'landing' ? 'font-medium text-ink' : 'text-sub')} title={label}>
+        {label}
+      </span>
+      {page.test && (
+        <span className="block text-[11px] text-muted">
+          {t(['اختبار', 'Test'])} <span className="ltr">{page.test.slug}</span> · {page.test.label}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** لوحة الطلبية الكاملة (تُستعمل في الطلبيات والزبائن والسلات المتروكة) */
 export function OrderDrawer({ id, onClose, onChanged }) {
   const { t, lang } = useI18n();
@@ -787,6 +810,7 @@ export function OrderDrawer({ id, onClose, onChanged }) {
                 <Info icon={Truck} label={t(['نوع التوصيل', 'Livraison'])} value={o.delivery_type === 'desk' ? t('c.desk') : t('c.home')} />
                 <Info label={t('c.address')} value={o.address} className="sm:col-span-2" />
                 {o.notes && <Info label={t('c.notes')} value={o.notes} className="sm:col-span-2" />}
+                {o.page && <Info label={t(['الصفحة التي طلب منها', 'Page de la commande'])} value={<PageTag page={o.page} />} />}
                 {(o.utm_source || o.utm_content) && <Info label={t('c.source')} value={[o.source, o.utm_source, o.utm_campaign, o.utm_content].filter(Boolean).join(' · ')} className="sm:col-span-2" />}
               </div>
             ) : (

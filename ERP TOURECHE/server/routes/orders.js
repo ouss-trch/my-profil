@@ -43,7 +43,13 @@ ordersRouter.get('/export.csv', (req, res) => {
   const { rows } = orders.listOrders({ projectIds: scope.ids, ...listArgs(req), limit: 500 });
   const cols = ['ref', 'shopify_name', 'created_at', 'status', 'customer_name', 'phone', 'wilaya_code', 'commune', 'address', 'delivery_type', 'total', 'carrier', 'tracking'];
   const esc = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
-  const lines = [[...cols, 'items'].join(','), ...rows.map((o) => [...cols.map((c) => esc(o[c])), esc(o.items.map((i) => `${i.title} ${i.variant || ''} x${i.qty}`).join(' | '))].join(','))];
+  // الصفحة: زاوية صفحة الهبوط، أو «product» لصفحة المنتج؛ والاختبار «slug.B» إن جاءت من رابط اختبار
+  const page = (o) => (o.page ? (o.page.kind === 'product' ? 'product' : o.page.label) : '');
+  const test = (o) => (o.page?.test ? `${o.page.test.slug}.${o.page.test.label}` : '');
+  const lines = [
+    [...cols, 'items', 'landing_page', 'ab_test'].join(','),
+    ...rows.map((o) => [...cols.map((c) => esc(o[c])), esc(o.items.map((i) => `${i.title} ${i.variant || ''} x${i.qty}`).join(' | ')), esc(page(o)), esc(test(o))].join(',')),
+  ];
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="orders.csv"');
   res.send('﻿' + lines.join('\n'));

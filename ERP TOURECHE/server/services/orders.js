@@ -21,9 +21,44 @@ export function hydrate(row) {
   };
 }
 
+/**
+ * الصفحة التي جاءت منها الطلبية (من رابطها landing_url): صفحة هبوط باسم زاويتها، صفحة المنتج، أو صفحة أخرى؛
+ * ونسخة اختبار A/B إن جاءت عبر رابط الاختبار (erp_v).
+ */
+export function pageOf(url, angles = new Map()) {
+  const s = String(url || '');
+  if (!s) return null;
+  let u;
+  try {
+    u = new URL(s, 'https://store.invalid');
+  } catch {
+    return null;
+  }
+  const view = (u.searchParams.get('view') || '').toLowerCase();
+  const [testSlug, testLabel] = String(u.searchParams.get('erp_v') || '').split('.');
+  const test = testSlug && /^[A-F]$/.test(testLabel || '') ? { slug: testSlug, label: testLabel } : null;
+  let path = u.pathname;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    /* رابط مشوّه: يبقى كما هو */
+  }
+  path = path.replace(/^\/[a-z]{2}(?:-[a-z]{2})?(?=\/)/i, '');
+  if (view.startsWith('lp-')) return { kind: 'landing', slug: view.slice(3), label: angles.get(view.slice(3)) || view.slice(3), test };
+  if (view) return { kind: 'template', label: view, test };
+  if (path.startsWith('/products/')) return { kind: 'product', label: null, test };
+  return { kind: 'page', label: path, test };
+}
+
+/** زوايا صفحات الهبوط (slug ← الزاوية) لتسمية الصفحة في قائمة الطلبيات */
+export function landingAngles(projectIds) {
+  return new Map(db.prepare(`SELECT slug, angle FROM landing_pages WHERE project_id IN (${inList(projectIds)})`).all(...projectIds).map((r) => [r.slug.toLowerCase(), r.angle]));
+}
+
 export function getOrder(id) {
   const o = hydrate(db.prepare('SELECT * FROM orders WHERE id = ?').get(id));
   if (!o) throw new HttpError(404, 'order_not_found');
+  o.page = pageOf(o.landing_url, landingAngles([o.project_id]));
   o.events = db
     .prepare('SELECT e.*, u.display_name AS user_name FROM order_events e LEFT JOIN users u ON u.id = e.user_id WHERE order_id = ? ORDER BY at, id')
     .all(id);
@@ -78,7 +113,8 @@ export function listOrders({ projectIds, status, statuses, q, wilaya, carrier, f
        WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ? OFFSET ?`,
     )
     .all(...args, Math.min(Number(limit) || 50, 500), Number(offset) || 0);
-  return { total, rows: rows.map(hydrate) };
+  const angles = landingAngles(projectIds);
+  return { total, rows: rows.map(hydrate).map((o) => ({ ...o, page: pageOf(o.landing_url, angles) })) };
 }
 
 export function statusCounts(projectIds) {
