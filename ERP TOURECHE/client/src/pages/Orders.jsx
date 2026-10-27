@@ -32,6 +32,7 @@ import { useApp } from '../components/ProjectContext.jsx';
 import { CARRIER_NAMES, StatusBadge, useStatusLabel } from '../components/status.jsx';
 import { DeliveryContacts } from './Contacts.jsx';
 import { ReturnCard, ReturnsBar } from '../components/Returns.jsx';
+import { Advice, LEVELS, ReasonChips, RiskBadge, pTone } from '../components/CustomerRisk.jsx';
 import { Badge, Button, Card, Drawer, Empty, ErrorBox, Field, Input, Loading, Modal, Pagination, Select, Tabs, Textarea, Toggle, cx, useAction, useToast } from '../components/ui.jsx';
 
 export const TABS = {
@@ -760,18 +761,22 @@ export function OrderDrawer({ id, onClose, onChanged }) {
               </div>
             </div>
           )}
-          {o.customer && (o.customer.previous > 0 || o.customer.blacklisted) && (
-            <div className={cx('rounded-lg border px-3 py-2 text-sm', o.customer.risk === 'high' ? 'border-bad/40 bg-bad/5' : o.customer.risk === 'medium' ? 'border-warn/40 bg-warn/5' : 'border-good/40 bg-good/5')}>
+          {o.customer && (o.customer.previous > 0 || o.customer.blacklisted || o.customer.level !== 'new') && (
+            <div className={cx('space-y-1.5 rounded-lg border px-3 py-2 text-sm', LEVELS[o.customer.level]?.box)}>
               <div className="flex flex-wrap items-center gap-2">
                 <User className="h-4 w-4" />
-                <b>{t(['تاريخ الزبون', 'Historique client'])}</b>
-                <Badge tone={o.customer.risk === 'high' ? 'bad' : o.customer.risk === 'medium' ? 'warn' : 'good'}>{t(['الخطر', 'Risque'])}: {o.customer.risk}</Badge>
-                {o.customer.blacklisted && <Badge tone="bad">{t(['محظور', 'Liste noire'])}</Badge>}
+                <b>{t(['تقييم الزبون', 'Évaluation du client'])}</b>
+                <RiskBadge level={o.customer.level} blacklisted={o.customer.blacklisted} />
+                <span className="text-xs text-sub">
+                  {t(['احتمال التسليم', 'Livraison attendue'])}: <b className={cx('num', pTone(o.customer.level))}>{o.customer.p_deliver}%</b>
+                </span>
               </div>
-              <div className="mt-1 text-xs text-sub">
+              <ReasonChips reasons={o.customer.reasons} skip={['duplicates']} />
+              <div className="text-xs text-sub">
                 {t(['{o} طلبية · {d} مسلّمة · {r} مرتجعة · {c} ملغاة', '{o} commandes · {d} livrées · {r} retours · {c} annulées'], { o: o.customer.orders, d: o.customer.delivered, r: o.customer.returned, c: o.customer.cancelled })}
                 {o.customer.open_duplicates > 0 && <b className="text-warn"> · {t(['{n} طلبية مفتوحة أخرى (مكررة؟)', '{n} autre(s) commande(s) ouverte(s) (doublon ?)'], { n: o.customer.open_duplicates })}</b>}
               </div>
+              <Advice code={o.customer.advice} />
             </div>
           )}
 

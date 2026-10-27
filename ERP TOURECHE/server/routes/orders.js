@@ -170,7 +170,7 @@ ordersRouter.get('/:id/label', async (req, res) => {
 // ——— الزبائن ———
 export const customersRouter = Router();
 
-customersRouter.get('/', (req, res) => res.json(orders.listCustomers({ projectIds: projectScope(req).ids, q: req.query.q, risk: req.query.risk, limit: req.query.limit, offset: req.query.offset })));
+customersRouter.get('/', (req, res) => res.json(orders.listCustomers({ projectIds: projectScope(req).ids, q: req.query.q, risk: req.query.risk, sort: req.query.sort, limit: req.query.limit, offset: req.query.offset })));
 
 customersRouter.get('/:phone', (req, res) => {
   const scope = projectScope(req);

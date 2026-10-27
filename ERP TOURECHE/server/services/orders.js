@@ -5,6 +5,7 @@ import { HttpError, normalizePhone, nowIso, randomId, round, badRequest, dzDaySt
 import { projectConfig } from '../lib/settings.js';
 import { inList } from './projects.js';
 import { enqueue } from './effects.js';
+import { customerProfile, listCustomerProfiles } from './customers.js';
 import { onReturned, onUnreturned, returnView } from './returns.js';
 import * as n8n from '../integrations/n8n.js';
 import * as shopify from '../integrations/shopify.js';
@@ -469,54 +470,22 @@ export function deleteOrder(id) {
 }
 
 // ——— الزبائن ———
+/** ملخص الزبون في الطلبية: تقييمه (احتمال التسليم، المستوى، الأسباب، اقتراح للمؤكِّد) + طلبياته الأخرى المفتوحة */
 export function customerSummary(phone, excludeId = null) {
   if (!phone) return null;
-  const rows = db.prepare('SELECT id, status, total, created_at, project_id FROM orders WHERE phone = ?').all(phone);
-  const others = rows.filter((r) => r.id !== excludeId);
-  const delivered = rows.filter((r) => r.status === 'delivered').length;
-  const returned = rows.filter((r) => r.status === 'returned').length;
-  const flag = db.prepare('SELECT * FROM customer_flags WHERE phone = ?').get(phone);
+  const profile = customerProfile(phone);
+  if (!profile) return null;
+  const others = db.prepare('SELECT id, status FROM orders WHERE phone = ? AND id != ?').all(phone, excludeId ?? 0);
   return {
-    phone,
-    orders: rows.length,
-    previous: others.length,
-    delivered,
-    returned,
-    cancelled: rows.filter((r) => ['cancelled', 'fake'].includes(r.status)).length,
+    ...profile,
+    previous: excludeId ? others.length : profile.orders + profile.abandoned,
     open_duplicates: others.filter((r) => ['new', 'no_answer', 'callback', 'confirmed', 'abandoned'].includes(r.status)).length,
-    blacklisted: Boolean(flag?.blacklisted),
-    flag_reason: flag?.reason || null,
-    risk: riskLevel({ delivered, returned, blacklisted: flag?.blacklisted }),
+    risk: profile.level,
   };
 }
 
-export function riskLevel({ delivered, returned, blacklisted }) {
-  if (blacklisted) return 'high';
-  if (returned >= 2 && returned > delivered) return 'high';
-  if (returned >= 1 && returned >= delivered) return 'medium';
-  return 'low';
-}
-
-export function listCustomers({ projectIds, q, risk, limit = 100, offset = 0 }) {
-  const args = [...projectIds];
-  let where = `o.project_id IN (${inList(projectIds)}) AND o.phone IS NOT NULL`;
-  if (q) {
-    where += ' AND (o.phone LIKE ? OR o.customer_name LIKE ?)';
-    args.push(`%${q}%`, `%${q}%`);
-  }
-  const rows = db
-    .prepare(
-      `SELECT o.phone, MAX(o.customer_name) AS name, COUNT(*) AS orders,
-        SUM(o.status = 'delivered') AS delivered, SUM(o.status = 'returned') AS returned,
-        SUM(CASE WHEN o.status = 'delivered' THEN o.total ELSE 0 END) AS revenue,
-        MAX(o.created_at) AS last_order, MAX(o.wilaya_code) AS wilaya_code,
-        COALESCE(f.blacklisted, 0) AS blacklisted, f.reason AS flag_reason
-       FROM orders o LEFT JOIN customer_flags f ON f.phone = o.phone
-       WHERE ${where} GROUP BY o.phone ORDER BY last_order DESC LIMIT ? OFFSET ?`,
-    )
-    .all(...args, Math.min(Number(limit) || 100, 500), Number(offset) || 0)
-    .map((r) => ({ ...r, wilaya: wilayaByCode(r.wilaya_code), risk: riskLevel(r) }));
-  return risk ? rows.filter((r) => r.risk === risk) : rows;
+export function listCustomers({ projectIds, q, risk, sort, limit = 100, offset = 0 }) {
+  return listCustomerProfiles(projectIds, { q, risk, sort, limit, offset });
 }
 
 export function setCustomerFlag(phone, { blacklisted, reason, note }) {
