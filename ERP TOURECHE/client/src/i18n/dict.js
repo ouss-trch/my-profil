@@ -132,6 +132,7 @@ export const DICT = {
   'err.drive_upload_unconfirmed': ['n8n لم يؤكد وصول الملف إلى Google Drive', 'n8n n’a pas confirmé l’arrivée du fichier sur Google Drive'],
   'err.backup_offsite_failed': ['النسخة على الخادم تمت، لكن النسخة خارج الجهاز فشلت: انظر بطاقة النسخ الاحتياطية', 'Copie locale faite, mais la copie externe a échoué : voir la carte Sauvegardes'],
   'err.access_denied': ['صلاحية ناقصة في التطبيق المربوط: راجع الصلاحيات ثم أعد المحاولة', 'Autorisation manquante dans l’app connectée'],
+  'err.split_entry_busy': ['اختبار آخر يعمل على نفس الصفحة: «{x}». أوقفه أولاً، فاختباران على نفس الزوار يفسدان النتيجتين.', 'Un autre test tourne sur la même page : « {x} ». Mettez-le en pause d’abord.'],
   'err.theme_scopes_missing': ['تطبيق Shopify لا يملك بعدُ الإذن: \u2068{x}\u2069. إن أضفته في Dev Dashboard فوافق عليه في المتجر (افتح التطبيق من «Applications»)، ثم أعد «تثبيت على القالب». أو الصق الكود يدوياً الآن.', 'L’app Shopify n’a pas encore : \u2068{x}\u2069. Si vous l’avez ajouté dans le Dev Dashboard, approuvez-le dans la boutique (ouvrez l’app depuis « Applications »), puis réessayez. Ou collez le code à la main.'],
   'err.theme_write_refused': ['رفضت Shopify تعديل القالب من التطبيق رغم وجود الإذن. لا بأس: الصق الكود يدوياً مرة واحدة (دقيقتان).', 'Shopify refuse la modification du thème malgré l’autorisation. Collez le code à la main, une seule fois (2 min).'],
   'err.theme_layout_unreadable': ['تعذّرت قراءة layout/theme.liquid: ثبّت يدوياً', 'layout/theme.liquid illisible : installez à la main'],

@@ -7,6 +7,7 @@ import { api } from '../lib/api.js';
 import { n0, pct } from '../lib/format.js';
 import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
+import AttributionNotice from '../components/AttributionNotice.jsx';
 import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, cx, useAction } from '../components/ui.jsx';
 
 const KIND = {
@@ -124,6 +125,7 @@ export default function StorePages() {
         <Segmented size="sm" value={filter} onChange={setFilter} options={FILTERS.map(([v, l]) => ({ value: v, label: v === 'pinned' ? `${t(l)} (${pinnedCount})` : t(l) }))} />
         <p className="text-xs text-muted">{t(['الطلبيات تُنسب للصفحة من رابط الدخول (آخر 30 يوماً).', 'Commandes attribuées par page d’entrée (30 derniers jours).'])}</p>
       </div>
+      <AttributionNotice health={data?.attribution} />
 
       {loading && !data ? (
         <Loading />

@@ -230,7 +230,7 @@ export const pagesRouter = Router();
 
 pagesRouter.get('/', (req, res) => {
   const scope = projectScope(req);
-  res.json({ rows: pages.listPages(scope.ids, { pinnedOnly: req.query.pinned === '1' }), base: scope.all ? null : pages.storeBase(scope.id) });
+  res.json({ rows: pages.listPages(scope.ids, { pinnedOnly: req.query.pinned === '1' }), base: scope.all ? null : pages.storeBase(scope.id), attribution: pages.attributionHealth(scope.ids) });
 });
 
 pagesRouter.post('/sync', async (req, res) => {

@@ -137,6 +137,21 @@ export function deletePage(id) {
   return cur;
 }
 
+/**
+ * صحة النسب: من طلبيات آخر 14 يوماً، كم منها يحمل رابط الصفحة التي جاء منها الزبون؟
+ * بدونه لا تُنسب الطلبيات للصفحات ولا لنسخ اختبار A/B (نموذج الطلب أو n8n لا يرسل landing_page/utm_content).
+ */
+export function attributionHealth(projectIds) {
+  const since = dzDayStartIso(addDays(dzDay(), -13));
+  const r = db
+    .prepare(
+      `SELECT COUNT(*) AS orders, COALESCE(SUM(landing_url IS NOT NULL AND landing_url != ''), 0) AS with_page, COALESCE(SUM(utm_content IS NOT NULL AND utm_content != ''), 0) AS with_content
+       FROM orders WHERE project_id IN (${inList(projectIds)}) AND created_at >= ? AND status NOT IN ('abandoned','fake')`,
+    )
+    .get(...projectIds, since);
+  return { days: 14, orders: r.orders, with_page: r.with_page, with_content: r.with_content, ok: !r.orders || r.with_page / r.orders >= 0.5 };
+}
+
 /** القائمة مع الأداء: طلبيات آخر 30 يوماً دخلت من الصفحة (landing_url)، المسلّمة، والاختبارات التي تستعملها */
 export function listPages(projectIds, { pinnedOnly = false } = {}) {
   const rows = db

@@ -776,6 +776,30 @@ function splitRules(projectIds, push) {
         advice: tx('تحقق من الرابط العام في إعدادات المشروع (Tailscale Funnel أو Cloudflare) وضعه في الإعلان.', 'Vérifiez l’URL publique (Tailscale Funnel ou Cloudflare) et mettez-la dans la pub.'),
         action: { to: `/splits/${t.id}`, label: tx('الاختبار', 'Le test') },
       });
+    else if (r.no_attribution)
+      push({
+        key: `split.no_attribution:${t.id}`,
+        area: 'splits',
+        type: 'alert',
+        severity: 'high',
+        title: tx(`اختبار «${t.name}» يعمل منذ يومين دون أي طلبية منسوبة لصفحاته`, `Le test « ${t.name} » tourne depuis 2 jours sans commande attribuée`),
+        insight: tx('الطلبيات تصل دون رابط الصفحة التي جاء منها الزبون، فلا يعرف الـ ERP أي نسخة جلبتها.', 'Les commandes arrivent sans la page d’origine : l’ERP ne sait pas quelle version les a apportées.'),
+        evidence: [{ label: tx('رابط الإعلان', 'Lien de la pub'), value: r.test.public_url || r.test.entry_path || '—' }],
+        advice: tx('تأكد أن نموذج الطلب (n8n) يرسل landing_page و utm_content مع كل طلبية، وأن الإعلان يشير إلى رابط الدخول نفسه.', 'Vérifiez que le formulaire (n8n) envoie landing_page et utm_content, et que la pub pointe sur l’URL d’entrée.'),
+        action: { to: '/store-pages', label: tx('صحة النسب', 'Attribution') },
+      });
+    else if (r.verdict === 'split_broken')
+      push({
+        key: `split.broken:${t.id}`,
+        area: 'splits',
+        type: 'alert',
+        severity: 'high',
+        title: tx(`توزيع الزوار في «${t.name}» لا يطابق النسب`, `La répartition de « ${t.name} » ne suit pas les poids`),
+        insight: tx('الفارق أكبر مما تفسّره الصدفة، فأي حكم الآن قد يكون خاطئاً بثقة.', 'L’écart dépasse le hasard : un verdict maintenant serait faux avec assurance.'),
+        evidence: r.variants.map((v) => ({ label: tx(`${v.label} · ${v.weight}`, `${v.label} · ${v.weight}`), value: `${v.visitors}` })),
+        advice: tx('هل يشير إعلان ما مباشرة إلى رابط نسخة بعينها؟ أو غُيّرت النسب أثناء الاختبار؟ صحّح ذلك ثم ابدأ اختباراً جديداً.', 'Une pub pointe-t-elle directement sur une version ? Les poids ont-ils changé ? Corrigez puis relancez un test.'),
+        action: { to: `/splits/${t.id}`, label: tx('الاختبار', 'Le test') },
+      });
     else if (r.verdict === 'winner') {
       const w = r.variants.find((v) => v.id === r.leader.id);
       push({

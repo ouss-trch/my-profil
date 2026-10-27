@@ -9,6 +9,7 @@ import { SHIPPED_EVER } from '../lib/statuses.js';
 import { projectConfig } from '../lib/settings.js';
 import { getProduct } from './products.js';
 import { getProject } from './projects.js';
+import { attributionHealth } from './pages.js';
 
 /**
  * اختبار صفحات الهبوط A/B (مثل «تيسير»):
@@ -18,6 +19,8 @@ import { getProject } from './projects.js';
  * ملاحظة سياسة Meta: كل الصفحات يجب أن تعرض نفس المنتج والعرض — لا نُرسل زاحف Meta إلى صفحة مختلفة عن الزوار (لا cloaking).
  */
 const LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
+// شروط الحكم: 7 أيام (14 إن كان الهدف التسليم: الطرود تعود بعد أيام)، 30 طلبية لكل نسخة، 1000 زائر لكل نسخة إن كانوا يُعدّون، و95% احتمال
+export const SPLIT_RULES = { days: 7, daysDelivered: 14, orders: 30, visitors: 1000 };
 const BOT = /bot|crawl|spider|facebookexternalhit|facebookcatalog|meta-externalagent|preview|slurp|bingpreview|whatsapp|telegrambot|headless|lighthouse|curl|wget|python|axios|node-fetch/i;
 const PASS_PARAMS = /^(utm_\w+|fbclid|gclid|ttclid|campaign_id|adset_id|ad_id|placement|site_source_name)$/i;
 
@@ -108,6 +111,12 @@ function entryPath(raw, variants) {
 /** تعديل الأوزان/الروابط/الحالة. تغيير الروابط أثناء التشغيل مسموح، لكن الحروف (A/B/C) ثابتة حتى لا تختلط النتائج */
 export function updateTest(id, input) {
   const t = getTest(id);
+  // اختبار واحد جارٍ لكل صفحة دخول: اختباران على نفس الزوار لا يعطيان نتيجتين بل نتيجتين خاطئتين
+  if (input.status === 'running' && t.status !== 'running' && t.mode === 'shopify') {
+    const p = input.entry_path !== undefined ? entryPath(input.entry_path, t.variants) : t.entry_path;
+    const busy = db.prepare("SELECT name FROM split_tests WHERE project_id = ? AND mode = 'shopify' AND status = 'running' AND entry_path = ? AND id != ?").get(t.project_id, p, id);
+    if (busy) throw badRequest(`split_entry_busy:${busy.name}`);
+  }
   db.transaction(() => {
     if (input.name !== undefined || input.goal !== undefined || input.sticky !== undefined || input.fallback_url !== undefined || input.notes !== undefined || input.product_id !== undefined)
       db.prepare('UPDATE split_tests SET name = ?, goal = ?, sticky = ?, fallback_url = ?, notes = ?, product_id = ? WHERE id = ?').run(
@@ -325,18 +334,23 @@ export function results(id) {
         : probabilityBestByWeights(arms.map((v) => ({ successes: v.successes, weight: Math.max(1, v.weight) })));
   arms.forEach((v, i) => (v.p_best = probs[i] === null ? null : round(probs[i] * 100, 1)));
   const minVisitors = Math.min(...arms.map((v) => v.visitors));
-  const minSuccesses = Math.min(...arms.map((v) => v.successes));
   const leader = [...arms].sort((a, b) => (b.p_best ?? 0) - (a.p_best ?? 0))[0];
-  const totalSuccesses = arms.reduce((s, v) => s + v.successes, 0);
+  // ما ينتظره الحكم (قواعد مثل «تسيير»): مدة دنيا، طلبيات لكل نسخة، وزوار لكل نسخة إن كانوا يُعدّون
+  const rules = { days: goal === 'delivered' ? SPLIT_RULES.daysDelivered : SPLIT_RULES.days, orders: SPLIT_RULES.orders, visitors: tracked ? SPLIT_RULES.visitors : null };
+  const days = Math.floor((Date.now() - Date.parse(test.started_at || test.created_at)) / 86400e3);
+  const minOrders = arms.length ? Math.min(...arms.map((v) => v.orders)) : 0;
+  const waiting = [];
+  if (days < rules.days) waiting.push({ key: 'days', have: days, need: rules.days });
+  if (minOrders < rules.orders) waiting.push({ key: 'orders', have: minOrders, need: rules.orders });
+  if (tracked && minVisitors < rules.visitors) waiting.push({ key: 'visitors', have: minVisitors, need: rules.visitors });
+  // توزيع مكسور: الزوار لا يتبعون الأوزان أكثر مما تفسّره الصدفة ← لا حكم (أشيع سبب لنتيجة واثقة وخاطئة)
+  const live = arms.filter((v) => v.active && v.weight > 0);
+  const srm = tracked && live.length >= 2 && splitIsBroken(live);
   let verdict = 'collecting';
-  if (tracked) {
-    if (arms.length >= 2 && leader?.p_best >= 95 && minVisitors >= 150 && leader.successes >= 10) verdict = 'winner';
-    else if (arms.length >= 2 && minVisitors >= 1500 && minSuccesses >= 20 && leader?.p_best < 80) verdict = 'no_difference';
-  } else if (arms.length >= 2 && leader?.p_best >= 95 && leader.successes >= 10 && totalSuccesses >= 20) verdict = 'winner';
-  else if (arms.length >= 2 && minSuccesses >= 25 && leader?.p_best < 80) verdict = 'no_difference';
-  // تقدير الزوار الإضافيين اللازمين (قاعدة تقريبية: 10 نجاحات على الأقل لكل نسخة + فارق واضح)
-  const rate = arms.reduce((s, v) => s + v.successes, 0) / Math.max(1, arms.reduce((s, v) => s + v.visitors, 0));
-  const needed = rate > 0 ? Math.max(0, Math.ceil(10 / rate) - minVisitors) : null;
+  if (arms.length < 2) verdict = 'collecting';
+  else if (srm) verdict = 'split_broken';
+  else if (!waiting.length) verdict = leader?.p_best >= 95 ? 'winner' : leader?.p_best >= 70 ? 'trending' : 'no_difference';
+  else if (leader?.p_best >= 70) verdict = 'trending';
   return {
     test: {
       ...test,
@@ -346,9 +360,25 @@ export function results(id) {
     goal,
     variants,
     verdict,
+    rules,
+    days,
+    waiting,
     leader: leader ? { id: leader.id, label: leader.label, p_best: leader.p_best } : null,
-    visitors_needed_per_variant: verdict === 'collecting' ? needed : 0,
+    visitors_needed_per_variant: tracked ? Math.max(0, rules.visitors - minVisitors) : 0,
   };
+}
+
+/** فحص Chi² لتوزيع الزوار مقابل الأوزان (p < 0.001) */
+const CHI2_P001 = [10.83, 13.82, 16.27, 18.47, 20.52];
+export function splitIsBroken(arms) {
+  const total = arms.reduce((s, v) => s + v.visitors, 0);
+  const weights = arms.reduce((s, v) => s + Math.max(0, v.weight), 0);
+  if (total < 100 || !weights) return false;
+  const chi2 = arms.reduce((s, v) => {
+    const expected = (total * Math.max(0, v.weight)) / weights;
+    return expected > 0 ? s + (v.visitors - expected) ** 2 / expected : s;
+  }, 0);
+  return chi2 > CHI2_P001[Math.min(arms.length - 2, CHI2_P001.length - 1)];
 }
 
 /** للمستشار: الاختبارات الجارية التي ظهر فيها فائز أو التي لا يصلها أي زائر */
@@ -357,7 +387,14 @@ export function splitInsights(projectIds) {
   for (const t of db.prepare(`SELECT id FROM split_tests WHERE status = 'running' AND project_id IN (${projectIds.map(() => '?').join(',')})`).all(...projectIds)) {
     const r = results(t.id);
     const age = (Date.now() - Date.parse(r.test.started_at || r.test.created_at)) / 3600e3;
-    out.push({ ...r, age_hours: age, no_traffic: age > 24 && r.variants.every((v) => !v.visitors) });
+    // الزوار لا يُعدّون في وضع Shopify دون رابط عام: الإشارة عندها هي غياب الطلبيات المنسوبة، لا غياب الزوار
+    const counted = r.estimation === 'visitors' || r.test.mode === 'redirect' || Boolean(projectConfig(r.test.project_id).split_base_url);
+    out.push({
+      ...r,
+      age_hours: age,
+      no_traffic: counted && age > 24 && r.variants.every((v) => !v.visitors),
+      no_attribution: !counted && age > 48 && r.variants.every((v) => !v.orders),
+    });
   }
   return out;
 }
@@ -367,6 +404,8 @@ export function splitInsights(projectIds) {
 // ————————————————————————————————————————————————
 const SNIPPET_FILE = 'snippets/erp-split.liquid';
 export const RENDER_LINE = "{% render 'erp-split' %}";
+// لصق يدوي ترك «%}» زائدة بعد السطر: تظهر نصاً في أعلى كل صفحة من المتجر
+const STRAY_AFTER_RENDER = /\{%-?\s*render\s+'erp-split'\s*-?%\}(?:[ \t]*%\})+/;
 
 /** السنيبت: يقرأ الإعدادات من metafield المتجر، ويوجّه الزائر لنسخة الصفحة قبل رسمها */
 export function snippetLiquid() {
@@ -440,15 +479,19 @@ function syncShopifyQuiet(projectId) {
 export async function shopifyStatus(projectId) {
   const cfg = projectConfig(projectId);
   if (!shopify.isConfigured(cfg)) return { configured: false };
-  const out = { configured: true, sync: syncState.get(projectId) || null, render_line: RENDER_LINE, snippet: snippetLiquid(), beacon: shopifyConfig(projectId).b };
+  const out = { configured: true, sync: syncState.get(projectId) || null, render_line: RENDER_LINE, snippet: snippetLiquid(), beacon: shopifyConfig(projectId).b, attribution: attributionHealth([projectId]) };
   try {
     const theme = await shopify.mainTheme(cfg);
     out.theme = theme;
     if (theme) {
       const files = await shopify.themeFiles(cfg, theme.id, ['layout/theme.liquid', SNIPPET_FILE]);
       const layout = files.find((f) => f.filename === 'layout/theme.liquid')?.content || '';
-      out.snippet_present = files.some((f) => f.filename === SNIPPET_FILE);
-      out.installed = out.snippet_present && layout.includes("render 'erp-split'");
+      const snippet = files.find((f) => f.filename === SNIPPET_FILE);
+      out.snippet_present = Boolean(snippet);
+      // لصق يدوي فيه زيادة، أو سنيبت قديم/معدّل: «تثبيت على القالب» يعيدهما كما يجب
+      out.paste_broken = STRAY_AFTER_RENDER.test(layout) || /endif\s*-?%\}\s*(?:%\}\s*)+$/.test(snippet?.content || '');
+      out.snippet_outdated = Boolean(snippet && snippet.content !== null && snippet.content.trim() !== snippetLiquid().trim());
+      out.installed = out.snippet_present && layout.includes("render 'erp-split'") && !out.paste_broken;
     }
   } catch (e) {
     out.theme_error = e.message;
@@ -474,12 +517,16 @@ export async function installShopify(projectId) {
     const layout = layoutFile?.content;
     if (!layout) throw new HttpError(409, 'theme_layout_unreadable');
     const files = [{ filename: SNIPPET_FILE, content: snippetLiquid() }];
+    let next = layout;
     if (!layout.includes("render 'erp-split'")) {
       const m = /<head[^>]*>/i.exec(layout);
       if (!m) throw new HttpError(409, 'theme_head_not_found');
+      next = `${layout.slice(0, m.index + m[0].length)}\n    ${RENDER_LINE}${layout.slice(m.index + m[0].length)}`;
+    } else next = layout.replace(STRAY_AFTER_RENDER, RENDER_LINE); // إصلاح لصق يدوي خاطئ
+    if (next !== layout) {
       fs.mkdirSync(config.backupsDir, { recursive: true });
       fs.writeFileSync(path.join(config.backupsDir, `theme-${projectId}-${Date.now()}.liquid`), layout);
-      files.push({ filename: 'layout/theme.liquid', content: `${layout.slice(0, m.index + m[0].length)}\n    ${RENDER_LINE}${layout.slice(m.index + m[0].length)}` });
+      files.push({ filename: 'layout/theme.liquid', content: next });
     }
     await shopify.upsertThemeFiles(cfg, theme.id, files);
   } catch (e) {

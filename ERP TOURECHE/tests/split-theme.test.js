@@ -12,6 +12,8 @@ import * as splits from '../server/services/splits.js';
 let granted = [];
 let refuseWrite = false;
 const upserts = [];
+// ملفات القالب الوهمي (ما يُكتب يُحفظ هنا)
+const files = { 'layout/theme.liquid': '<!doctype html><html><head>\n<title>x</title></head></html>' };
 const denied = () => ({ errors: [{ message: 'Access denied', extensions: { code: 'ACCESS_DENIED' } }] });
 globalThis.fetch = async (_url, init) => {
   const { query, variables } = JSON.parse(init.body);
@@ -21,12 +23,13 @@ globalThis.fetch = async (_url, init) => {
   else if (query.includes('themes(first: 1')) body = can('read_themes') ? { data: { themes: { nodes: [{ id: 'gid://shopify/OnlineStoreTheme/1', name: 'Dawn' }] } } } : denied();
   else if (query.includes('theme(id:'))
     body = can('read_themes')
-      ? { data: { theme: { files: { nodes: variables.f.map((filename) => ({ filename, body: { content: filename.startsWith('layout/') ? '<!doctype html><html><head>\n<title>x</title></head></html>' : '' } })).filter((n) => n.filename.startsWith('layout/') || upserts.length) } } } }
+      ? { data: { theme: { files: { nodes: variables.f.filter((f) => f in files).map((filename) => ({ filename, body: { content: files[filename] } })) } } } }
       : denied();
   else if (query.includes('themeFilesUpsert')) {
     if (!can('write_themes') || refuseWrite) body = denied();
     else {
       upserts.push(...variables.files);
+      for (const f of variables.files) files[f.filename] = f.body.value;
       body = { data: { themeFilesUpsert: { upsertedThemeFiles: variables.files.map((f) => ({ filename: f.filename })), userErrors: [] } } };
     }
   } else if (query.includes('shop { id }')) body = { data: { shop: { id: 'gid://shopify/Shop/1' } } };
@@ -67,4 +70,24 @@ test('split theme: names the missing Shopify permission, tells a Shopify refusal
   const baks = fs.readdirSync(config.backupsDir).filter((f) => f.startsWith(`theme-${p.id}-`));
   assert.equal(baks.length, 2);
   assert.ok(baks.every((f) => !fs.readFileSync(path.join(config.backupsDir, f), 'utf8').includes('erp-split')));
+});
+
+test('split theme: a botched manual paste (stray "%}" shown on every page) is detected and repaired by one install', async () => {
+  const { RENDER_LINE, snippetLiquid } = splits;
+  const p = createProject({ name: 'Theme paste', domain: 'paste.example' });
+  setSetting('shopify_shop', 'paste-test.myshopify.com', p.id);
+  setSetting('shopify_access_token', 'shpat_test', p.id);
+  granted = ['write_themes'];
+  refuseWrite = false;
+  // ما وُجد فعلاً على المتجر: «%}» بعد سطر render، و«%} %}» في آخر السنيبت
+  files['layout/theme.liquid'] = `<!doctype html><html><head>\n  ${RENDER_LINE} %}\n  <meta charset="utf-8">\n</head></html>`;
+  files['snippets/erp-split.liquid'] = `${snippetLiquid()} %} %}`;
+  const s = await splits.shopifyStatus(p.id);
+  assert.equal(s.paste_broken, true);
+  assert.equal(s.installed, false);
+  await splits.installShopify(p.id);
+  assert.equal(files['layout/theme.liquid'], `<!doctype html><html><head>\n  ${RENDER_LINE}\n  <meta charset="utf-8">\n</head></html>`);
+  assert.equal(files['snippets/erp-split.liquid'], snippetLiquid());
+  const after = await splits.shopifyStatus(p.id);
+  assert.deepEqual([after.installed, after.paste_broken, after.snippet_outdated], [true, false, false]);
 });

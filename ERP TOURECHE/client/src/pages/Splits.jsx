@@ -10,10 +10,23 @@ import { useApp } from '../components/ProjectContext.jsx';
 import { Badge, Bar, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Select, Toggle, cx, useAction } from '../components/ui.jsx';
 import { SERIES } from '../components/charts.jsx';
 import PageSuggest from '../components/PageSuggest.jsx';
+import AttributionNotice from '../components/AttributionNotice.jsx';
 
 const STATUS = { draft: ['مسودة', 'Brouillon', 'neutral'], running: ['يعمل', 'En cours', 'good'], paused: ['متوقف', 'En pause', 'warn'], ended: ['منتهٍ', 'Terminé', 'neutral'] };
 const GOALS = { orders: ['الطلبيات', 'Commandes'], confirmed: ['الطلبيات المؤكدة', 'Commandes confirmées'], delivered: ['الطلبيات المسلّمة (الأدق)', 'Commandes livrées (le plus juste)'] };
-const VERDICTS = { collecting: ['يجمع البيانات', 'Collecte en cours', 'info'], winner: ['يوجد فائز واضح', 'Gagnant clair', 'good'], no_difference: ['لا فرق حقيقي', 'Pas de vraie différence', 'warn'] };
+const VERDICTS = {
+  collecting: ['يجمع البيانات', 'Collecte en cours', 'info'],
+  trending: ['يتجه نحو فائز — أكمل الاختبار', 'Tendance — continuez', 'info'],
+  winner: ['يوجد فائز واضح', 'Gagnant clair', 'good'],
+  no_difference: ['لا فرق حقيقي', 'Pas de vraie différence', 'warn'],
+  split_broken: ['توزيع الزوار لا يطابق النسب', 'Répartition faussée', 'bad'],
+};
+// ما ينتظره الحكم: {have} من {need}
+const WAITING = {
+  days: ['المدة: {have} من {need} أيام', 'Durée : {have} / {need} jours'],
+  orders: ['أقل نسخة: {have} من {need} طلبية', 'Version la plus faible : {have} / {need} commandes'],
+  visitors: ['أقل نسخة: {have} من {need} زائر', 'Version la plus faible : {have} / {need} visiteurs'],
+};
 
 export default function Splits() {
   const { id } = useParams();
@@ -71,7 +84,7 @@ function ShopifyPanel() {
           <Button size="sm" loading={busy === 'sync'} onClick={() => run('sync', () => api.post('/splits/shopify/sync', {}), { success: t(['أُرسلت الإعدادات إلى المتجر', 'Réglages envoyés à la boutique']) }).then(() => reload(true))}>
             {t(['مزامنة الآن', 'Synchroniser'])}
           </Button>
-          {!data.installed && (
+          {(!data.installed || data.snippet_outdated) && (
             <Button size="sm" variant="primary" loading={busy === 'install'} onClick={install}>
               {t(['تثبيت على القالب', 'Installer sur le thème'])}
             </Button>
@@ -82,10 +95,13 @@ function ShopifyPanel() {
         </>
       }
     >
+      <AttributionNotice health={data.attribution} className="mb-3" />
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {data.theme && <Badge>{data.theme.name}</Badge>}
         {data.installed ? (
           <Badge tone="good">{t(['السنيبت مثبت ويعمل', 'Snippet installé'])}</Badge>
+        ) : data.paste_broken ? (
+          <Badge tone="bad">{t(['خطأ في اللصق: نص زائد يظهر في المتجر', 'Collage erroné : texte parasite visible'])}</Badge>
         ) : data.missing_scopes?.length ? (
           <Badge tone="warn">
             {t(['ينقص تطبيق Shopify الإذن', 'Autorisation Shopify manquante'])} <span className="ltr">{data.missing_scopes.join('\u00a0+\u00a0')}</span>
@@ -100,6 +116,18 @@ function ShopifyPanel() {
         {data.sync?.at && (data.sync.error ? <Badge tone="bad" title={data.sync.error}>{t(['فشلت آخر مزامنة', 'Dernière synchro en échec'])}</Badge> : <Badge tone="good">{t(['آخر مزامنة', 'Synchro'])} · {data.sync.tests}</Badge>)}
         <span className="text-xs text-muted">{data.beacon ? t(['عدّ الزوار مفعّل', 'Comptage des visiteurs actif']) : t(['عدّ الزوار غير مفعّل: الحكم بالطلبيات مقارنة بنِسب التوزيع (دقيق إحصائياً)', 'Visiteurs non comptés : jugement sur les commandes rapportées aux poids (statistiquement valide)'])}</span>
       </div>
+      {data.paste_broken && (
+        <p className="mt-3 rounded-lg bg-bad/5 p-3 text-xs leading-6 text-bad">
+          {t([
+            'في القالب «%}» زائدة من اللصق اليدوي، وتظهر نصاً في أعلى كل صفحة من المتجر. اضغط «تثبيت على القالب» ليصلحها الـ ERP، أو احذفها يدوياً من آخر ملف snippets/erp-split.liquid، ومن هذا السطر في layout/theme.liquid حتى يصبح:',
+            'Un « %} » en trop (collage manuel) s’affiche en haut de chaque page. « Installer sur le thème » le corrige ; sinon supprimez-le à la fin de snippets/erp-split.liquid et dans layout/theme.liquid pour obtenir :',
+          ])}{' '}
+          <code className="ltr inline-block rounded bg-raised px-1.5 text-ink">{data.render_line}</code>
+        </p>
+      )}
+      {data.installed && data.snippet_outdated && (
+        <p className="mt-3 text-xs text-muted">{t(['السنيبت في القالب أقدم من نسخة الـ ERP: اضغط «تثبيت على القالب» لتحديثه.', 'Le snippet du thème est plus ancien que celui de l’ERP : réinstallez-le.'])}</p>
+      )}
       {!data.installed && data.missing_scopes?.length > 0 && (
         <p className="mt-3 rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
           {t([
@@ -414,10 +442,18 @@ function SplitDetail({ id }) {
             {t(['التقدير بنسب التوزيع', 'Estimation par les poids'])}
           </Badge>
         )}
-        {data.verdict === 'collecting' && data.estimation !== 'weights' && data.visitors_needed_per_variant ? (
-          <span className="text-xs text-muted">{t(['يحتاج تقريباً {n} زائراً إضافياً لكل صفحة', '≈ {n} visiteurs de plus par page'], { n: n0(data.visitors_needed_per_variant) })}</span>
-        ) : null}
       </div>
+      {data.waiting?.length > 0 && data.verdict !== 'split_broken' && (
+        <p className="text-xs leading-6 text-muted">
+          {t(['لا حكم قبل:', 'Pas de verdict avant :'])}{' '}
+          {data.waiting.map((w) => t(WAITING[w.key], { have: n0(w.have), need: n0(w.need) })).join(' · ')}
+        </p>
+      )}
+      {data.verdict === 'split_broken' && (
+        <p className="rounded-lg bg-bad/5 p-3 text-xs leading-6 text-bad">
+          {t(['عدد الزوار في كل نسخة يبتعد عن النسب أكثر مما تفسّره الصدفة، فأي حكم الآن قد يكون خاطئاً. هل يشير إعلان ما مباشرة إلى رابط نسخة بعينها؟ أو غُيّرت النسب أثناء الاختبار؟', 'Les visiteurs par version s’écartent des poids au-delà du hasard : un verdict serait trompeur. Une pub pointe-t-elle sur une version précise ? Les poids ont-ils changé ?'])}
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {data.variants.map((v, i) => {

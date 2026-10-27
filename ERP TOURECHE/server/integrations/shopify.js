@@ -171,6 +171,14 @@ export function parseOrder(node) {
   const visit = node.customerJourneySummary?.lastVisit || node.customerJourneySummary?.firstVisit || {};
   const utm = visit.utmParameters || {};
   const landing = attr(node, 'landing_page') || attr(node, 'landing_url') || visit.landingPage || null;
+  // معاملات رابط الصفحة نفسها (السنيبت يضع فيها utm_content و erp_v): احتياط إن لم تصل كخصائص منفصلة
+  const fromLanding = (k) => {
+    try {
+      return landing ? new URL(landing, 'https://store.invalid').searchParams.get(k) || '' : '';
+    } catch {
+      return '';
+    }
+  };
   return {
     ref,
     external_id: node.id,
@@ -186,9 +194,9 @@ export function parseOrder(node) {
     discount: num(node.totalDiscountsSet?.shopMoney?.amount),
     shipping_fee: num(node.totalShippingPriceSet?.shopMoney?.amount),
     total: num(node.totalPriceSet?.shopMoney?.amount),
-    utm_source: attr(node, 'utm_source') || utm.source || null,
-    utm_campaign: attr(node, 'utm_campaign') || utm.campaign || null,
-    utm_content: attr(node, 'utm_content') || utm.content || null,
+    utm_source: attr(node, 'utm_source') || utm.source || fromLanding('utm_source') || null,
+    utm_campaign: attr(node, 'utm_campaign') || utm.campaign || fromLanding('utm_campaign') || null,
+    utm_content: attr(node, 'utm_content') || utm.content || fromLanding('utm_content') || null,
     landing_url: landing ? String(landing).slice(0, 1000) : null,
     tags,
     created_at: node.createdAt,

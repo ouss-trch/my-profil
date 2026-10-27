@@ -62,22 +62,28 @@ test('split: route only counts while running, tags URL, keeps ad params, no cloa
 });
 
 test('split: orders attributed by utm_content and winner detected with Bayesian probability', () => {
-  const t = splits.createTest(project.id, { name: 'Winner', goal: 'delivered', variants: [{ url: 'https://shop.example/a' }, { url: 'https://shop.example/b' }] });
+  const t = splits.createTest(project.id, { name: 'Winner', goal: 'delivered', variants: [{ url: 'https://shop.example/w-a' }, { url: 'https://shop.example/w-b' }] });
   splits.updateTest(t.id, { status: 'running' });
   const [A, B] = t.variants;
   const insertClicks = (variant, n) => {
     const stmt = db.prepare('INSERT INTO split_clicks (test_id, variant_id, visitor, at) VALUES (?, ?, ?, ?)');
-    for (let i = 0; i < n; i++) stmt.run(t.id, variant.id, `${variant.label}${i}`.padEnd(16, '0'), new Date().toISOString());
+    for (let i = 0; i < n; i++) stmt.run(t.id, variant.id, `${variant.label}${String(i).padStart(15, '0')}`, new Date().toISOString());
   };
-  insertClicks(A, 400);
-  insertClicks(B, 400);
+  insertClicks(A, 1000);
+  insertClicks(B, 1000);
   const order = (label, i, delivered) => {
     const { id } = createOrder(project.id, { ref: `W-${label}-${i}`, phone: `055${String(1000000 + i).slice(-7)}`, wilaya: 16, items: [{ title: 'Thermos', qty: 1, price: 2900 }], utm_content: `winner-${label.toLowerCase()}` });
     changeStatus(id, 'confirmed', { force: true });
     changeStatus(id, delivered ? 'delivered' : 'returned', { force: true });
   };
   for (let i = 0; i < 40; i++) order('A', i, i < 32);
-  for (let i = 0; i < 12; i++) order('B', 100 + i, i < 8);
+  for (let i = 0; i < 30; i++) order('B', 100 + i, i < 8);
+  // فارق واضح لكن عمر الاختبار يوم واحد: الهدف «المسلّمة» يحتاج 14 يوماً (الطرود تعود متأخرة) ← «يتجه» لا «فائز»
+  const early = splits.results(t.id);
+  assert.equal(early.verdict, 'trending');
+  assert.deepEqual(early.waiting.map((w) => w.key), ['days']);
+  db.prepare('UPDATE split_tests SET started_at = ? WHERE id = ?').run(new Date(Date.now() - 15 * 86400e3).toISOString(), t.id);
+  db.prepare('UPDATE orders SET created_at = ? WHERE ref LIKE ?').run(new Date(Date.now() - 10 * 86400e3).toISOString(), 'W-%');
   const res = splits.results(t.id);
   const a = res.variants.find((v) => v.label === 'A');
   const b = res.variants.find((v) => v.label === 'B');
@@ -153,6 +159,9 @@ test('split (shopify mode): config for the theme snippet + weight-based estimati
   for (let i = 0; i < 30; i++) createOrder(project.id, { ref: `SD-A-${i}`, phone: '0550000001', wilaya: 16, items: [{ title: 'T', qty: 1, price: 1 }], utm_content: `${t.slug}-a` });
   for (let i = 0; i < 30; i++) createOrder(project.id, { ref: `SD-B-${i}`, phone: '0550000002', wilaya: 16, items: [{ title: 'T', qty: 1, price: 1 }], utm_content: `${t.slug}-b` });
   splits.updateTest(t.id, { goal: 'orders' });
+  assert.equal(splits.results(t.id).waiting[0].key, 'days', 'no verdict before 7 days');
+  db.prepare('UPDATE split_tests SET started_at = ? WHERE id = ?').run(new Date(Date.now() - 8 * 86400e3).toISOString(), t.id);
+  db.prepare('UPDATE orders SET created_at = ? WHERE ref LIKE ?').run(new Date(Date.now() - 86400e3).toISOString(), 'SD-%');
   const r = splits.results(t.id);
   assert.equal(r.estimation, 'weights');
   assert.equal(r.leader.label, 'A');
@@ -170,7 +179,7 @@ test('split (shopify mode): config for the theme snippet + weight-based estimati
 });
 
 test('split: visit beacon is counted for humans and flagged for bots', () => {
-  const t = splits.createTest(project.id, { name: 'Beacon', variants: [{ url: 'https://shop.example/a' }, { url: 'https://shop.example/b' }] });
+  const t = splits.createTest(project.id, { name: 'Beacon', variants: [{ url: 'https://shop.example/bc-a' }, { url: 'https://shop.example/bc-b' }] });
   assert.equal(splits.recordHit(t.slug, { v: 'A', vid: '0123456789abcdef' }, 'Mozilla/5.0 (iPhone)'), false, 'not running → ignored');
   splits.updateTest(t.id, { status: 'running' });
   assert.equal(splits.recordHit(t.slug, { v: 'A', vid: '0123456789abcdef', ad: 1 }, 'Mozilla/5.0 (iPhone)'), true);
