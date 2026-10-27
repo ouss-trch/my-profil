@@ -46,7 +46,7 @@ function HowItWorks() {
         <div className="text-sub">
           <b className="text-ink">{t(['كيف يعمل؟', 'Comment ça marche ?'])}</b>{' '}
           {t(
-            ['تضع في الإعلان رابط المنتج العادي على متجرك (مثل souqnna.com/products/thermos). كل زائر جديد يُعرض عليه شكل مختلف للصفحة — A أو B أو C (قالب بزاوية تسويقية مختلفة أو صفحة هبوط) حسب النسبة التي تحددها، على نفس الدومين، ويبقى على نفس النسخة إن عاد. كل نسخة تحمل utm_content فتُنسب كل طلبية للصفحة التي جلبتها، ثم يقارن الـ ERP الطلبيات ← التأكيد ← التسليم ويحسب احتمال أن تكون كل صفحة هي الأفضل.', 'Dans la pub, mettez le lien produit normal de votre boutique (ex. souqnna.com/products/thermos). Chaque nouveau visiteur voit une version différente — A, B ou C (template avec un autre angle ou landing page) selon vos poids, sur le même domaine, et garde la même version s’il revient. Chaque version porte un utm_content pour attribuer les commandes ; l’ERP compare commandes → confirmations → livraisons et calcule la probabilité que chaque page soit la meilleure.'],
+            ['ضع في الإعلان «رابط الاختبار» الذي يعطيك إياه الـ ERP (رابط المنتج ومعه ‎?erp_t=‎). كل زائر يأتي منه يُعرض عليه A أو B أو C (صفحة المنتج أو صفحة هبوط) حسب النسبة، ويبقى على نفس النسخة إن عاد. أما صفحة المنتج العادية فتبقى كما هي لكل من يتصفح المتجر من الأقسام، ورابط كل صفحة هبوط يفتحها هي نفسها. كل نسخة تحمل utm_content فتُنسب كل طلبية للصفحة التي جلبتها، ثم يقارن الـ ERP الطلبيات ويحسب احتمال أن تكون كل صفحة هي الأفضل.', 'Dans la pub, mettez le « lien du test » donné par l’ERP (lien produit + ?erp_t=). Chaque visiteur venu par ce lien voit A, B ou C (page produit ou landing page) selon vos poids, et garde sa version s’il revient. La page produit normale ne change pas pour qui navigue dans la boutique, et le lien de chaque landing page ouvre cette page. Chaque version porte un utm_content ; l’ERP compare les commandes et calcule la probabilité que chaque page soit la meilleure.'],
           )}
           <span className="mt-1 block text-xs">
             {t(['يعمل داخل Shopify 24/7 دون الحاجة لتشغيل جهازك. شرط سياسة Meta: كل النسخ تعرض نفس المنتج ونفس العرض؛ غيّر التصميم والصور والزاوية فقط.', 'Fonctionne dans Shopify 24/7, sans votre ordinateur. Politique Meta : même produit et même offre partout ; changez seulement design, visuels et angle.'])}
@@ -424,7 +424,11 @@ function SplitForm({ open, onClose, initial }) {
             </Field>
           )}
           {f.mode === 'shopify' && (
-            <Field label={t(['رابط الدخول (الذي تضعه في الإعلان)', "Lien d'entrée (celui de la pub)"])} className="sm:col-span-2" hint={t(['مثال: /products/thermos — كل من يفتحه يُعرض عليه A أو B أو C', 'Ex. /products/thermos — chaque visiteur voit A, B ou C'])}>
+            <Field
+              label={t(['صفحة المنتج (أساس رابط الاختبار)', 'Page produit (base du lien du test)'])}
+              className="sm:col-span-2"
+              hint={t(['رابط الإعلان يصبح: هذه الصفحة + ‎?erp_t=اسم-الاختبار. صفحة المنتج نفسها لا تتغيّر لزوار المتجر.', 'Lien de pub : cette page + ?erp_t=nom-du-test. La page produit elle-même ne change pas pour les visiteurs de la boutique.'])}
+            >
               <Input className="ltr" list="pinned-paths" value={f.entry_path} onChange={(e) => setF({ ...f, entry_path: e.target.value })} placeholder="/products/thermos" />
             </Field>
           )}
@@ -562,7 +566,10 @@ function SplitDetail({ id }) {
         <Button aria-label={t('c.delete')} variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/splits/${s.id}`), { success: t(['حُذف', 'Supprimé']) }).then((r) => r && nav('/splits'))} />
       </div>
 
-      <Card title={t(['الرابط الذي تضعه في الإعلان', 'Le lien à mettre dans la pub'])}>
+      <Card
+        title={t(['رابط الاختبار (ضعه في الإعلان)', 'Lien du test (à mettre dans la pub)'])}
+        subtitle={s.mode === 'shopify' ? t(['صفحة المنتج دون ‎?erp_t=‎ تبقى كما هي لزوار المتجر.', 'Sans ?erp_t=, la page produit reste normale pour la boutique.']) : undefined}
+      >
         {s.mode === 'shopify' && !s.public_url ? (
           <p className="text-sm text-warn">{t(['حدد دومين المتجر في الإعدادات ← تكاملات المشروع ← «دومين المتجر».', 'Renseignez le domaine de la boutique dans Paramètres → Intégrations.'])}</p>
         ) : s.public_url ? (
@@ -643,6 +650,13 @@ function SplitDetail({ id }) {
                 <M label={t(['مسلّمة', 'Livrées'])} value={n0(v.delivered)} hint={pct(v.delivery_rate)} />
                 <M label={t(['إيراد', 'CA'])} value={da(v.revenue)} />
               </div>
+              {v.direct && (
+                <p className="mt-2 rounded-lg bg-raised px-2.5 py-1.5 text-xs leading-5 text-sub">
+                  {t(['من رابطها المباشر (خارج الحكم):', 'Via son lien direct (hors verdict) :'])} <b className="num text-ink">{n0(v.direct.visitors)}</b> {t(['زائر', 'visiteurs'])} ·{' '}
+                  <b className="num text-ink">{n0(v.direct.orders)}</b> {t(['طلبية', 'commandes'])}
+                  {v.direct.conversion !== null ? ` · ${pct(v.direct.conversion, 2)}` : ''}
+                </p>
+              )}
               <div className="mt-3">
                 <div className="mb-1 flex justify-between text-xs">
                   <span className="text-sub">{t(['معدل الهدف لكل زائر', 'Taux objectif / visiteur'])}</span>
@@ -670,7 +684,10 @@ function SplitDetail({ id }) {
       <p className="text-xs text-muted">
         {t(['الطلبيات تُنسب عبر utm_content=', 'Attribution via utm_content='])}
         <span className="ltr">{s.slug}-a/b/c</span>
-        {t([' (يحفظه Shopify ونموذج الطلب). الزواحف (روبوتات Meta…) توجَّه بنفس التوزيع لكنها لا تُحتسب.', ' (conservé par Shopify et le formulaire). Les robots sont redirigés pareil mais non comptés.'])}
+        {t([
+          ' (يحفظه Shopify ونموذج الطلب). الزواحف (روبوتات Meta…) توجَّه بنفس التوزيع لكنها لا تُحتسب. من يفتح رابط صفحة هبوط بعينها يبقى عليها ولا يُحوَّل، وتُعدّ زيارته «مباشرة» لتلك الصفحة خارج الحكم.',
+          ' (conservé par Shopify et le formulaire). Les robots sont redirigés pareil mais non comptés. Qui ouvre le lien d’une landing page précise y reste ; sa visite compte « en direct » pour cette page, hors verdict.',
+        ])}
       </p>
       <SplitForm open={edit} initial={edit ? s : null} onClose={(r) => (setEdit(false), r && reload(true))} />
     </div>

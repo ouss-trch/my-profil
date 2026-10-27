@@ -241,6 +241,24 @@ function variantOrders(test, variant) {
     .all(test.project_id, test.started_at || test.created_at, tag, `%${marker}%`);
 }
 
+/**
+ * الزيارات المباشرة لصفحة النسخة (رابطها الخاص ‎?view=…‎ لا رابط الاختبار): تبيّن تحويل الصفحة نفسها،
+ * لكنها لا تدخل الحكم لأن الزائر لم يُوزَّع عشوائياً. صفحة المنتج (A) هي رابط الدخول نفسه فلا «مباشر» لها.
+ */
+function directStats(test, variant) {
+  const view = new URL(variant.url, 'https://x.invalid').searchParams.get('view');
+  if (!view) return null;
+  const since = test.started_at || test.created_at;
+  const v = db.prepare('SELECT COUNT(DISTINCT visitor) AS n FROM split_clicks WHERE variant_id = ? AND direct = 1 AND is_bot = 0').get(variant.id).n;
+  const like = `%view=${view.toLowerCase()}%`;
+  const o = db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM orders WHERE project_id = ? AND status NOT IN ('abandoned','fake') AND created_at >= ? AND LOWER(landing_url) LIKE ? AND COALESCE(landing_url, '') NOT LIKE '%erp_v=%'",
+    )
+    .get(test.project_id, since, like).n;
+  return { visitors: v, orders: o, conversion: v ? round((100 * o) / v, 2) : null };
+}
+
 /** عيّنة من توزيع Beta (Marsaglia–Tsang عبر Gamma) لحساب احتمال أن تكون كل نسخة هي الأفضل */
 function gamma(k) {
   if (k < 1) return gamma(k + 1) * Math.pow(Math.random(), 1 / k);
@@ -284,7 +302,7 @@ export function probabilityBest(arms, draws = 20000) {
 
 function quickSummary(testId) {
   const r = db
-    .prepare('SELECT COUNT(DISTINCT visitor) AS visitors, COUNT(*) AS clicks FROM split_clicks WHERE test_id = ? AND is_bot = 0')
+    .prepare('SELECT COUNT(DISTINCT visitor) AS visitors, COUNT(*) AS clicks FROM split_clicks WHERE test_id = ? AND is_bot = 0 AND direct = 0')
     .get(testId);
   return { visitors: r.visitors, clicks: r.clicks };
 }
@@ -297,10 +315,11 @@ export function results(id) {
     const human = db
       .prepare(
         `SELECT COUNT(DISTINCT CASE WHEN is_bot = 0 THEN visitor END) AS visitors, COALESCE(SUM(is_bot = 0), 0) AS clicks,
-           COALESCE(SUM(is_bot = 0 AND from_ad = 1), 0) AS from_ad, COALESCE(SUM(is_bot), 0) AS bots FROM split_clicks WHERE variant_id = ?`,
+           COALESCE(SUM(is_bot = 0 AND from_ad = 1), 0) AS from_ad, COALESCE(SUM(is_bot), 0) AS bots FROM split_clicks WHERE variant_id = ? AND direct = 0`,
       )
       .get(v.id);
     const orders = variantOrders(test, v);
+    const direct = directStats(test, v);
     const confirmed = orders.filter((o) => ['confirmed', ...SHIPPED_EVER].includes(o.status)).length;
     const delivered = orders.filter((o) => o.status === 'delivered');
     const returned = orders.filter((o) => o.status === 'returned').length;
@@ -323,6 +342,7 @@ export function results(id) {
       delivery_rate: delivered.length + returned ? round((100 * delivered.length) / (delivered.length + returned)) : null,
       goal_rate: human.visitors ? round((100 * successes) / human.visitors, 2) : null,
       successes,
+      direct,
     };
   });
   const arms = variants.filter((v) => v.active || v.visitors || v.successes);
@@ -355,7 +375,7 @@ export function results(id) {
   return {
     test: {
       ...test,
-      public_url: test.mode === 'shopify' ? storeUrl(cfg.store_domain || getProject(test.project_id)?.domain, test.entry_path) : cfg.split_base_url ? `${cfg.split_base_url.replace(/\/$/, '')}/go/${test.slug}` : null,
+      public_url: test.mode === 'shopify' ? storeUrl(cfg.store_domain || getProject(test.project_id)?.domain, test.entry_path && `${test.entry_path}?erp_t=${test.slug}`) : publicBase(cfg) ? `${publicBase(cfg)}/go/${test.slug}` : null,
     },
     estimation: tracked ? 'visitors' : 'weights',
     goal,
@@ -389,7 +409,7 @@ export function splitInsights(projectIds) {
     const r = results(t.id);
     const age = (Date.now() - Date.parse(r.test.started_at || r.test.created_at)) / 3600e3;
     // الزوار لا يُعدّون في وضع Shopify دون رابط عام: الإشارة عندها هي غياب الطلبيات المنسوبة، لا غياب الزوار
-    const counted = r.estimation === 'visitors' || r.test.mode === 'redirect' || Boolean(projectConfig(r.test.project_id).split_base_url);
+    const counted = r.estimation === 'visitors' || r.test.mode === 'redirect' || Boolean(publicBase(projectConfig(r.test.project_id)));
     out.push({
       ...r,
       age_hours: age,
@@ -408,33 +428,43 @@ export const RENDER_LINE = "{% render 'erp-split' %}";
 // لصق يدوي ترك «%}» زائدة بعد السطر: تظهر نصاً في أعلى كل صفحة من المتجر
 const STRAY_AFTER_RENDER = /\{%-?\s*render\s+'erp-split'\s*-?%\}(?:[ \t]*%\})+/;
 
-/** السنيبت: يقرأ الإعدادات من metafield المتجر، ويوجّه الزائر لنسخة الصفحة قبل رسمها */
+/**
+ * السنيبت: يقرأ الإعدادات من metafield المتجر. لا يلمس صفحة المنتج العادية أبداً:
+ *  - رابط الاختبار وحده (‎?erp_t=<slug>‎، يوضع في الإعلان) يُوزَّع على النسخ؛ زائر المتجر من الأقسام يرى صفحة المنتج كما هي؛
+ *  - من يفتح رابط صفحة هبوط بعينها (‎?view=lp-…‎) يبقى عليها، وتُعدّ زيارته «مباشرة» لها خارج حكم الاختبار.
+ */
 export function snippetLiquid() {
-  return `{%- comment -%} ERP TOURECHE · اختبار صفحات الهبوط A/B — يُدار من الـ ERP، لا تعدّله يدوياً {%- endcomment -%}
+  return `{%- comment -%} ERP TOURECHE · اختبار صفحات الهبوط A/B — يُدار من الـ ERP، لا تعدّله يدوياً. صفحة المنتج العادية لا تتغيّر: التوزيع لرابط الإعلان (?erp_t=) فقط {%- endcomment -%}
 {%- assign erp_ab = shop.metafields.${shopify.SPLIT_NAMESPACE}.${shopify.SPLIT_KEY}.value -%}
 {%- if erp_ab and erp_ab.tests.size > 0 -%}
 <script>
 (function(){try{
-var C={{ erp_ab | json }};var L=location,path=L.pathname.replace(/\\/+$/,'')||'/',q=new URLSearchParams(L.search);
+var C={{ erp_ab | json }};if(!C||C.v!==2)return;
+var L=location,q=new URLSearchParams(L.search),key=q.get('erp_t'),vw=q.get('view'),i,j,t;
 if(q.has('erp_v')||q.has('preview_theme_id')||q.has('oseid'))return;
-for(var i=0;i<C.tests.length;i++){var t=C.tests[i],p=t.p.replace(/\\/+$/,'')||'/';
-var pre=path.length>p.length&&path.slice(-p.length)===p?path.slice(0,path.length-p.length):'';
-if(!(path===p||(pre&&/^\\/[a-z]{2}(-[a-z]{2})?$/i.test(pre))))continue;
-var pick=null,ck='erp_sv_'+t.s,j;
+var beat=function(t,l,d){if(!C.b||!t.c)return;try{var vid=localStorage.getItem('erp_vid');if(!vid){vid=(Math.random().toString(16).slice(2)+'0000000000000000').slice(0,16);localStorage.setItem('erp_vid',vid);}navigator.sendBeacon(C.b+'/'+t.s+'/hit',JSON.stringify({v:l,vid:vid,d:d,ad:q.has('fbclid')?1:0,c:q.get('utm_campaign')||''}));}catch(e){}};
+for(i=0;i<C.tests.length;i++){t=C.tests[i];
+if(key===t.s){var pick=null,ck='erp_sv_'+t.s;
 if(t.st){var m=document.cookie.match(new RegExp('(?:^|; )'+ck+'=([A-F])'));if(m)for(j=0;j<t.v.length;j++)if(t.v[j].l===m[1])pick=t.v[j];}
 if(!pick){var tot=0;for(j=0;j<t.v.length;j++)tot+=t.v[j].w;var r=Math.random()*tot;for(j=0;j<t.v.length;j++){r-=t.v[j].w;if(r<0){pick=t.v[j];break;}}if(!pick)pick=t.v[t.v.length-1];}
 if(t.st)document.cookie=ck+'='+pick.l+'; path=/; max-age=2592000; SameSite=Lax';
-var u=new URL(pick.u,L.origin);if(pre&&u.pathname.indexOf(pre+'/')!==0)u.pathname=pre+u.pathname;
-q.forEach(function(v,k){if(!u.searchParams.has(k))u.searchParams.set(k,v);});
+var u=new URL(pick.u,L.origin),pre=(L.pathname.match(/^\\/[a-z]{2}(-[a-z]{2})?(?=\\/)/i)||[''])[0];
+if(pre&&u.pathname.indexOf(pre+'/')!==0)u.pathname=pre+u.pathname;
+q.forEach(function(v,k){if(k!=='erp_t'&&k!=='view'&&!u.searchParams.has(k))u.searchParams.set(k,v);});
 u.searchParams.set('utm_content',t.s+'-'+pick.l.toLowerCase());u.searchParams.set('erp_v',t.s+'.'+pick.l);
-if(C.b&&t.c){try{var vid=localStorage.getItem('erp_vid');if(!vid){vid=(Math.random().toString(16).slice(2)+'0000000000000000').slice(0,16);localStorage.setItem('erp_vid',vid);}navigator.sendBeacon(C.b+'/'+t.s+'/hit',JSON.stringify({v:pick.l,vid:vid,ad:q.has('fbclid')?1:0,c:q.get('utm_campaign')||''}));}catch(e){}}
+beat(t,pick.l,0);
 document.documentElement.style.opacity='0';setTimeout(function(){document.documentElement.style.opacity='';},2500);
 L.replace(u.toString());return;}
+if(vw&&!key)for(j=0;j<t.v.length;j++)if(t.v[j].u.indexOf('view='+vw)>-1){beat(t,t.v[j].l,1);return;}
+}
 }catch(e){document.documentElement.style.opacity='';}})();
 </script>
 {%- endif -%}
 `;
 }
+
+/** عنوان الـ ERP العام لعدّ الزوار: إعداد المشروع، وإلا عنوان الـ VPS نفسه (ERP_PUBLIC_URL أو أول ERP_ALLOWED_ORIGINS) */
+export const publicBase = (cfg) => String(cfg.split_base_url || config.publicUrl || '').replace(/\/$/, '');
 
 const storeUrl = (domain, p) => (domain && p ? `https://${String(domain).replace(/^https?:\/\//, '').replace(/\/$/, '')}${p}` : null);
 
@@ -452,15 +482,17 @@ export function shopifyConfig(projectId) {
     if (!t.entry_path) continue;
     if (t.status === 'running') {
       const v = t.variants.filter((x) => x.active && x.weight > 0).map((x) => ({ l: x.label, u: relTarget(x.url, cfg.store_domain), w: x.weight }));
-      if (v.length) tests.push({ s: t.slug, p: t.entry_path, st: t.sticky ? 1 : 0, c: 1, v });
+      if (v.length) tests.push({ s: t.slug, st: t.sticky ? 1 : 0, c: 1, v });
     } else if (t.winner_variant_id) {
       const w = t.variants.find((x) => x.id === t.winner_variant_id);
       const target = w && relTarget(w.url, cfg.store_domain);
-      if (target && target !== t.entry_path) tests.push({ s: t.slug, p: t.entry_path, st: 0, c: 0, v: [{ l: w.label, u: target, w: 1 }] });
+      // الفائز المعتمد: رابط الإعلان يبقى يوجّه إليه (صفحة المنتج العادية لا تتغيّر)
+      if (target) tests.push({ s: t.slug, st: 0, c: 0, v: [{ l: w.label, u: target, w: 1 }] });
     }
   }
-  const base = String(cfg.split_base_url || '').replace(/\/$/, '');
-  return { v: 1, b: base ? `${base}/api/hooks/split` : null, tests };
+  const base = publicBase(cfg);
+  // v2: التوزيع بمفتاح رابط الإعلان (erp_t) لا بمسار الصفحة؛ السنيبت القديم (v1) لا يجد «p» فلا يحوّل أحداً
+  return { v: 2, b: base ? `${base}/api/hooks/split` : null, tests };
 }
 
 const syncState = new Map();
@@ -542,7 +574,7 @@ export async function installShopify(projectId) {
 
 export async function uninstallShopify(projectId) {
   const cfg = projectConfig(projectId);
-  await shopify.setShopJsonMetafield(cfg, shopify.SPLIT_NAMESPACE, shopify.SPLIT_KEY, { v: 1, b: null, tests: [] });
+  await shopify.setShopJsonMetafield(cfg, shopify.SPLIT_NAMESPACE, shopify.SPLIT_KEY, { v: 2, b: null, tests: [] });
   const theme = await shopify.mainTheme(cfg);
   const [layoutFile] = theme ? await shopify.themeFiles(cfg, theme.id, ['layout/theme.liquid']) : [];
   if (layoutFile?.content?.includes(RENDER_LINE)) await shopify.upsertThemeFiles(cfg, theme.id, [{ filename: 'layout/theme.liquid', content: layoutFile.content.replace(`\n    ${RENDER_LINE}`, '').replace(RENDER_LINE, '') }]);
@@ -550,19 +582,20 @@ export async function uninstallShopify(projectId) {
 }
 
 /** نقرة مُرسلة من السنيبت (navigator.sendBeacon) — تُحتسب فقط إن كان الـ ERP متاحاً من الإنترنت */
-export function recordHit(slug, { v, vid, ad, c }, userAgent) {
+export function recordHit(slug, { v, vid, ad, c, d }, userAgent) {
   const t = db.prepare("SELECT * FROM split_tests WHERE slug = ? AND status = 'running'").get(String(slug).toLowerCase());
   if (!t) return false;
   const variant = db.prepare('SELECT id FROM split_variants WHERE test_id = ? AND label = ?').get(t.id, String(v || '').toUpperCase());
   if (!variant) return false;
   const visitor = /^[a-f0-9]{16}$/.test(String(vid || '')) ? vid : crypto.randomBytes(8).toString('hex');
-  db.prepare('INSERT INTO split_clicks (test_id, variant_id, visitor, first_visit, is_bot, from_ad, utm_campaign, at) VALUES (?, ?, ?, 1, ?, ?, ?, ?)').run(
+  db.prepare('INSERT INTO split_clicks (test_id, variant_id, visitor, first_visit, is_bot, from_ad, utm_campaign, direct, at) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)').run(
     t.id,
     variant.id,
     visitor,
     BOT.test(userAgent || '') || !userAgent ? 1 : 0,
     ad ? 1 : 0,
     c ? String(c).slice(0, 120) : null,
+    d ? 1 : 0,
     nowIso(),
   );
   return true;

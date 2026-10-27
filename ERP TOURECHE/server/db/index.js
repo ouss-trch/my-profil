@@ -582,6 +582,10 @@ ${STORE_PAGES_SQL}
     )`);
     db.exec("ALTER TABLE landing_pages ADD COLUMN visuals TEXT NOT NULL DEFAULT '[]'");
   },
+  // زيارة مباشرة لصفحة نسخة (رابطها الخاص، لا رابط الاختبار): تُعدّ للصفحة ولا تدخل حكم A/B
+  (db) => {
+    db.exec('ALTER TABLE split_clicks ADD COLUMN direct INTEGER NOT NULL DEFAULT 0');
+  },
 ];
 
 export function openDb(file = config.dbFile) {

@@ -48,6 +48,10 @@ export const config = {
     .map((x) => x.trim().replace(/\/$/, ''))
     .filter(Boolean),
   anthropicApiKey: env.ANTHROPIC_API_KEY || '',
+  // عنوان الـ ERP العام (على الـ VPS): لعدّ زوار اختبارات الصفحات من دومين المتجر
+  publicUrl: String(env.ERP_PUBLIC_URL || String(env.ERP_ALLOWED_ORIGINS || '').split(',')[0] || '')
+    .trim()
+    .replace(/\/$/, ''),
   // مجلد التبادل مع خدمة التحديث على الـ VPS (غير موجود على الحاسوب)
   updaterDir: env.ERP_UPDATER_MOUNT || '/updater',
   isTest: env.NODE_ENV === 'test' || Boolean(env.NODE_TEST_CONTEXT),

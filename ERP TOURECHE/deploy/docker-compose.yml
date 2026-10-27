@@ -18,6 +18,8 @@ services:
     restart: unless-stopped
     environment:
       ERP_ALLOWED_ORIGINS: https://${ERP_DOMAIN}
+      # عنوان الـ ERP العام: يعدّ زوار اختبارات الصفحات من دومين المتجر
+      ERP_PUBLIC_URL: https://${ERP_DOMAIN}
       ERP_BACKUP_MIRROR: ${ERP_BACKUP_MIRROR:-}
     volumes:
       - erp_data:/data

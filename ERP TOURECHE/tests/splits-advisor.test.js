@@ -166,7 +166,8 @@ test('split (shopify mode): config for the theme snippet + weight-based estimati
   assert.equal(r.estimation, 'weights');
   assert.equal(r.leader.label, 'A');
   assert.equal(r.verdict, 'winner');
-  assert.equal(r.test.public_url, 'https://shop.example/products/thermos-500');
+  // رابط الإعلان = صفحة المنتج + مفتاح الاختبار؛ صفحة المنتج دون المفتاح لا تتغيّر لزوار المتجر
+  assert.equal(r.test.public_url, `https://shop.example/products/thermos-500?erp_t=${t.slug}`);
   // اعتماد الفائز: الرابط يبقى يوجّه إليه بشكل دائم
   splits.updateTest(t.id, { winner_variant_id: r.leader.id, status: 'ended' });
   const ended = splits.shopifyConfig(project.id).tests.find((x) => x.s === t.slug);
@@ -174,8 +175,27 @@ test('split (shopify mode): config for the theme snippet + weight-based estimati
   // سنيبت القالب: يقرأ metafield المتجر وكود JavaScript صالح
   const snippet = splits.snippetLiquid();
   assert.match(snippet, /shop\.metafields\.erp_toureche\.splits\.value/);
-  const js = snippet.slice(snippet.indexOf('<script>') + 8, snippet.indexOf('</script>')).replace('{{ erp_ab | json }}', JSON.stringify({ v: 1, b: null, tests: [] }));
-  assert.doesNotThrow(() => new Function(js));
+  const js = snippet.slice(snippet.indexOf('<script>') + 8, snippet.indexOf('</script>'));
+  const run = (href, conf, cookie = '') => {
+    const loc = new URL(href);
+    const out = { replaced: null, beacons: [] };
+    const fake = { pathname: loc.pathname, search: loc.search, origin: loc.origin, replace: (u) => (out.replaced = u) };
+    const doc = { cookie, documentElement: { style: {} } };
+    new Function('location', 'document', 'navigator', 'localStorage', js.replace('{{ erp_ab | json }}', JSON.stringify(conf)))(fake, doc, { sendBeacon: (u, b) => out.beacons.push(JSON.parse(b)) }, { getItem: () => '0123456789abcdef', setItem() {} });
+    return out;
+  };
+  const live = { v: 2, b: 'https://erp.example/api/hooks/split', tests: [{ s: 'thermos', st: 1, c: 1, v: [{ l: 'A', u: '/products/t', w: 1 }, { l: 'B', u: '/products/t?view=lp-cadeau', w: 1 }] }] };
+  // زائر المتجر (من الأقسام): صفحة المنتج كما هي
+  assert.deepEqual(run('https://s.example/products/t', live), { replaced: null, beacons: [] });
+  // رابط الإعلان: يوزَّع ويُعدّ
+  const ad = run('https://s.example/products/t?erp_t=thermos&fbclid=1', live, 'erp_sv_thermos=B');
+  assert.equal(ad.replaced, 'https://s.example/products/t?view=lp-cadeau&fbclid=1&utm_content=thermos-b&erp_v=thermos.B');
+  assert.deepEqual(ad.beacons.map((b) => [b.v, b.d, b.ad]), [['B', 0, 1]]);
+  // رابط صفحة هبوط بعينها: يبقى عليها، وزيارة مباشرة
+  assert.deepEqual(run('https://s.example/products/t?view=lp-cadeau', live).replaced, null);
+  assert.deepEqual(run('https://s.example/products/t?view=lp-cadeau', live).beacons.map((b) => [b.v, b.d]), [['B', 1]]);
+  // إعدادات قديمة (v1) لا تحوّل أحداً
+  assert.equal(run('https://s.example/products/t', { v: 1, tests: [{ s: 'thermos', p: '/products/t', st: 0, c: 1, v: live.tests[0].v }] }).replaced, null);
 });
 
 test('split: visit beacon is counted for humans and flagged for bots', () => {
@@ -192,4 +212,7 @@ test('split: visit beacon is counted for humans and flagged for bots', () => {
   assert.equal(a.from_ad, 1);
   assert.equal(b.visitors, 0);
   assert.equal(b.bots, 1);
+  // زيارة مباشرة لرابط النسخة: لا تدخل زوار الاختبار
+  assert.equal(splits.recordHit(t.slug, { v: 'A', vid: 'aaaaaaaaaaaaaaaa', d: 1 }, 'Mozilla/5.0 (Android)'), true);
+  assert.equal(splits.results(t.id).variants.find((v) => v.label === 'A').visitors, 1);
 });
