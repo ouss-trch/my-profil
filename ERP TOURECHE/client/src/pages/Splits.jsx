@@ -257,6 +257,8 @@ function SplitList() {
 }
 
 const CUSTOM = '__custom';
+// حصص متساوية مجموعها 100 (3 صفحات: 34 · 33 · 33)
+const shares = (n) => Array.from({ length: n }, (_, i) => Math.floor(100 / n) + (i < 100 % n ? 1 : 0));
 
 /**
  * الصفحات التي يمكن اختبارها لمنتج: صفحة المنتج الأصلية، صفحات الهبوط المنشورة من الـ ERP (باسم الزاوية)،
@@ -283,9 +285,13 @@ function usePageChoices(open, productId, productInfo) {
       .map((l) => ({ value: `${base}${l.target_url}`, label: `${l.angle} · /pages/${l.slug}`, name: l.angle })),
   );
   const others = take((pages.data?.rows || []).filter((p) => !p.gone && p.published && (p.kind !== 'product' || /[?&]view=/.test(p.url)) && (p.pinned || mine(p))).map((p) => ({ value: p.url, label: p.title || p.path })));
+  // صفحات الهبوط المنشورة لمنتج معيّن (لملء الاختبار تلقائياً)
+  const landingsOf = (id) =>
+    (landings.data?.rows || []).filter((l) => l.status === 'published' && l.target_url && base && l.product_id === Number(id)).map((l) => ({ url: `${base}${l.target_url}`, name: l.angle }));
   return {
     base,
     product,
+    landingsOf,
     groups: [
       { label: t(['صفحة المنتج الأصلية', 'Page produit d’origine']), items: product },
       { label: t(['صفحات الهبوط من الـ ERP (الزاوية)', 'Landing pages de l’ERP (angle)']), items: lps },
@@ -356,19 +362,27 @@ function SplitForm({ open, onClose, initial }) {
   if (!f) return null;
   const setV = (k, patch) => setF({ ...f, variants: f.variants.map((v, j) => (j === k ? { ...v, ...patch } : v)) });
   const total = f.variants.filter((v) => v.active).reduce((s, v) => s + Number(v.weight || 0), 0);
-  // اختيار المنتج: رابط الدخول = صفحته، والنسخة A = صفحته الأصلية (ما لم تُملأ من قبل)
+  // اختيار المنتج يبني الاختبار كله: A = صفحة المنتج الرسمية (رابط المنشورات والإعلانات)،
+  // ثم كل صفحات الهبوط المنشورة لهذا المنتج — 3 صفحات هبوط + صفحة المنتج = 4 نسخ بحصص متساوية
   const pickProduct = (id) => {
     const p = (products.data || []).find((x) => String(x.id) === String(id));
     const path = p?.handle ? `/products/${p.handle}` : '';
     const origin = path && choices.base ? `${choices.base}${path}` : '';
+    if (!origin) return setF({ ...f, product_id: id });
+    const pages = [{ url: origin, name: t(['صفحة المنتج', 'Page produit']) }, ...choices.landingsOf(id)].slice(0, 6);
+    if (pages.length < 2) pages.push({ url: '', name: '' });
+    const w = shares(pages.length);
     setF({
       ...f,
       product_id: id,
-      name: f.name || p?.handle || '',
-      entry_path: f.entry_path || path,
-      variants: f.variants.map((v, k) => (k === 0 && !v.url && origin ? { ...v, url: origin, name: v.name || t(['صفحة المنتج', 'Page produit']) } : v)),
+      name: f.name || p.handle,
+      entry_path: path,
+      variants: pages.map((x, k) => ({ ...x, weight: w[k], active: true })),
     });
   };
+  // تعديل اختبار: صفحات هبوط نُشرت بعد إنشائه
+  const missing = initial && initial.product_id ? choices.landingsOf(initial.product_id).filter((x) => !f.variants.some((v) => v.url === x.url)) : [];
+  const lpCount = !initial && f.product_id ? choices.landingsOf(f.product_id).length : null;
   const save = async () => {
     const body = { ...f, product_id: f.product_id ? Number(f.product_id) : undefined, variants: f.variants.map(({ custom, ...v }) => ({ ...v, weight: Number(v.weight) })) };
     const r = await run('save', () => (initial ? api.patch(`/splits/${initial.id}`, body) : api.post('/splits', body)));
@@ -426,10 +440,38 @@ function SplitForm({ open, onClose, initial }) {
           {f.mode === 'shopify' && (
             <p className="text-xs leading-5 text-muted">
               {t([
-                'اختر لكل نسخة صفحة من القائمة: صفحة المنتج الأصلية، أو صفحة هبوط من الـ ERP (تظهر باسم زاويتها بعد «نشر على المتجر»)، أو صفحة أخرى من متجرك. كل الصفحات لنفس المنتج ونفس العرض.',
-                'Pour chaque version, choisissez une page : la page produit, une landing page de l’ERP (avec son angle, après « Publier »), ou une autre page de la boutique. Même produit et même offre partout.',
+                'عند اختيار المنتج تُدرج تلقائياً صفحة المنتج الرسمية (A، رابط منشوراتك وإعلاناتك) وكل صفحات الهبوط المنشورة له من «صفحات الهبوط»، بحصص متساوية: 3 صفحات هبوط + صفحة المنتج = 4 صفحات. يمكنك تعطيل صفحة أو تغييرها من القائمة.',
+                'En choisissant le produit, la page produit officielle (A, celle de vos posts et pubs) et toutes ses landing pages publiées sont ajoutées, à parts égales : 3 landing pages + la page produit = 4 pages. Vous pouvez en désactiver ou en changer une.',
               ])}
             </p>
+          )}
+          {lpCount === 0 && (
+            <p className="rounded-lg bg-warn/10 px-3 py-2 text-xs leading-6 text-sub">
+              {t([
+                'لا صفحات هبوط منشورة لهذا المنتج بعد. أنشئها وانشرها من «صفحات المتجر ← صفحات الهبوط»، أو اختر الصفحة B يدوياً.',
+                'Aucune landing page publiée pour ce produit. Créez-la et publiez-la depuis « Pages de la boutique », ou choisissez la page B à la main.',
+              ])}
+            </p>
+          )}
+          {lpCount > 5 && <p className="text-xs text-muted">{t(['الحد 6 صفحات: أُدرجت صفحة المنتج وأول 5 صفحات هبوط.', 'Maximum 6 pages : la page produit et les 5 premières landing pages.'])}</p>}
+          {missing.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-info/10 px-3 py-2 text-xs leading-6 text-sub">
+              <span className="min-w-0 flex-1">
+                {t(['صفحات هبوط منشورة لهذا المنتج ليست في الاختبار:', 'Landing pages publiées absentes du test :'])} <b className="text-ink">{missing.map((x) => x.name).join('، ')}</b>.{' '}
+                {t(['إضافتها أثناء التشغيل تبدأ عدّها من الآن.', 'Ajoutées en cours de test, elles comptent à partir de maintenant.'])}
+              </span>
+              <Button
+                size="sm"
+                icon={Plus}
+                disabled={f.variants.length >= 6}
+                onClick={() => {
+                  const w = Number(f.variants.find((v) => v.active)?.weight) || 50;
+                  setF({ ...f, variants: [...f.variants, ...missing.map((x) => ({ ...x, weight: w, active: true }))].slice(0, 6) });
+                }}
+              >
+                {t(['أضفها', 'Les ajouter'])}
+              </Button>
+            </div>
           )}
           <p className="rounded-lg bg-raised px-3 py-2 text-xs leading-6 text-sub">
             <b className="text-ink">{t(['نسبة الزوار:', 'Part des visiteurs :'])}</b>{' '}

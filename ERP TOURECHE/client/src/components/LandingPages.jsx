@@ -465,9 +465,8 @@ export default function LandingPages() {
             {rows.map((l) => (
               <li key={l.id} className="flex flex-wrap items-center gap-2 py-2.5">
                 <button type="button" className="min-w-0 flex-1 text-start" onClick={() => setOpen(l)}>
-                  <span className="block truncate font-medium text-ink">
-                    {l.product_title} · {l.angle}
-                  </span>
+                  <span className="block truncate font-medium text-ink">{l.angle}</span>
+                  <span className="block truncate text-xs text-sub">{l.product_title}</span>
                   <span className="ltr block truncate text-xs text-muted">/pages/{l.slug}</span>
                 </button>
                 <Badge>{l.framework.toUpperCase()}</Badge>
