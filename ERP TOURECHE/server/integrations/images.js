@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { getSetting } from '../lib/settings.js';
 import { request, IntegrationError } from '../lib/http.js';
 import { randomId } from '../lib/util.js';
+import { recordGemini, recordOpenAIImage } from '../services/apiCost.js';
 
 /**
  * توليد صور الإعلانات والمنتجات. المزوّد يُختار من الإعدادات:
@@ -71,7 +72,7 @@ export function geminiError(e, model) {
   return e;
 }
 
-export async function generateImages(projectId, { prompt, sourceUrls = [], count = 1, size = '1024x1024', aspect = null, product = null }) {
+export async function generateImages(projectId, { prompt, sourceUrls = [], count = 1, size = '1024x1024', aspect = null, product = null, kind = 'image' }) {
   if (aspect && OPENAI_SIZE[aspect]) size = OPENAI_SIZE[aspect];
   const provider = imageProvider();
   if (provider === 'none') throw new IntegrationError('images', 'config', 'image_provider_not_configured');
@@ -115,7 +116,9 @@ export async function generateImages(projectId, { prompt, sourceUrls = [], count
         retries: 0,
       }));
     }
-    for (const img of data?.data || []) if (img.b64_json) results.push(save(projectId, Buffer.from(img.b64_json, 'base64'), 'png'));
+    const made = (data?.data || []).filter((img) => img.b64_json);
+    recordOpenAIImage(model, data?.usage, made.length || count, { projectId, kind });
+    for (const img of made) results.push(save(projectId, Buffer.from(img.b64_json, 'base64'), 'png'));
   }
 
   if (provider === 'gemini') {
@@ -146,10 +149,12 @@ export async function generateImages(projectId, { prompt, sourceUrls = [], count
         await new Promise((r) => setTimeout(r, wait * 1000));
         return call();
       });
+      const before = results.length;
       for (const p of data?.candidates?.[0]?.content?.parts || []) {
         const inline = p.inlineData || p.inline_data;
         if (inline?.data) results.push(save(projectId, Buffer.from(inline.data, 'base64'), (inline.mimeType || inline.mime_type || '').includes('jpeg') ? 'jpg' : 'png'));
       }
+      recordGemini(model, data?.usageMetadata, results.length - before, { projectId, kind });
     }
   }
 

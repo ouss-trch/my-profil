@@ -483,6 +483,7 @@ export async function generateSeo(id, { instructions = '' } = {}) {
     schema: ai.SEO_SCHEMA,
     effort: 'medium',
     images,
+    meter: { projectId: p.project_id, kind: 'seo' },
   });
   result.handle = slugify(result.handle || result.title, 60);
   result.collections = cols.filter((c) => (result.collections_hint || []).includes(c.title)).map((c) => ({ id: c.id, title: c.title, handle: c.handle }));
@@ -526,6 +527,7 @@ ${instructions ? `تعليمات إضافية: ${instructions}` : ''}`,
     schema: ai.AD_SCHEMA,
     effort: 'medium',
     images,
+    meter: { projectId: p.project_id, kind: 'ad_copy' },
   });
   db.prepare('INSERT INTO creatives (project_id, product_id, kind, content, provider) VALUES (?, ?, ?, ?, ?)').run(p.project_id, id, 'copy', JSON.stringify(res), ai.model());
   return res;

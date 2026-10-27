@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import { getSetting } from '../lib/settings.js';
 import { IntegrationError } from '../lib/http.js';
+import { recordClaude } from '../services/apiCost.js';
 
 /**
  * Claude داخل الـ ERP: توليد SEO للمنتجات، نصوص الإعلانات، الملخص اليومي، والمساعد الذكي (services/assistant.js).
@@ -58,8 +59,8 @@ function translateError(e) {
   return e;
 }
 
-/** طلب واحد يعيد JSON مطابقاً للمخطط (Structured Outputs) */
-export async function structured({ system, prompt, schema, effort = 'medium', maxTokens = 16000, images = [] }) {
+/** طلب واحد يعيد JSON مطابقاً للمخطط (Structured Outputs). meter = { projectId, kind } لدفتر كلفة الواجهات */
+export async function structured({ system, prompt, schema, effort = 'medium', maxTokens = 16000, images = [], meter }) {
   const content = [
     ...images.map((img) => (img.url ? { type: 'image', source: { type: 'url', url: img.url } } : { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } })),
     { type: 'text', text: prompt },
@@ -75,6 +76,8 @@ export async function structured({ system, prompt, schema, effort = 'medium', ma
   } catch (e) {
     throw translateError(e);
   }
+  // مدفوع حتى لو رُفض أو قُطع: يُسجَّل قبل الفحص
+  recordClaude(res, meter);
   if (res.stop_reason === 'refusal') throw new IntegrationError('ai', 'invalid', 'ai_refused');
   if (res.stop_reason === 'max_tokens') throw new IntegrationError('ai', 'invalid', 'ai_output_truncated');
   try {
@@ -85,9 +88,10 @@ export async function structured({ system, prompt, schema, effort = 'medium', ma
 }
 
 /** نص حر قصير (ملخصات، تقارير) */
-export async function text({ system, prompt, effort = 'low', maxTokens = 8000 }) {
+export async function text({ system, prompt, effort = 'low', maxTokens = 8000, meter }) {
   try {
     const res = await client().beta.messages.create({ ...baseParams({ effort, maxTokens }), system, messages: [{ role: 'user', content: prompt }] });
+    recordClaude(res, meter);
     if (res.stop_reason === 'refusal') throw new IntegrationError('ai', 'invalid', 'ai_refused');
     return textOf(res);
   } catch (e) {
@@ -95,12 +99,15 @@ export async function text({ system, prompt, effort = 'low', maxTokens = 8000 })
   }
 }
 
-export async function createMessage(params) {
+export async function createMessage(params, meter) {
+  let res;
   try {
-    return await client().beta.messages.create(params);
+    res = await client().beta.messages.create(params);
   } catch (e) {
     throw translateError(e);
   }
+  recordClaude(res, meter);
+  return res;
 }
 
 // ——— مخططات JSON ———

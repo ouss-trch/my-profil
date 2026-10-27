@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, EyeOff, FileText, Globe, Home, LayoutTemplate, Package, Rows3 } from 'lucide-react';
+import { Activity, CircleHelp, EyeOff, FileText, Globe, Home, LayoutTemplate, Package, Rows3 } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { ago, n0, pct } from '../lib/format.js';
@@ -20,7 +20,7 @@ export function TrackingBadge({ health }) {
   );
 }
 
-const KINDS = {
+export const KINDS = {
   landing: { icon: LayoutTemplate, label: ['صفحة هبوط', 'Landing'] },
   template: { icon: LayoutTemplate, label: ['قالب', 'Modèle'] },
   product: { icon: Package, label: ['صفحة المنتج', 'Fiche produit'] },
@@ -28,9 +28,10 @@ const KINDS = {
   collection: { icon: Rows3, label: ['مجموعة', 'Collection'] },
   page: { icon: FileText, label: ['صفحة', 'Page'] },
   other: { icon: Globe, label: ['أخرى', 'Autre'] },
+  none: { icon: CircleHelp, label: ['دون صفحة معروفة', 'Page inconnue'] },
 };
 
-const SOURCES = {
+export const SOURCES = {
   meta: ['إعلانات Meta', 'Pubs Meta'],
   google: ['Google Ads', 'Google Ads'],
   tiktok: ['TikTok Ads', 'TikTok Ads'],
@@ -40,7 +41,39 @@ const SOURCES = {
   internal: ['تنقّل داخل المتجر', 'Navigation interne'],
   direct: ['مباشر (رابط محفوظ، واتساب…)', 'Direct (favori, WhatsApp…)'],
   other: ['مواقع أخرى', 'Autres sites'],
+  manual: ['يدوية (هاتف، رسالة)', 'Manuelles (téléphone, message)'],
+  unknown: ['غير معروف (الجدول، طلبيات قبل العدّاد)', 'Inconnu (Sheet, commandes d’avant le compteur)'],
 };
+
+/** اسم الصفحة كما يفهمه صاحب المتجر: الزاوية أو المنتج، نوعها، والمسار */
+export function PageCell({ p }) {
+  const { t } = useI18n();
+  const K = KINDS[p.kind] || KINDS.other;
+  const name = p.label || t(K.label);
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {p.product_id ? (
+          <Link className="font-medium hover:underline" to={`/products/${p.product_id}`} dir="auto">
+            {name}
+          </Link>
+        ) : (
+          <span className="font-medium" dir="auto">
+            {name}
+          </span>
+        )}
+        {p.label && <Badge icon={K.icon}>{t(K.label)}</Badge>}
+      </div>
+      {p.sub && (
+        <div className="text-xs text-muted" dir="auto">
+          {p.sub}
+        </div>
+      )}
+      {p.kind === 'none' && <div className="text-xs text-muted">{t(['طلبيات يدوية، من الجدول، أو قبل تركيب العدّاد', 'Manuelles, issues du Sheet ou d’avant le compteur'])}</div>}
+      {p.key && <div className="ltr max-w-xs truncate text-[11px] text-muted">{p.key}</div>}
+    </>
+  );
+}
 
 /**
  * الزوار والتحويل لكل صفحة من عدّاد المتجر: من زار، من بدأ النموذج، من طلب، ومن استلم.
@@ -111,25 +144,10 @@ export default function TrafficCard() {
                 </thead>
                 <tbody>
                   {shown.map((p) => {
-                    const K = KINDS[p.kind] || KINDS.other;
-                    const name = p.label || t(K.label);
                     return (
                       <tr key={`${p.project_id}:${p.key}`}>
                         <td className="min-w-[13rem]">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {p.product_id ? (
-                              <Link className="font-medium hover:underline" to={`/products/${p.product_id}`} dir="auto">
-                                {name}
-                              </Link>
-                            ) : (
-                              <span className="font-medium" dir="auto">
-                                {name}
-                              </span>
-                            )}
-                            {p.label && <Badge icon={K.icon}>{t(K.label)}</Badge>}
-                          </div>
-                          {p.sub && <div className="text-xs text-muted" dir="auto">{p.sub}</div>}
-                          <div className="ltr max-w-xs truncate text-[11px] text-muted">{p.key}</div>
+                          <PageCell p={p} />
                         </td>
                         <td className="num text-end">{n0(p.visitors)}</td>
                         <td className="num text-end">

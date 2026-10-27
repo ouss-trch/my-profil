@@ -392,6 +392,7 @@ export async function generateLanding(projectId, input, userId = null) {
       schema: LANDING_SCHEMA,
       effort: 'medium',
       images,
+      meter: { projectId, kind: 'landing' },
     }),
     ai
       .structured({
@@ -400,6 +401,7 @@ export async function generateLanding(projectId, input, userId = null) {
         schema: planSchema(extras),
         effort: 'medium',
         images: images.slice(0, 1),
+        meter: { projectId, kind: 'landing_plan' },
       })
       // النص هو الأهم: إن فشل هذا الطلب تُحفظ الصفحة دونه، و«خطط الصور» يكمله
       .catch(() => ({ visuals: [] })),
@@ -448,6 +450,7 @@ export async function planVisuals(id) {
     schema: planSchema(missing),
     effort: 'medium',
     images,
+    meter: { projectId: l.project_id, kind: 'landing_plan' },
   });
   if (missing.length) db.prepare('UPDATE landing_pages SET copy = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(cleanCopy({ ...l.copy, ...Object.fromEntries(missing.map((k) => [k, raw[k]])) })), nowIso(), id);
   saveVisuals(id, cleanVisuals(raw.visuals));
@@ -493,7 +496,7 @@ export async function generateVisual(id, vid) {
   const sources = (p.images || []).map((i) => i.url).filter((u) => /^https:\/\//.test(u || '') || uploadPath(u)).slice(0, 1);
   if (!sources.length) throw badRequest('visual_needs_product_photos');
   const prompt = visualPrompt(p, v);
-  const [img] = await generateImages(l.project_id, { prompt, sourceUrls: sources, count: 1, aspect: '4:5', product: { id: p.id, title: p.title } });
+  const [img] = await generateImages(l.project_id, { prompt, sourceUrls: sources, count: 1, aspect: '4:5', product: { id: p.id, title: p.title }, kind: 'landing_image' });
   db.prepare('INSERT INTO creatives (project_id, product_id, kind, file, url, prompt, provider) VALUES (?, ?, ?, ?, ?, ?, ?)').run(l.project_id, p.id, 'image', img.file, img.url, prompt, imageProvider());
   // قراءة جديدة: لقطات أخرى قد تكون رُسمت في الأثناء
   const fresh = getLanding(id).visuals.map((x) => (x.id === vid ? { ...x, image: img.url, drawn_with_text: Boolean(v.with_text && v.headline), shopify_url: null, width: null, height: null, approved: true } : x));

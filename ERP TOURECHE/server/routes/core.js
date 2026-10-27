@@ -127,7 +127,7 @@ coreRouter.post('/settings/test/:service', requireRole('admin', 'manager'), asyn
     else if (s === 'sheets') {
       const rows = await n8n.sheetsRead(cfg.sheet_id, `${cfg.sheet_tab}!1:2`);
       result = { headers: rows[0] || [] };
-    } else if (s === 'ai') result = { reply: await ai.text({ system: 'أجب بكلمة واحدة.', prompt: 'قل: جاهز', maxTokens: 1024 }) };
+    } else if (s === 'ai') result = { reply: await ai.text({ system: 'أجب بكلمة واحدة.', prompt: 'قل: جاهز', maxTokens: 1024, meter: { projectId: projectId || null, kind: 'test' } }) };
     else throw badRequest('unknown_service');
     res.json({ ok: true, result });
   } catch (e) {

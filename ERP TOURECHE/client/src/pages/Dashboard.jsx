@@ -8,6 +8,7 @@ import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import { Card, Empty, ErrorBox, Input, Loading, Segmented, Stat, Tabs } from '../components/ui.jsx';
 import { BarList, BarsChart, TrendChart } from '../components/charts.jsx';
+import { PageCell, SOURCES } from '../components/Traffic.jsx';
 
 /** لوحة القيادة: القمع، المالية، الاتجاهات، الولايات، المنتجات، المصادر، الفريق */
 export default function Dashboard() {
@@ -90,6 +91,7 @@ export default function Dashboard() {
                     <Row label={t(['تكلفة المرتجعات', 'Retours'])} value={da(-(d.finance.return_cost || 0))} />
                     <Row label={t(['الإعلانات', 'Publicité'])} value={da(-(d.finance.ad_spend_da || 0))} />
                     <Row label={t(['مصاريف أخرى', 'Autres charges'])} value={da(-(d.finance.expenses || 0))} />
+                    <Row label={t(['الذكاء الاصطناعي (API)', 'IA (API)'])} value={da(-(d.finance.api_cost || 0))} />
                     <Row label={t(['الربح', 'Profit'])} value={da(d.finance.profit)} strong tone={d.finance.profit < 0 ? 'text-bad' : 'text-good'} />
                     <Row label={t(['تكلفة الطلبية', 'Coût / commande'])} value={da(d.finance.cpa)} />
                     <Row label={t(['تكلفة المسلّمة', 'Coût / livrée'])} value={da(d.finance.cost_per_delivered)} />
@@ -187,9 +189,65 @@ export default function Dashboard() {
             </Card>
           )}
           {tab === 'sources' && (
-            <Card title={t(['من أين تأتي الطلبيات؟ (utm_source)', "D'où viennent les commandes ? (utm_source)"])}>
-              {d.sources.length ? <BarList rows={d.sources.map((s) => ({ key: s.source, label: s.source, value: s.orders, extra: `${t(['مسلّمة', 'livrées'])} ${s.delivered}` }))} /> : <Empty />}
-            </Card>
+            <div className="space-y-4">
+              <Card
+                pad={false}
+                title={t(['الطلبيات حسب الصفحة', 'Commandes par page'])}
+                subtitle={t(['الصفحة التي أُرسل منها النموذج (صفحة هبوط، صفحة منتج…)، وزوارها في نفس الفترة من العدّاد المخفي. المزيفة لا تُحسب.', 'La page d’où le formulaire est parti (landing, fiche produit…), avec ses visiteurs sur la même période (compteur invisible). Hors fausses commandes.'])}
+              >
+                {d.source_pages?.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>{t(['الصفحة', 'Page'])}</th>
+                          <th className="text-end">{t(['زوار', 'Visiteurs'])}</th>
+                          <th className="text-end">{t('c.orders')}</th>
+                          <th className="text-end">{t(['التحويل', 'Conversion'])}</th>
+                          <th className="text-end">{t(['مؤكدة', 'Confirmées'])}</th>
+                          <th className="text-end">{t(['مسلّمة', 'Livrées'])}</th>
+                          <th className="text-end">{t(['الإيراد', 'CA'])}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {d.source_pages.map((p) => (
+                          <tr key={`${p.project_id}:${p.key}`}>
+                            <td className="min-w-[13rem]">
+                              <PageCell p={p} />
+                            </td>
+                            <td className="num text-end">{p.key ? n0(p.visitors) : '—'}</td>
+                            <td className="num text-end font-semibold">{n0(p.orders)}</td>
+                            <td className="num text-end">{pct(p.conversion, 2)}</td>
+                            <td className="num text-end">{n0(p.confirmed)}</td>
+                            <td className="num text-end">
+                              {n0(p.delivered)}
+                              {p.delivery_rate !== null && <span className="text-xs text-muted"> · {pct(p.delivery_rate)}</span>}
+                            </td>
+                            <td className="num text-end">{da(p.revenue)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <Empty />
+                )}
+              </Card>
+              <Card title={t(['حسب القناة', 'Par canal'])} subtitle={t(['آخر مصدر قبل الطلب: معاملات رابط الصفحة (fbclid، utm_source…). الحكم بالمسلّمة لا بالطلبيات.', 'Dernière source avant la commande (fbclid, utm_source… du lien). Jugez sur les livrées, pas sur les commandes.'])}>
+                {d.sources.length ? (
+                  <BarList
+                    rows={d.sources.map((s) => ({
+                      key: s.source,
+                      label: t(SOURCES[s.source] || [s.source, s.source]),
+                      value: s.orders,
+                      extra: `${t(['مسلّمة', 'livrées'])} ${s.delivered}${s.delivery_rate !== null ? ` · ${pct(s.delivery_rate)}` : ''}`,
+                    }))}
+                  />
+                ) : (
+                  <Empty />
+                )}
+              </Card>
+            </div>
           )}
           {tab === 'agents' && (
             <Card pad={false}>

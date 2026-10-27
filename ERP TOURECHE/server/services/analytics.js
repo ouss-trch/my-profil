@@ -7,6 +7,8 @@ import { CARRIERS } from '../integrations/carriers/index.js';
 import { inList } from './projects.js';
 import { tariff } from './shipments.js';
 import { returnCost as returnCostOf, returnsByOrder } from './returns.js';
+import { sourcesReport } from './tracking.js';
+import { apiCosts } from './apiCost.js';
 
 const q = (list) => list.map((s) => `'${s}'`).join(',');
 const CONFIRMED_EVER = q(['confirmed', ...SHIPPED_EVER]);
@@ -203,6 +205,8 @@ export function stats(projectIds, fromDay, toDay) {
   const returnGoodsLost = retCosts.reduce((s, c) => s + c.goods, 0);
   const ads = adSpendDa(projectIds, fromDay, toDay);
   const expenses = db.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM expenses WHERE project_id IN (${P}) AND date >= ? AND date <= ?`).get(...projectIds, fromDay, toDay).s;
+  // الذكاء الاصطناعي والصور (Claude، Gemini، OpenAI): الاستهلاك الفعلي بسعر الصرف في الإعدادات
+  const api = apiCosts(projectIds, fromDay, toDay);
 
   // السلسلة اليومية
   const days = [];
@@ -278,17 +282,10 @@ export function stats(projectIds, fromDay, toDay) {
     )
     .all(...projectIds, startIso, endIso);
 
-  const sources = Object.values(
-    orders.reduce((m, o) => {
-      const k = o.utm_source || o.source || 'direct';
-      m[k] ||= { source: k, orders: 0, delivered: 0 };
-      m[k].orders++;
-      if (o.status === 'delivered') m[k].delivered++;
-      return m;
-    }, {}),
-  ).sort((a, b) => b.orders - a.orders);
+  // المصادر: الصفحة التي أُرسلت منها الطلبية (مع زوارها والتحويل) والقناة (Meta، Google…)، لا مصدر الاستيراد (shopify)
+  const src = sourcesReport(projectIds, orders, fromDay, toDay);
 
-  const profit = revenue - cogs - shipCost - returnCost - ads.spend_da - expenses;
+  const profit = revenue - cogs - shipCost - returnCost - ads.spend_da - expenses - api.da;
   return {
     from: fromDay,
     to: toDay,
@@ -303,6 +300,7 @@ export function stats(projectIds, fromDay, toDay) {
       return_goods_lost: round(returnGoodsLost),
       ad_spend_da: ads.spend_da,
       expenses: round(expenses),
+      api_cost: api.da,
       profit: round(profit),
       cpa: funnel.orders ? round(ads.spend_da / funnel.orders) : null,
       cost_per_delivered: deliveredC.length ? round(ads.spend_da / deliveredC.length) : null,
@@ -312,7 +310,9 @@ export function stats(projectIds, fromDay, toDay) {
     wilayas,
     products,
     agents,
-    sources,
+    sources: src.channels,
+    source_pages: src.pages,
+    api_costs: api,
   };
 }
 

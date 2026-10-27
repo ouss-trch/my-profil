@@ -169,7 +169,7 @@ financeRouter.get('/', (req, res) => {
     .prepare(`SELECT e.*, p.name AS project_name FROM expenses e JOIN projects p ON p.id = e.project_id WHERE e.project_id IN (${inList(scope.ids)}) AND e.date >= ? AND e.date <= ? ORDER BY e.date DESC`)
     .all(...scope.ids, from, to);
   const byCategory = Object.values(expenses.reduce((m, e) => ((m[e.category] ||= { category: e.category, amount: 0 }).amount += e.amount, m), {}));
-  res.json({ from, to, finance: s.finance, series: s.series, funnel: s.funnel, expenses, by_category: byCategory, products: s.products.slice(0, 20) });
+  res.json({ from, to, finance: s.finance, series: s.series, funnel: s.funnel, expenses, by_category: byCategory, api_costs: s.api_costs, products: s.products.slice(0, 20) });
 });
 
 financeRouter.post('/expenses', requireRole('admin', 'manager'), (req, res) => {

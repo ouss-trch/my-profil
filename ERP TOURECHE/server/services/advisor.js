@@ -1164,6 +1164,7 @@ export async function aiReport(projectIds, { userId, lang = 'ar', focus = '' } =
     schema: ADVISOR_SCHEMA,
     effort: 'high',
     maxTokens: 12000,
+    meter: { projectId: projectIds.length === 1 ? projectIds[0] : null, kind: 'report' },
   });
   const key = projectIds.slice().sort().join(',');
   const info = db.prepare('INSERT INTO advisor_reports (project_key, period_from, period_to, content, model, created_by) VALUES (?, ?, ?, ?, ?, ?)').run(key, from, to, JSON.stringify(res), ai.model(), userId || null);

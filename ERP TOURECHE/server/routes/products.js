@@ -193,7 +193,7 @@ productsRouter.post('/:id/images/generate', requireRole('admin', 'manager'), asy
   const p = products.getProduct(Number(req.params.id));
   const prompt = v.str(req.body.prompt, { required: true, max: 4000, name: 'prompt' });
   const sources = (req.body.source_urls || p.images.slice(0, 2).map((i) => i.url)).slice(0, 4);
-  const images = await generateImages(p.project_id, { prompt, sourceUrls: sources, count: Math.min(Number(req.body.count) || 1, 4), size: req.body.size || '1024x1024', product: { id: p.id, title: p.title } });
+  const images = await generateImages(p.project_id, { prompt, sourceUrls: sources, count: Math.min(Number(req.body.count) || 1, 4), size: req.body.size || '1024x1024', product: { id: p.id, title: p.title }, kind: 'image' });
   for (const img of images) db.prepare('INSERT INTO creatives (project_id, product_id, kind, file, url, prompt, provider) VALUES (?, ?, ?, ?, ?, ?, ?)').run(p.project_id, p.id, 'image', img.file, img.url, prompt, req.body.provider || null);
   res.json({ images });
 });

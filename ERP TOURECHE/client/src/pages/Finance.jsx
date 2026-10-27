@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CircleDollarSign, Plus, Trash2, Wallet } from 'lucide-react';
+import { Bot, CircleDollarSign, Plus, Trash2, Wallet } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { api, qs } from '../lib/api.js';
@@ -61,7 +61,7 @@ export default function Finance() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Stat label={t(['الإيراد المسلّم', 'CA livré'])} value={da(f.revenue)} icon={CircleDollarSign} />
             <Stat label={t(['الإعلانات', 'Publicité'])} value={da(f.ad_spend_da)} hint={f.cost_per_delivered ? `${da(f.cost_per_delivered)} / ${t(['مسلّمة', 'livrée'])}` : null} />
-            <Stat label={t(['التكاليف الأخرى', 'Autres coûts'])} value={da(f.cogs + f.shipping_cost + f.return_cost + f.expenses)} />
+            <Stat label={t(['التكاليف الأخرى', 'Autres coûts'])} value={da(f.cogs + f.shipping_cost + f.return_cost + f.expenses + (f.api_cost || 0))} />
             <Stat label={t(['صافي الربح التقديري', 'Profit net estimé'])} value={da(f.profit)} tone={f.profit < 0 ? 'bad' : 'good'} />
           </div>
           <div className="grid gap-4 xl:grid-cols-3">
@@ -85,6 +85,7 @@ export default function Finance() {
                   { key: 'ret', label: t(['المرتجعات (إرجاع وتغليف)', 'Retours (frais et emballage)']), value: f.return_cost - (f.return_goods_lost || 0) },
                   { key: 'lost', label: t(['بضاعة مرتجعة تالفة أو مفقودة', 'Retours endommagés ou manquants']), value: f.return_goods_lost || 0 },
                   { key: 'exp', label: t(['مصاريف أخرى', 'Autres']), value: f.expenses },
+                  { key: 'api', label: t(['الذكاء الاصطناعي والصور (API)', 'IA et images (API)']), value: f.api_cost || 0 },
                 ].sort((a, b) => b.value - a.value)}
               />
             </Card>
@@ -111,6 +112,7 @@ export default function Finance() {
                 <Empty icon={Wallet} title={t(['لا مصاريف مسجلة', 'Aucune dépense'])} />
               )}
             </Card>
+            <ApiCostCard costs={data.api_costs} />
             <Card title={t(['الربح حسب المنتج (الإيراد المسلّم)', 'CA livré par produit'])}>
               {data.products.length ? <BarList format={(v) => da(v)} rows={data.products.filter((p) => p.revenue > 0).map((p) => ({ key: p.product_id || p.title, label: p.title, value: p.revenue, extra: `${p.delivered}/${p.orders}` }))} /> : <Empty />}
             </Card>
@@ -119,6 +121,77 @@ export default function Finance() {
       )}
       <ExpenseModal open={open} onClose={(ok) => (setOpen(false), ok && reload(true))} />
     </div>
+  );
+}
+
+const API_KINDS = {
+  landing: ['نصوص صفحات الهبوط', 'Textes des landings'],
+  landing_plan: ['أقسام الصفحات وخطة صورها', 'Sections et plan visuel des landings'],
+  landing_image: ['صور صفحات الهبوط', 'Images des landings'],
+  seo: ['SEO المنتجات', 'SEO produits'],
+  ad_copy: ['نصوص الإعلانات', 'Textes publicitaires'],
+  image: ['صور المنتجات والإعلانات', 'Images produits et pubs'],
+  report: ['تقرير المستشار', 'Rapport du conseiller'],
+  assistant: ['المساعد الذكي', 'Assistant IA'],
+  brief: ['الملخص اليومي', 'Brief du jour'],
+  test: ['اختبار الربط', 'Test de connexion'],
+  other: ['أخرى', 'Autre'],
+};
+const PROVIDERS = { anthropic: 'Claude', gemini: 'Gemini', openai: 'OpenAI' };
+
+/** مصاريف الواجهات المدفوعة: من الاستهلاك الفعلي لكل طلب (الرموز والصور) بالأسعار الرسمية، وبسعر الصرف في الإعدادات */
+function ApiCostCard({ costs }) {
+  const { t } = useI18n();
+  if (!costs) return null;
+  return (
+    <Card
+      icon={Bot}
+      pad={false}
+      title={t(['الذكاء الاصطناعي والصور (API)', 'IA et images (API)'])}
+      subtitle={t(['كل طلب يُحسب باستهلاكه الفعلي بالأسعار الرسمية، ويدخل في المصاريف والربح. 1$ = {fx} دج (الإعدادات).', 'Chaque appel compté à sa consommation réelle aux prix officiels, inclus dans les coûts et le profit. 1 $ = {fx} DA (paramètres).'], { fx: costs.fx })}
+    >
+      {costs.rows.length ? (
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t(['الاستعمال', 'Usage'])}</th>
+                <th className="text-end">{t(['طلبات', 'Appels'])}</th>
+                <th className="text-end">{t(['صور', 'Images'])}</th>
+                <th className="text-end">$</th>
+                <th className="text-end">{t(['دج', 'DA'])}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costs.rows.map((r) => (
+                <tr key={`${r.provider}:${r.kind}:${r.model}`}>
+                  <td>
+                    <div className="font-medium">{t(API_KINDS[r.kind] || API_KINDS.other)}</div>
+                    <div className="ltr text-[11px] text-muted">
+                      {PROVIDERS[r.provider] || r.provider}
+                      {r.model ? ` · ${r.model}` : ''}
+                    </div>
+                  </td>
+                  <td className="num text-end">{r.calls}</td>
+                  <td className="num text-end">{r.images || '—'}</td>
+                  <td className="num text-end">{r.usd.toFixed(r.usd < 1 ? 3 : 2)}</td>
+                  <td className="num whitespace-nowrap text-end">{da(r.da)}</td>
+                </tr>
+              ))}
+              <tr className="font-semibold">
+                <td>{t(['المجموع', 'Total'])}</td>
+                <td />
+                <td />
+                <td className="num text-end">{costs.usd.toFixed(2)}</td>
+                <td className="num whitespace-nowrap text-end">{da(costs.da)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <Empty icon={Bot} title={t(['لا استهلاك في هذه الفترة', 'Aucune consommation sur la période'])} />
+      )}
+    </Card>
   );
 }
 

@@ -621,6 +621,26 @@ ${STORE_PAGES_SQL}
     db.exec('CREATE INDEX IF NOT EXISTS idx_deleted_orders_ext ON deleted_orders(project_id, external_id) WHERE external_id IS NOT NULL');
     if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'read_only')) db.exec('ALTER TABLE users ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0');
   },
+  // كلفة الواجهات المدفوعة (Claude، صور Gemini/OpenAI): سطر لكل طلب بالاستهلاك الفعلي، يدخل في المالية كمصروف
+  // project_id فارغ = طلب على كل المشاريع (المساعد، تقرير عدة مشاريع)
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS api_usage (
+      id INTEGER PRIMARY KEY,
+      project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+      day TEXT NOT NULL,
+      at TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT,
+      kind TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+      images INTEGER NOT NULL DEFAULT 0,
+      cost_usd REAL NOT NULL DEFAULT 0
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_api_usage_day ON api_usage(day, project_id)');
+  },
 ];
 
 export function openDb(file = config.dbFile) {

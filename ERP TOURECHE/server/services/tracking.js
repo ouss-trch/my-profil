@@ -259,6 +259,78 @@ export function metricsByPage(projectIds, days = 30) {
   };
 }
 
+/** قناة الطلبية (آخر لمسة): معاملات رابط الصفحة التي أُرسل منها النموذج (fbclid، gclid، utm_source…) ثم utm_source المحفوظ */
+export function orderChannel(o) {
+  if (o.source === 'manual' && !o.landing_url) return 'manual';
+  let params = new URLSearchParams();
+  if (o.landing_url) {
+    try {
+      params = new URL(String(o.landing_url), 'https://store.invalid').searchParams;
+    } catch {
+      /* رابط مشوّه */
+    }
+  }
+  if (!params.get('utm_source') && o.utm_source) params.set('utm_source', String(o.utm_source));
+  const ch = sourceOf(params, null, null);
+  // دون رابط صفحة: طلبيات الجدول أو القديمة — لا نعرف من أين جاءت
+  return ch === 'direct' && !o.landing_url ? 'unknown' : ch;
+}
+
+/**
+ * لوحة القيادة ← المصادر: طلبيات الفترة حسب الصفحة التي أُرسلت منها (مع زوارها في الفترة نفسها والتحويل) وحسب القناة.
+ * orders = طلبيات الفترة دون المتروكة (كما في analytics.stats)؛ المزيفة لا تُحسب.
+ */
+export function sourcesReport(projectIds, orders, fromDay, toDay) {
+  const blank = () => ({ orders: 0, confirmed: 0, delivered: 0, returned: 0, revenue: 0 });
+  const count = (e, o) => {
+    e.orders++;
+    if (CONFIRMED.includes(o.status)) e.confirmed++;
+    if (o.status === 'delivered') {
+      e.delivered++;
+      e.revenue += o.total || 0;
+    }
+    if (o.status === 'returned') e.returned++;
+  };
+  const pages = new Map();
+  const channels = new Map();
+  for (const o of orders) {
+    if (o.status === 'fake' || o.status === 'abandoned') continue;
+    const key = pageKey(o.landing_url);
+    const k = key ? `${o.project_id}|${key}` : 'none';
+    const p = pages.get(k) || { project_id: key ? o.project_id : null, key, visitors: 0, ...blank() };
+    count(p, o);
+    pages.set(k, p);
+    const ch = orderChannel(o);
+    const c = channels.get(ch) || { source: ch, ...blank() };
+    count(c, o);
+    channels.set(ch, c);
+  }
+  const visits = db
+    .prepare(`SELECT project_id, page, COUNT(DISTINCT visitor) AS visitors FROM page_visits WHERE project_id IN (${inList(projectIds)}) AND day >= ? AND day <= ? GROUP BY project_id, page`)
+    .all(...projectIds, fromDay, toDay);
+  for (const v of visits) {
+    const k = `${v.project_id}|${v.page}`;
+    if (pages.has(k)) pages.get(k).visitors = v.visitors;
+    // صفحة زارها كثيرون ولم تأتِ منها طلبية: تستحق النظر
+    else if (v.visitors >= 5) pages.set(k, { project_id: v.project_id, key: v.page, visitors: v.visitors, ...blank() });
+  }
+  const label = labeler(projectIds);
+  const rate = (x) => (x.delivered + x.returned ? round((100 * x.delivered) / (x.delivered + x.returned)) : null);
+  return {
+    pages: [...pages.values()]
+      .map((p) => ({
+        ...p,
+        ...(p.key ? label(p.project_id, p.key) : { kind: 'none', label: null, sub: null }),
+        revenue: round(p.revenue),
+        conversion: p.visitors ? round((100 * p.orders) / p.visitors, 2) : null,
+        delivery_rate: rate(p),
+      }))
+      .sort((a, b) => b.orders - a.orders || b.visitors - a.visitors)
+      .slice(0, 40),
+    channels: [...channels.values()].map((c) => ({ ...c, revenue: round(c.revenue), delivery_rate: rate(c) })).sort((a, b) => b.orders - a.orders),
+  };
+}
+
 /** آخر زيارة وصلت وعدد زيارات آخر 24 ساعة: هل العدّاد يعمل فعلاً؟ */
 export function trackingHealth(projectIds) {
   const r = db

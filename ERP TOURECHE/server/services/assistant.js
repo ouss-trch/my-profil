@@ -200,7 +200,7 @@ export async function chat({ userId, conversationId, message, projectId }) {
   const params = { ...ai.baseParams({ maxTokens: 16000 }), system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }], tools: TOOLS };
   let final = null;
   for (let i = 0; i < 10; i++) {
-    const res = await ai.createMessage({ ...params, messages });
+    const res = await ai.createMessage({ ...params, messages }, { projectId: projectId || null, kind: 'assistant' });
     messages.push({ role: 'assistant', content: res.content });
     if (res.stop_reason === 'refusal') {
       final = 'لا أستطيع المساعدة في هذا الطلب.';
@@ -292,5 +292,6 @@ export async function dailyBrief(projectIds) {
     prompt: JSON.stringify({ today: { ...t, series: undefined }, decisions }),
     effort: 'low',
     maxTokens: 2000,
+    meter: { projectId: projectIds.length === 1 ? projectIds[0] : null, kind: 'brief' },
   });
 }
