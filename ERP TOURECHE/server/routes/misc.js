@@ -11,6 +11,7 @@ import * as pages from '../services/pages.js';
 import * as landing from '../services/landing.js';
 import * as delivery from '../services/delivery.js';
 import * as collections from '../services/collections.js';
+import * as tracking from '../services/tracking.js';
 
 export const dashboardRouter = Router();
 
@@ -233,6 +234,13 @@ export const pagesRouter = Router();
 pagesRouter.get('/', (req, res) => {
   const scope = projectScope(req);
   res.json({ rows: pages.listPages(scope.ids, { pinnedOnly: req.query.pinned === '1' }), base: scope.all ? null : pages.storeBase(scope.id), attribution: pages.attributionHealth(scope.ids) });
+});
+
+// الزوار والتحويل لكل صفحة (عدّاد المتجر) + المصادر + يومياً + صحة العدّاد
+pagesRouter.get('/traffic', (req, res) => {
+  const scope = projectScope(req);
+  const days = v.int(req.query.days, { min: 1, max: 365 }) || 30;
+  res.json({ ...tracking.trafficReport(scope.ids, { days }), base: scope.all ? null : pages.storeBase(scope.id) });
 });
 
 pagesRouter.post('/sync', async (req, res) => {

@@ -4,6 +4,7 @@ import { AlertTriangle, CloudOff, ExternalLink, Eye, ImageOff, ImagePlus, Images
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
+import { n0, pct } from '../lib/format.js';
 import { useApp } from './ProjectContext.jsx';
 import DeliveryCard from './DeliveryCard.jsx';
 import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, Toggle, cx, useAction } from './ui.jsx';
@@ -485,6 +486,12 @@ export default function LandingPages() {
                   <span className="block truncate text-xs text-sub">{l.product_title}</span>
                   <span className="ltr block truncate text-xs text-muted">/pages/{l.slug}</span>
                 </button>
+                {l.stats && (l.stats.visitors > 0 || l.stats.orders > 0) && (
+                  <span className="text-xs text-sub" title={t(['آخر 30 يوماً: زوار · طلبيات · التحويل', '30 derniers jours : visiteurs · commandes · conversion'])}>
+                    <b className="num text-ink">{n0(l.stats.visitors)}</b> {t(['زائر', 'visit.'])} · <b className="num text-ink">{n0(l.stats.orders)}</b> {t(['طلبية', 'cmd'])}
+                    {l.stats.conversion !== null && <> · <b className="num text-ink">{pct(l.stats.conversion, 1)}</b></>}
+                  </span>
+                )}
                 <Badge>{l.framework.toUpperCase()}</Badge>
                 <Badge tone={STATUS[l.status][2]}>{t(STATUS[l.status])}</Badge>
                 {l.public_url && l.status === 'published' && <CopyButton text={l.public_url} />}

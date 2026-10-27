@@ -5,6 +5,7 @@ import { HttpError, v } from '../lib/util.js';
 import { projectScope } from '../services/projects.js';
 import * as advisor from '../services/advisor.js';
 import * as splits from '../services/splits.js';
+import { recordVisit } from '../services/tracking.js';
 
 // ——— المستشار: ملاحظات، تقييمات، استنتاجات، اقتراحات + دفتر الملاحظات + تقرير ذكي ———
 export const advisorRouter = Router();
@@ -121,6 +122,25 @@ export function hitHandler(req, res) {
   // يُستدعى من دومين المتجر: نسمح بالاستجابة عبر الأصول حتى لا يظهر خطأ في متصفح الزائر
   res.set('Cross-Origin-Resource-Policy', 'cross-origin');
   res.set('Access-Control-Allow-Origin', '*');
+  res.status(204).end();
+}
+
+/** زيارة صفحة أو بدء نموذج من عدّاد المتجر (sendBeacon نص خام) — عام، محدود المعدل، يرد 204 دائماً */
+export function visitHandler(req, res) {
+  let body = {};
+  try {
+    body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+  } catch {
+    body = {};
+  }
+  try {
+    recordVisit(req.params.key, body, req.headers['user-agent'] || '');
+  } catch (e) {
+    console.error('[visit]', e.message);
+  }
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', 'no-store');
   res.status(204).end();
 }
 

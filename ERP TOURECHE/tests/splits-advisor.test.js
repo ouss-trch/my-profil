@@ -37,7 +37,7 @@ test('split: weighted pick respects weights and stickiness', () => {
 });
 
 test('split: route only counts while running, tags URL, keeps ad params, no cloaking for bots', () => {
-  const t = splits.createTest(project.id, { name: 'Route test', variants: [{ url: 'https://shop.example/a?x=1' }, { url: 'https://shop.example/b' }] });
+  const t = splits.createTest(project.id, { name: 'Route test', mode: 'redirect', variants: [{ url: 'https://shop.example/a?x=1' }, { url: 'https://shop.example/b' }] });
   const draft = splits.route(t.slug, { query: {}, userAgent: 'Mozilla/5.0' });
   assert.equal(draft.cookies.length, 0);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM split_clicks WHERE test_id = ?').get(t.id).n, 0);
@@ -62,7 +62,7 @@ test('split: route only counts while running, tags URL, keeps ad params, no cloa
 });
 
 test('split: orders attributed by utm_content and winner detected with Bayesian probability', () => {
-  const t = splits.createTest(project.id, { name: 'Winner', goal: 'delivered', variants: [{ url: 'https://shop.example/w-a' }, { url: 'https://shop.example/w-b' }] });
+  const t = splits.createTest(project.id, { name: 'Winner', mode: 'redirect', goal: 'delivered', variants: [{ url: 'https://shop.example/w-a' }, { url: 'https://shop.example/w-b' }] });
   splits.updateTest(t.id, { status: 'running' });
   const [A, B] = t.variants;
   const insertClicks = (variant, n) => {
@@ -176,30 +176,67 @@ test('split (shopify mode): config for the theme snippet + weight-based estimati
   const snippet = splits.snippetLiquid();
   assert.match(snippet, /shop\.metafields\.erp_toureche\.splits\.value/);
   const js = snippet.slice(snippet.indexOf('<script>') + 8, snippet.indexOf('</script>'));
-  const run = (href, conf, cookie = '') => {
+  const run = (href, conf, { cookie = '', me = null, prerendering = false, designMode = false } = {}) => {
     const loc = new URL(href);
-    const out = { replaced: null, beacons: [] };
+    const out = { replaced: null, beacons: [], listeners: {} };
+    const store = { erp_vid: '0123456789abcdef', erp_me: me };
     const fake = { pathname: loc.pathname, search: loc.search, origin: loc.origin, replace: (u) => (out.replaced = u) };
-    const doc = { cookie, documentElement: { style: {} } };
-    new Function('location', 'document', 'navigator', 'localStorage', js.replace('{{ erp_ab | json }}', JSON.stringify(conf)))(fake, doc, { sendBeacon: (u, b) => out.beacons.push(JSON.parse(b)) }, { getItem: () => '0123456789abcdef', setItem() {} });
+    const doc = { cookie, referrer: 'https://l.facebook.com/', prerendering, documentElement: { style: {} }, addEventListener: (ev, fn) => (out.listeners[ev] = fn) };
+    const code = js.replace('{{ erp_ab | json }}', JSON.stringify(conf)).replace('{{ request.page_type | json }}', '"product"');
+    new Function('location', 'document', 'navigator', 'localStorage', 'window', code)(
+      fake,
+      doc,
+      { sendBeacon: (u, b) => out.beacons.push({ url: u, ...JSON.parse(b) }) },
+      { getItem: (k) => store[k] ?? null, setItem: (k, v) => (store[k] = v) },
+      designMode ? { Shopify: { designMode: true } } : {},
+    );
+    out.store = store;
     return out;
   };
-  const live = { v: 2, b: 'https://erp.example/api/hooks/split', tests: [{ s: 'thermos', st: 1, c: 1, v: [{ l: 'A', u: '/products/t', w: 1 }, { l: 'B', u: '/products/t?view=lp-cadeau', w: 1 }] }] };
-  // زائر المتجر (من الأقسام): صفحة المنتج كما هي
-  assert.deepEqual(run('https://s.example/products/t', live), { replaced: null, beacons: [] });
-  // رابط الإعلان: يوزَّع ويُعدّ
-  const ad = run('https://s.example/products/t?erp_t=thermos&fbclid=1', live, 'erp_sv_thermos=B');
-  assert.equal(ad.replaced, 'https://s.example/products/t?view=lp-cadeau&fbclid=1&utm_content=thermos-b&erp_v=thermos.B');
-  assert.deepEqual(ad.beacons.map((b) => [b.v, b.d, b.ad]), [['B', 0, 1]]);
-  // رابط صفحة هبوط بعينها: يبقى عليها، وزيارة مباشرة
-  assert.deepEqual(run('https://s.example/products/t?view=lp-cadeau', live).replaced, null);
-  assert.deepEqual(run('https://s.example/products/t?view=lp-cadeau', live).beacons.map((b) => [b.v, b.d]), [['B', 1]]);
-  // إعدادات قديمة (v1) لا تحوّل أحداً
-  assert.equal(run('https://s.example/products/t', { v: 1, tests: [{ s: 'thermos', p: '/products/t', st: 0, c: 1, v: live.tests[0].v }] }).replaced, null);
+  const live = { v: 3, b: 'https://erp.example/api/hooks', k: 'sou9na', tests: [{ s: 'thermos', st: 1, c: 1, v: [{ l: 'A', u: '/products/t', w: 1 }, { l: 'B', u: '/products/t?view=lp-cadeau', w: 1 }] }] };
+  // زائر المتجر (من الأقسام): صفحة المنتج كما هي، وتُعدّ زيارة واحدة
+  const shop = run('https://s.example/products/t', live);
+  assert.equal(shop.replaced, null);
+  assert.deepEqual(shop.beacons.map((b) => [b.url, b.e, b.u, b.vid, b.t]), [['https://erp.example/api/hooks/sp/sou9na', 'v', '/products/t', '0123456789abcdef', 'product']]);
+  // أول لمسة لنموذج الطلب: «بدأ النموذج» مرة واحدة فقط
+  const form = { closest: (sel) => (sel === '[data-lead-form]' ? {} : null) };
+  shop.listeners.focusin({ target: form });
+  shop.listeners.focusin({ target: form });
+  shop.listeners.focusin({ target: { closest: () => null } });
+  assert.deepEqual(shop.beacons.map((b) => b.e), ['v', 'f']);
+  // رابط الإعلان: يوزَّع (utm_content الإعلان لا يُستبدل) ولا يُعدّ هنا — الصفحة الهدف تعدّ نفسها بـ erp_v
+  const ad = run('https://s.example/products/t?erp_t=thermos&fbclid=1&utm_content=ad-7', live, { cookie: 'erp_sv_thermos=B' });
+  assert.equal(ad.replaced, 'https://s.example/products/t?view=lp-cadeau&fbclid=1&utm_content=ad-7&erp_v=thermos.B');
+  assert.deepEqual(ad.beacons, []);
+  const landed = run(ad.replaced, live);
+  assert.equal(landed.replaced, null);
+  assert.equal(landed.beacons[0].u, '/products/t?view=lp-cadeau&fbclid=1&utm_content=ad-7&erp_v=thermos.B');
+  // رابط صفحة هبوط بعينها: يبقى عليها ويُعدّ لها
+  const direct = run('https://s.example/products/t?view=lp-cadeau', live);
+  assert.equal(direct.replaced, null);
+  assert.equal(direct.beacons.length, 1);
+  // جهاز التاجر (?erp_me=1 مرة واحدة)، محرر القالب، والإعدادات القديمة: لا عدّ ولا تحويل
+  const me = run('https://s.example/products/t?erp_me=1', live);
+  assert.deepEqual([me.beacons.length, me.store.erp_me], [0, '1']);
+  assert.equal(run('https://s.example/products/t', live, { me: '1' }).beacons.length, 0);
+  assert.equal(run('https://s.example/products/t', live, { designMode: true }).beacons.length, 0);
+  // تثبيت على الحاسوب (لا عنوان عام للـ ERP): الاختبار يعمل، والعدّ متوقف
+  const local = run('https://s.example/products/t?erp_t=thermos', { ...live, b: null }, { cookie: 'erp_sv_thermos=A' });
+  assert.deepEqual([local.replaced, local.beacons.length], ['https://s.example/products/t?erp_v=thermos.A', 0]);
+  assert.equal(run('https://s.example/products/t', { ...live, b: null }).beacons.length, 0);
+  assert.match(snippet, /\{%- if erp_ab\.b or erp_ab\.tests\.size > 0 -%\}/);
+  const old = run('https://s.example/products/t?erp_t=thermos', { ...live, v: 2 });
+  assert.deepEqual([old.replaced, old.beacons.length], [null, 0]);
+  // صفحة محمّلة مسبقاً (prerender): تُعدّ عند فتحها فقط
+  const pre = run('https://s.example/products/t', live, { prerendering: true });
+  assert.equal(pre.beacons.length, 0);
+  pre.listeners.prerenderingchange();
+  assert.equal(pre.beacons.length, 1);
 });
 
 test('split: visit beacon is counted for humans and flagged for bots', () => {
-  const t = splits.createTest(project.id, { name: 'Beacon', variants: [{ url: 'https://shop.example/bc-a' }, { url: 'https://shop.example/bc-b' }] });
+  // السنيبت القديم (v2) كان يرسل هذه النقرات؛ النقطة باقية للقوالب التي لم تُحدَّث بعد
+  const t = splits.createTest(project.id, { name: 'Beacon', mode: 'redirect', variants: [{ url: 'https://shop.example/bc-a' }, { url: 'https://shop.example/bc-b' }] });
   assert.equal(splits.recordHit(t.slug, { v: 'A', vid: '0123456789abcdef' }, 'Mozilla/5.0 (iPhone)'), false, 'not running → ignored');
   splits.updateTest(t.id, { status: 'running' });
   assert.equal(splits.recordHit(t.slug, { v: 'A', vid: '0123456789abcdef', ad: 1 }, 'Mozilla/5.0 (iPhone)'), true);

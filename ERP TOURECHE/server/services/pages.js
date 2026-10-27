@@ -3,6 +3,7 @@ import { projectConfig } from '../lib/settings.js';
 import { addDays, badRequest, dzDay, dzDayStartIso, notFound, nowIso, round, v } from '../lib/util.js';
 import * as shopify from '../integrations/shopify.js';
 import { getProject, inList } from './projects.js';
+import { metricsByPage, pageKey } from './tracking.js';
 
 /**
  * صفحات المتجر: كل صفحة تُعرف بمسارها (والنسخة ?view= إن وُجدت) فتُربط بالطلبيات عبر landing_url،
@@ -181,6 +182,7 @@ export function listPages(projectIds, { pinnedOnly = false } = {}) {
     add(byKey, `${o.project_id}|${p.key}`, o);
     add(byPath, `${o.project_id}|${p.path.toLowerCase()}`, o);
   }
+  const metrics = metricsByPage(projectIds, 30);
   const tests = db.prepare(`SELECT t.id, t.project_id, t.name, t.status, t.entry_path FROM split_tests t WHERE t.project_id IN (${inList(projectIds)}) AND t.status != 'ended'`).all(...projectIds);
   const variants = db.prepare(`SELECT test_id, url FROM split_variants WHERE test_id IN (${inList(tests.map((t) => t.id))})`).all(...tests.map((t) => t.id));
   for (const r of rows) {
@@ -188,7 +190,16 @@ export function listPages(projectIds, { pinnedOnly = false } = {}) {
     const hasView = p.key.includes('?view=');
     const s = (hasView ? byKey.get(`${r.project_id}|${p.key}`) : byPath.get(`${r.project_id}|${p.path.toLowerCase()}`)) || { orders: 0, delivered: 0, returned: 0 };
     const closed = s.delivered + s.returned;
-    Object.assign(r, { orders_30d: s.orders, delivered_30d: s.delivered, delivery_rate: closed ? round((100 * s.delivered) / closed) : null });
+    // زوار الصفحة من عدّاد المتجر (نفس مفتاح الصفحة)؛ التحويل = طلبيات ÷ زوار
+    const m = metrics(r.project_id, pageKey(r.url));
+    Object.assign(r, {
+      orders_30d: s.orders,
+      delivered_30d: s.delivered,
+      delivery_rate: closed ? round((100 * s.delivered) / closed) : null,
+      visitors_30d: m.visitors,
+      form_30d: m.form,
+      conversion_30d: m.visitors ? round((100 * s.orders) / m.visitors, 2) : null,
+    });
     r.tests = tests
       .filter((t) => t.project_id === r.project_id && ((t.entry_path && parse(t.entry_path)?.path.toLowerCase() === p.path.toLowerCase()) || variants.some((x) => x.test_id === t.id && parse(x.url)?.key === p.key)))
       .map((t) => ({ id: t.id, name: t.name, status: t.status }));

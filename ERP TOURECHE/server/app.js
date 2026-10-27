@@ -13,7 +13,7 @@ import { ordersRouter, customersRouter, carriersRouter, returnsRouter } from './
 import { productsRouter } from './routes/products.js';
 import { adsRouter } from './routes/ads.js';
 import { dashboardRouter, aiRouter, tasksRouter, contactsRouter, financeRouter, pagesRouter, collectionsRouter } from './routes/misc.js';
-import { advisorRouter, splitsRouter, goHandler, hitHandler } from './routes/insights.js';
+import { advisorRouter, splitsRouter, goHandler, hitHandler, visitHandler } from './routes/insights.js';
 
 export function createApp() {
   const app = express();
@@ -59,6 +59,8 @@ export function createApp() {
   const loginLimiter = rateLimit({ windowMs: 15 * 60e3, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false });
   app.use('/api/auth/login', loginLimiter);
   app.use('/api/auth/setup', loginLimiter);
+  // عدّاد زوار المتجر (sendBeacon من كل صفحة): قبل حدّ /api/hooks العام — زبائن الهاتف في الجزائر يتشاركون عنوان IP واحداً (CGNAT)
+  app.post('/api/hooks/sp/:key', rateLimit({ windowMs: 60e3, limit: 3000, standardHeaders: 'draft-8', legacyHeaders: false }), express.text({ type: '*/*', limit: '4kb' }), visitHandler);
   app.use('/api/hooks', rateLimit({ windowMs: 60e3, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.0.0' }));

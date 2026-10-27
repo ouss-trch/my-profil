@@ -9,6 +9,7 @@ import { getProduct, imageBlocks } from './products.js';
 import { getProject, inList } from './projects.js';
 import { deliveryFacts, getDelivery } from './delivery.js';
 import { addPages, storeBase } from './pages.js';
+import { metricsByPage, pageKey } from './tracking.js';
 
 /**
  * صفحات الهبوط: منتج واحد + زاوية تسويقية + إطار كتابة (AIDA، PAS…) → صفحة بيع دون قائمة ولا تذييل،
@@ -299,10 +300,16 @@ export function getLanding(id) {
 }
 
 export function listLandings(projectIds) {
+  const metrics = metricsByPage(projectIds, 30);
   return db
     .prepare(`SELECT l.id FROM landing_pages l WHERE l.project_id IN (${inList(projectIds)}) ORDER BY l.id DESC`)
     .all(...projectIds)
-    .map((r) => getLanding(r.id));
+    .map((r) => {
+      const l = getLanding(r.id);
+      // زوار الصفحة وطلبياتها (30 يوماً) من عدّاد المتجر: رابطها النهائي ‎/products/<handle>?view=lp-<slug>‎
+      const key = l.product_handle ? pageKey(`/products/${l.product_handle}?view=lp-${l.slug}`) : null;
+      return { ...l, stats: key ? metrics(l.project_id, key) : null };
+    });
 }
 
 function productFacts(p) {

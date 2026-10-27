@@ -9,6 +9,7 @@ import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import AttributionNotice from '../components/AttributionNotice.jsx';
 import LandingPages from '../components/LandingPages.jsx';
+import TrafficCard from '../components/Traffic.jsx';
 import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, cx, useAction } from '../components/ui.jsx';
 
 const KIND = {
@@ -124,9 +125,10 @@ export default function StorePages() {
       />
       <div className="flex flex-wrap items-center gap-3">
         <Segmented size="sm" value={filter} onChange={setFilter} options={FILTERS.map(([v, l]) => ({ value: v, label: v === 'pinned' ? `${t(l)} (${pinnedCount})` : t(l) }))} />
-        <p className="text-xs text-muted">{t(['الطلبيات تُنسب للصفحة من رابط الدخول (آخر 30 يوماً).', 'Commandes attribuées par page d’entrée (30 derniers jours).'])}</p>
+        <p className="text-xs text-muted">{t(['الطلبيات تُنسب للصفحة التي أُرسل منها النموذج، والزوار من عدّاد المتجر (آخر 30 يوماً).', 'Commandes attribuées à la page du formulaire, visiteurs du compteur de la boutique (30 derniers jours).'])}</p>
       </div>
       <AttributionNotice health={data?.attribution} />
+      <TrafficCard />
       <LandingPages />
 
       {loading && !data ? (
@@ -163,7 +165,9 @@ export default function StorePages() {
                   <th className="w-10" />
                   <th>{t(['الصفحة', 'Page'])}</th>
                   <th>{t(['المنتج', 'Produit'])}</th>
+                  <th>{t(['زوار 30 يوماً', 'Visiteurs 30 j'])}</th>
                   <th>{t(['طلبيات 30 يوماً', 'Commandes 30 j'])}</th>
+                  <th>{t(['التحويل', 'Conversion'])}</th>
                   <th>{t(['المسلّمة', 'Livrées'])}</th>
                   <th>A/B</th>
                   <th />
@@ -200,7 +204,9 @@ export default function StorePages() {
                         {p.note && <div className="mt-0.5 text-xs text-sub">{p.note}</div>}
                       </td>
                       <td>{p.product_id ? <Link className="link" to={`/products/${p.product_id}`}>{p.product_title}</Link> : <span className="text-muted">—</span>}</td>
+                      <td className="num">{n0(p.visitors_30d)}</td>
                       <td className="num">{n0(p.orders_30d)}</td>
+                      <td className="num">{pct(p.conversion_30d, 2)}</td>
                       <td className="num">
                         {n0(p.delivered_30d)}
                         {p.delivery_rate !== null && <span className="text-xs text-muted"> · {pct(p.delivery_rate)}</span>}

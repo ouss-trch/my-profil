@@ -6,6 +6,7 @@ import { createOrder } from '../server/services/orders.js';
 import { attributionHealth } from '../server/services/pages.js';
 import { parseOrder } from '../server/integrations/shopify.js';
 import * as splits from '../server/services/splits.js';
+import { dzDay } from '../server/lib/util.js';
 
 const project = createProject({ name: 'Split rules', domain: 'rules.example' });
 
@@ -17,9 +18,11 @@ test('split rules: a broken traffic split withholds the verdict', () => {
 
   const t = splits.createTest(project.id, { name: 'SRM', variants: [{ url: 'https://rules.example/products/x' }, { url: 'https://rules.example/products/x?view=landing' }] });
   splits.updateTest(t.id, { status: 'running' });
-  const stmt = db.prepare('INSERT INTO split_clicks (test_id, variant_id, visitor, at) VALUES (?, ?, ?, ?)');
+  // زوار رابط الاختبار من عدّاد المتجر: كل صفحة تحمل erp_v=<slug>.<حرف>
+  const now = new Date().toISOString();
+  const stmt = db.prepare('INSERT INTO page_visits (project_id, day, page, visitor, ab, first_at, last_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
   t.variants.forEach((v, k) => {
-    for (let i = 0; i < (k ? 1300 : 1000); i++) stmt.run(t.id, v.id, `${v.label}${String(i).padStart(15, '0')}`, new Date().toISOString());
+    for (let i = 0; i < (k ? 1300 : 1000); i++) stmt.run(project.id, dzDay(), k ? '/products/x?view=landing' : '/products/x', `${v.label}${String(i).padStart(15, '0')}`.toLowerCase(), `${t.slug}.${v.label}`.toLowerCase(), now, now);
   });
   assert.equal(splits.results(t.id).verdict, 'split_broken');
 });

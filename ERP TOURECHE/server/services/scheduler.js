@@ -16,6 +16,8 @@ import { aiConfigured } from '../integrations/ai.js';
 import { backup } from './backup.js';
 import { syncPages } from './pages.js';
 import { retryShopify as retryReturns } from './returns.js';
+import { ensureTracking } from './splits.js';
+import { pruneVisits } from './tracking.js';
 
 /**
  * المهام الدورية (تعمل ما دام الجهاز مشغلاً).
@@ -24,7 +26,8 @@ import { retryShopify as retryReturns } from './returns.js';
  *  كل 5 دقائق  : طلبيات Shopify + جدول Google + المرتجعات المنتظرة لمخزون Shopify
  *  كل 30 دقيقة : تتبع الطرود عند شركات التوصيل + إنفاق الإعلانات اليوم
  *  كل ساعة     : المنتجات، الحملات، تنبيهات المخزون، لقطة التقرير الصباحي لـ n8n
- *  يومياً 03:00 : نسخة احتياطية، أسعار شركات التوصيل، إنفاق 30 يوماً (+ تقرير المستشار الذكي كل سبت)
+ *  عند التشغيل ثم كل 6 ساعات (دائماً): سنيبت عدّاد الزوار في القالب محدَّث وإعداداته مكتوبة
+ *  يومياً 03:00 : نسخة احتياطية، أسعار شركات التوصيل، إنفاق 30 يوماً، حذف زيارات أقدم من 400 يوم (+ تقرير المستشار الذكي كل سبت)
  */
 const quiet = (p) => p.catch(() => {});
 const auto = () => Boolean(getSetting('auto_sync'));
@@ -49,9 +52,18 @@ export async function every30min() {
   }
 }
 
+// عدّاد الزوار يحمي البيانات (زيارة لا تُعدّ اليوم لا تعود): يعمل دون «المزامنة التلقائية»، أول مرة عند التشغيل بعد كل تحديث
+const trackingCheckedAt = new Map();
+async function keepTracking(projectId) {
+  if (Date.now() - (trackingCheckedAt.get(projectId) || 0) < 6 * 3600e3) return;
+  trackingCheckedAt.set(projectId, Date.now());
+  await quiet(runJob('tracking_snippet', projectId, 'عدّاد الزوار', () => ensureTracking(projectId)));
+}
+
 export async function hourly() {
   for (const p of listProjects()) {
     const cfg = projectConfig(p.id);
+    if (shopify.isConfigured(cfg)) await keepTracking(p.id);
     if (auto() && shopify.isConfigured(cfg)) await quiet(runJob('products', p.id, 'منتجات Shopify', () => syncFromShopify(p.id)));
     if (auto() && shopify.isConfigured(cfg)) await quiet(runJob('pages', p.id, 'صفحات المتجر', () => syncPages(p.id)));
     if (auto() && meta.isConfigured(cfg))
@@ -69,6 +81,7 @@ export async function hourly() {
 
 export async function daily() {
   await quiet(Promise.resolve(backup()));
+  await quiet(Promise.resolve().then(() => pruneVisits()));
   for (const p of listProjects()) {
     const cfg = projectConfig(p.id);
     if (auto() && Object.values(CARRIERS).some((c) => c.isConfigured(cfg))) await quiet(runJob('tariffs', p.id, 'أسعار التوصيل', () => refreshTariffs(p.id)));

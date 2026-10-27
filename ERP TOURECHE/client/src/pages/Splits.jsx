@@ -11,6 +11,7 @@ import { Badge, Bar, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Lo
 import { SERIES } from '../components/charts.jsx';
 import PageSuggest from '../components/PageSuggest.jsx';
 import AttributionNotice from '../components/AttributionNotice.jsx';
+import { TrackingBadge } from '../components/Traffic.jsx';
 
 const STATUS = { draft: ['مسودة', 'Brouillon', 'neutral'], running: ['يعمل', 'En cours', 'good'], paused: ['متوقف', 'En pause', 'warn'], ended: ['منتهٍ', 'Terminé', 'neutral'] };
 const GOALS = {
@@ -46,7 +47,7 @@ function HowItWorks() {
         <div className="text-sub">
           <b className="text-ink">{t(['كيف يعمل؟', 'Comment ça marche ?'])}</b>{' '}
           {t(
-            ['ضع في الإعلان «رابط الاختبار» الذي يعطيك إياه الـ ERP (رابط المنتج ومعه ‎?erp_t=‎). كل زائر يأتي منه يُعرض عليه A أو B أو C (صفحة المنتج أو صفحة هبوط) حسب النسبة، ويبقى على نفس النسخة إن عاد. أما صفحة المنتج العادية فتبقى كما هي لكل من يتصفح المتجر من الأقسام، ورابط كل صفحة هبوط يفتحها هي نفسها. كل نسخة تحمل utm_content فتُنسب كل طلبية للصفحة التي جلبتها، ثم يقارن الـ ERP الطلبيات ويحسب احتمال أن تكون كل صفحة هي الأفضل.', 'Dans la pub, mettez le « lien du test » donné par l’ERP (lien produit + ?erp_t=). Chaque visiteur venu par ce lien voit A, B ou C (page produit ou landing page) selon vos poids, et garde sa version s’il revient. La page produit normale ne change pas pour qui navigue dans la boutique, et le lien de chaque landing page ouvre cette page. Chaque version porte un utm_content ; l’ERP compare les commandes et calcule la probabilité que chaque page soit la meilleure.'],
+            ['ضع في الإعلان «رابط الاختبار» الذي يعطيك إياه الـ ERP (رابط المنتج ومعه ⁦?erp_t=⁩). كل زائر يأتي منه يُعرض عليه A أو B أو C (صفحة المنتج أو صفحة هبوط) حسب النسبة، ويبقى على نفس النسخة إن عاد. أما صفحة المنتج العادية فتبقى كما هي لكل من يتصفح المتجر من الأقسام، ورابط كل صفحة هبوط يفتحها هي نفسها. عدّاد المتجر يعدّ زوار كل نسخة، وكل طلبية تُنسب للصفحة التي أُرسل منها النموذج، ثم يقارن الـ ERP ويحسب احتمال أن تكون كل صفحة هي الأفضل.', 'Dans la pub, mettez le « lien du test » donné par l’ERP (lien produit + ?erp_t=). Chaque visiteur venu par ce lien voit A, B ou C (page produit ou landing page) selon vos poids, et garde sa version s’il revient. La page produit normale ne change pas pour qui navigue dans la boutique, et le lien de chaque landing page ouvre cette page. Le compteur de la boutique compte les visiteurs de chaque version et chaque commande compte pour la page d’où le formulaire est parti ; l’ERP compare et calcule la probabilité que chaque page soit la meilleure.'],
           )}
           <span className="mt-1 block text-xs">
             {t(['يعمل داخل Shopify 24/7 دون الحاجة لتشغيل جهازك. شرط سياسة Meta: كل النسخ تعرض نفس المنتج ونفس العرض؛ غيّر التصميم والصور والزاوية فقط.', 'Fonctionne dans Shopify 24/7, sans votre ordinateur. Politique Meta : même produit et même offre partout ; changez seulement design, visuels et angle.'])}
@@ -103,7 +104,7 @@ function ShopifyPanel() {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {data.theme && <Badge>{data.theme.name}</Badge>}
         {data.installed ? (
-          <Badge tone="good">{t(['السنيبت مثبت ويعمل', 'Snippet installé'])}</Badge>
+          <Badge tone="good">{t(['عدّاد الزوار مثبت في القالب', 'Compteur installé dans le thème'])}</Badge>
         ) : data.paste_broken ? (
           <Badge tone="bad">{t(['خطأ في اللصق: نص زائد يظهر في المتجر', 'Collage erroné : texte parasite visible'])}</Badge>
         ) : data.missing_scopes?.length ? (
@@ -117,8 +118,10 @@ function ShopifyPanel() {
         ) : (
           <Badge tone="warn">{t(['غير مثبت بعد', 'Pas encore installé'])}</Badge>
         )}
+        {data.auto_updated && <Badge tone="info">{t(['حُدّث السنيبت تلقائياً الآن', 'Snippet mis à jour automatiquement'])}</Badge>}
         {data.sync?.at && (data.sync.error ? <Badge tone="bad" title={data.sync.error}>{t(['فشلت آخر مزامنة', 'Dernière synchro en échec'])}</Badge> : <Badge tone="good">{t(['آخر مزامنة', 'Synchro'])} · {data.sync.tests}</Badge>)}
-        <span className="text-xs text-muted">{data.beacon ? t(['عدّ الزوار مفعّل', 'Comptage des visiteurs actif']) : t(['عدّ الزوار غير مفعّل: الحكم بالطلبيات مقارنة بنِسب التوزيع (دقيق إحصائياً)', 'Visiteurs non comptés : jugement sur les commandes rapportées aux poids (statistiquement valide)'])}</span>
+        {data.installed && data.beacon && <TrackingBadge health={data.tracking} />}
+        {!data.beacon && <span className="text-xs text-muted">{t(['عدّ الزوار يحتاج الـ ERP على الـ VPS (عنوان عام): الحكم الآن بالطلبيات مقارنة بنِسب التوزيع', 'Le comptage des visiteurs exige l’ERP sur le VPS (adresse publique) : verdict sur les commandes rapportées aux poids'])}</span>}
       </div>
       {data.paste_broken && (
         <p className="mt-3 rounded-lg bg-bad/5 p-3 text-xs leading-6 text-bad">
@@ -131,6 +134,14 @@ function ShopifyPanel() {
       )}
       {data.installed && data.snippet_outdated && (
         <p className="mt-3 text-xs text-muted">{t(['السنيبت في القالب أقدم من نسخة الـ ERP: اضغط «تثبيت على القالب» لتحديثه.', 'Le snippet du thème est plus ancien que celui de l’ERP : réinstallez-le.'])}</p>
+      )}
+      {!data.installed && !data.paste_broken && !data.missing_scopes?.length && !data.theme_error && (
+        <p className="mt-3 text-xs leading-6 text-sub">
+          {t([
+            'التثبيت مرة واحدة: يضيف سطراً في رأس القالب يعدّ زوار كل صفحة (مخفياً، لا يؤخر المتجر) ويشغّل اختبارات A/B. بعدها يحدّثه الـ ERP وحده بعد كل تحديث.',
+            'Installation unique : une ligne en tête du thème compte les visiteurs de chaque page (invisible, sans ralentir) et fait tourner les tests A/B. L’ERP la tient ensuite à jour seul.',
+          ])}
+        </p>
       )}
       {!data.installed && data.missing_scopes?.length > 0 && (
         <p className="mt-3 rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
@@ -568,7 +579,7 @@ function SplitDetail({ id }) {
 
       <Card
         title={t(['رابط الاختبار (ضعه في الإعلان)', 'Lien du test (à mettre dans la pub)'])}
-        subtitle={s.mode === 'shopify' ? t(['صفحة المنتج دون ‎?erp_t=‎ تبقى كما هي لزوار المتجر.', 'Sans ?erp_t=, la page produit reste normale pour la boutique.']) : undefined}
+        subtitle={s.mode === 'shopify' ? t(['صفحة المنتج دون ⁦?erp_t=⁩ تبقى كما هي لزوار المتجر.', 'Sans ?erp_t=, la page produit reste normale pour la boutique.']) : undefined}
       >
         {s.mode === 'shopify' && !s.public_url ? (
           <p className="text-sm text-warn">{t(['حدد دومين المتجر في الإعدادات ← تكاملات المشروع ← «دومين المتجر».', 'Renseignez le domaine de la boutique dans Paramètres → Intégrations.'])}</p>
@@ -642,6 +653,20 @@ function SplitDetail({ id }) {
                 {isWinner && <Badge tone="good" icon={Award}>{t(['الفائز', 'Gagnant'])}</Badge>}
                 {!v.active && <Badge>{t(['معطّلة', 'Inactive'])}</Badge>}
               </div>
+              {v.page && (
+                <div className="mb-3 rounded-lg border border-line p-2">
+                  <div className="mb-1.5 text-[11px] font-medium text-sub">{t(['الصفحة كلها منذ بداية الاختبار (كل الزوار)', 'Toute la page depuis le début (tous les visiteurs)'])}</div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <M label={t(['زوار', 'Visiteurs'])} value={n0(v.page.all.visitors)} />
+                    <M label={t('c.orders')} value={n0(v.page.all.orders)} />
+                    <M label={t(['تحويل', 'Conversion'])} value={pct(v.page.all.conversion, 2)} />
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-5 text-muted">
+                    {t(['منها خارج رابط الاختبار (رابطها المباشر، المتجر، إعلانات أخرى):', 'Dont hors lien du test (lien direct, boutique, autres pubs) :'])} <span className="num">{n0(v.page.direct.visitors)}</span> {t(['زائر', 'visiteurs'])} · <span className="num">{n0(v.page.direct.orders)}</span> {t(['طلبية', 'commandes'])}
+                  </p>
+                </div>
+              )}
+              <div className="mb-1.5 text-[11px] font-medium text-sub">{t(['من رابط الاختبار (يدخل الحكم)', 'Via le lien du test (compte pour le verdict)'])}</div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <M label={t(['زوار', 'Visiteurs'])} value={n0(v.visitors)} />
                 <M label={t('c.orders')} value={n0(v.orders)} />
@@ -650,13 +675,6 @@ function SplitDetail({ id }) {
                 <M label={t(['مسلّمة', 'Livrées'])} value={n0(v.delivered)} hint={pct(v.delivery_rate)} />
                 <M label={t(['إيراد', 'CA'])} value={da(v.revenue)} />
               </div>
-              {v.direct && (
-                <p className="mt-2 rounded-lg bg-raised px-2.5 py-1.5 text-xs leading-5 text-sub">
-                  {t(['من رابطها المباشر (خارج الحكم):', 'Via son lien direct (hors verdict) :'])} <b className="num text-ink">{n0(v.direct.visitors)}</b> {t(['زائر', 'visiteurs'])} ·{' '}
-                  <b className="num text-ink">{n0(v.direct.orders)}</b> {t(['طلبية', 'commandes'])}
-                  {v.direct.conversion !== null ? ` · ${pct(v.direct.conversion, 2)}` : ''}
-                </p>
-              )}
               <div className="mt-3">
                 <div className="mb-1 flex justify-between text-xs">
                   <span className="text-sub">{t(['معدل الهدف لكل زائر', 'Taux objectif / visiteur'])}</span>
@@ -669,7 +687,8 @@ function SplitDetail({ id }) {
                   {t(['احتمال أن تكون الأفضل', 'Probabilité d’être la meilleure'])}: <b className="text-ink">{v.p_best === null || v.p_best === undefined ? '—' : `${v.p_best}%`}</b>
                 </span>
                 <span className="text-muted">
-                  {t(['الوزن', 'Poids'])} {v.weight} · {t(['من الإعلان', 'depuis pub'])} {n0(v.from_ad)} · bots {n0(v.bots)}
+                  {t(['الوزن', 'Poids'])} {v.weight} · {t(['من الإعلان', 'depuis pub'])} {n0(v.from_ad)}
+                  {s.mode !== 'shopify' && ` · bots ${n0(v.bots)}`}
                 </span>
               </div>
               {data.verdict === 'winner' && isLeader && s.status !== 'ended' && (
@@ -681,12 +700,15 @@ function SplitDetail({ id }) {
           );
         })}
       </div>
-      <p className="text-xs text-muted">
-        {t(['الطلبيات تُنسب عبر utm_content=', 'Attribution via utm_content='])}
-        <span className="ltr">{s.slug}-a/b/c</span>
+      <p className="text-xs leading-6 text-muted">
         {t([
-          ' (يحفظه Shopify ونموذج الطلب). الزواحف (روبوتات Meta…) توجَّه بنفس التوزيع لكنها لا تُحتسب. من يفتح رابط صفحة هبوط بعينها يبقى عليها ولا يُحوَّل، وتُعدّ زيارته «مباشرة» لتلك الصفحة خارج الحكم.',
-          ' (conservé par Shopify et le formulaire). Les robots sont redirigés pareil mais non comptés. Qui ouvre le lien d’une landing page précise y reste ; sa visite compte « en direct » pour cette page, hors verdict.',
+          'كل طلبية تُنسب للصفحة التي أُرسل منها النموذج، وتُحسب لنسخة الاختبار فقط إن كان رابط تلك الصفحة يحمل ',
+          'Chaque commande est attribuée à la page d’où le formulaire est parti, et à une version du test seulement si l’adresse de cette page porte ',
+        ])}
+        <span className="ltr">erp_v={s.slug}.A/B/C</span>
+        {t([
+          ' (يضيفه رابط الاختبار). الزواحف (روبوتات Meta…) لا تُحتسب. من يفتح رابط صفحة هبوط بعينها يبقى عليها، وتُعدّ زيارته وطلبيته لتلك الصفحة خارج الحكم.',
+          ' (ajouté par le lien du test). Les robots ne comptent pas. Qui ouvre le lien d’une landing page précise y reste ; sa visite et sa commande comptent pour cette page, hors verdict.',
         ])}
       </p>
       <SplitForm open={edit} initial={edit ? s : null} onClose={(r) => (setEdit(false), r && reload(true))} />
@@ -694,7 +716,7 @@ function SplitDetail({ id }) {
   );
 }
 
-const M = ({ label, value, hint }) => (
+const M =({ label, value, hint }) => (
   <div className="rounded-lg bg-raised px-2 py-1.5">
     <div className="num text-sm font-semibold">{value}</div>
     <div className="text-[11px] text-muted">

@@ -586,6 +586,27 @@ ${STORE_PAGES_SQL}
   (db) => {
     db.exec('ALTER TABLE split_clicks ADD COLUMN direct INTEGER NOT NULL DEFAULT 0');
   },
+  // عدّاد الزوار المخفي على كل صفحات المتجر: صف لكل (صفحة، زائر، يوم) — الزوار والتحويل لكل صفحة
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS page_visits (
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      day TEXT NOT NULL,
+      page TEXT NOT NULL,
+      visitor TEXT NOT NULL,
+      views INTEGER NOT NULL DEFAULT 1,
+      form INTEGER NOT NULL DEFAULT 0,
+      from_ad INTEGER NOT NULL DEFAULT 0,
+      source TEXT,
+      campaign TEXT,
+      ab TEXT,
+      page_type TEXT,
+      first_at TEXT NOT NULL,
+      last_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, day, page, visitor)
+    ) WITHOUT ROWID`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_page_visits_page ON page_visits(project_id, page, day)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_page_visits_ab ON page_visits(project_id, ab, day) WHERE ab IS NOT NULL');
+  },
 ];
 
 export function openDb(file = config.dbFile) {

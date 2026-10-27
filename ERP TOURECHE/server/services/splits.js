@@ -4,12 +4,13 @@ import path from 'node:path';
 import { db } from '../db/index.js';
 import { config } from '../config.js';
 import * as shopify from '../integrations/shopify.js';
-import { HttpError, badRequest, nowIso, round, slugify } from '../lib/util.js';
+import { HttpError, badRequest, dzDay, nowIso, round, slugify } from '../lib/util.js';
 import { SHIPPED_EVER } from '../lib/statuses.js';
 import { projectConfig } from '../lib/settings.js';
 import { getProduct } from './products.js';
 import { getProject } from './projects.js';
 import { attributionHealth } from './pages.js';
+import { BOT_UA, pageKey, trackingHealth, visitorsWhere } from './tracking.js';
 
 /**
  * اختبار صفحات الهبوط A/B (مثل «تيسير»):
@@ -21,7 +22,7 @@ import { attributionHealth } from './pages.js';
 const LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 // شروط الحكم: 7 أيام (14 إن كان الهدف التسليم: الطرود تعود بعد أيام)، 30 طلبية لكل نسخة، 1000 زائر لكل نسخة إن كانوا يُعدّون، و95% احتمال
 export const SPLIT_RULES = { days: 7, daysDelivered: 14, orders: 30, visitors: 1000 };
-const BOT = /bot|crawl|spider|facebookexternalhit|facebookcatalog|meta-externalagent|preview|slurp|bingpreview|whatsapp|telegrambot|headless|lighthouse|curl|wget|python|axios|node-fetch/i;
+const BOT = BOT_UA;
 const PASS_PARAMS = /^(utm_\w+|fbclid|gclid|ttclid|campaign_id|adset_id|ad_id|placement|site_source_name)$/i;
 
 export const contentTag = (slug, label) => `${slug}-${label}`.toLowerCase();
@@ -185,7 +186,8 @@ export function pickVariant(test, stickyLabel) {
 export function targetUrl(test, variant, query = {}) {
   const url = new URL(variant.url);
   for (const [k, val] of Object.entries(query)) if (PASS_PARAMS.test(k) && typeof val === 'string' && !url.searchParams.has(k)) url.searchParams.set(k, val.slice(0, 300));
-  url.searchParams.set('utm_content', contentTag(test.slug, variant.label));
+  // utm_content الإعلان يبقى كما هو (اسم الإعلان)؛ النسخة تُعرف من erp_v في رابط الصفحة
+  if (!url.searchParams.has('utm_content')) url.searchParams.set('utm_content', contentTag(test.slug, variant.label));
   if (!url.searchParams.has('utm_source')) url.searchParams.set('utm_source', query.fbclid ? 'meta' : 'split');
   url.searchParams.set('erp_v', `${test.slug}.${variant.label}`);
   return url.toString();
@@ -230,33 +232,44 @@ export function route(slug, { cookies = {}, query = {}, userAgent = '' }) {
 }
 
 // ——— النتائج والإحصاء ———
+/**
+ * طلبيات النسخة: الطلبية تُنسب من رابط الصفحة التي أُرسل منها النموذج (erp_v فيه)، لا من utm_content:
+ * نموذج الطلب يحفظ آخر UTM في المتصفح، فمن مرّ بالنسخة C ثم طلب من صفحة الهدية كان يُحسب للنسخة C.
+ * utm_content احتياط فقط لطلبية بلا رابط صفحة (وضع التحويل القديم أو طلبية يدوية).
+ */
 function variantOrders(test, variant) {
   const tag = contentTag(test.slug, variant.label);
-  const marker = `erp_v=${test.slug}.${variant.label}`;
+  const marker = `erp_v=${test.slug}.${variant.label}`.toLowerCase();
   return db
     .prepare(
-      `SELECT status, total, cogs, created_at FROM orders WHERE project_id = ? AND status != 'abandoned' AND created_at >= ?
-       AND (LOWER(utm_content) = ? OR landing_url LIKE ?)`,
+      `SELECT status, total, cogs, created_at FROM orders WHERE project_id = ? AND status NOT IN ('abandoned','fake') AND created_at >= ?
+       AND (LOWER(landing_url) LIKE ? OR ((landing_url IS NULL OR landing_url = '') AND LOWER(utm_content) = ?))`,
     )
-    .all(test.project_id, test.started_at || test.created_at, tag, `%${marker}%`);
+    .all(test.project_id, test.started_at || test.created_at, `%${marker}%`, tag);
 }
 
 /**
- * الزيارات المباشرة لصفحة النسخة (رابطها الخاص ‎?view=…‎ لا رابط الاختبار): تبيّن تحويل الصفحة نفسها،
- * لكنها لا تدخل الحكم لأن الزائر لم يُوزَّع عشوائياً. صفحة المنتج (A) هي رابط الدخول نفسه فلا «مباشر» لها.
+ * الصفحة كلها (كل زوارها وطلبياتها منذ بداية الاختبار)، ومنها ما جاء خارج رابط الاختبار (رابطها المباشر، المتجر، إعلانات أخرى).
+ * المباشر لا يدخل الحكم لأن الزائر لم يُوزَّع عشوائياً، لكنه تحويل الصفحة الحقيقي.
  */
-function directStats(test, variant) {
-  const view = new URL(variant.url, 'https://x.invalid').searchParams.get('view');
-  if (!view) return null;
+function pageStats(test, variant) {
+  const key = pageKey(variant.url);
+  if (!key) return null;
   const since = test.started_at || test.created_at;
-  const v = db.prepare('SELECT COUNT(DISTINCT visitor) AS n FROM split_clicks WHERE variant_id = ? AND direct = 1 AND is_bot = 0').get(variant.id).n;
-  const like = `%view=${view.toLowerCase()}%`;
-  const o = db
-    .prepare(
-      "SELECT COUNT(*) AS n FROM orders WHERE project_id = ? AND status NOT IN ('abandoned','fake') AND created_at >= ? AND LOWER(landing_url) LIKE ? AND COALESCE(landing_url, '') NOT LIKE '%erp_v=%'",
-    )
-    .get(test.project_id, since, like).n;
-  return { visitors: v, orders: o, conversion: v ? round((100 * o) / v, 2) : null };
+  const sinceDay = dzDay(since);
+  const all = visitorsWhere(test.project_id, { page: key, sinceDay });
+  const direct = visitorsWhere(test.project_id, { page: key, sinceDay, direct: true });
+  const rows = db
+    .prepare("SELECT landing_url FROM orders WHERE project_id = ? AND status NOT IN ('abandoned','fake') AND created_at >= ? AND landing_url IS NOT NULL AND landing_url != ''")
+    .all(test.project_id, since)
+    .filter((o) => pageKey(o.landing_url) === key);
+  const allOrders = rows.length;
+  const directOrders = rows.filter((o) => !/[?&]erp_v=/i.test(o.landing_url)).length;
+  const conv = (o, v) => (v ? round((100 * o) / v, 2) : null);
+  return {
+    all: { visitors: all.visitors, orders: allOrders, form: all.form, conversion: conv(allOrders, all.visitors) },
+    direct: { visitors: direct.visitors, orders: directOrders, conversion: conv(directOrders, direct.visitors) },
+  };
 }
 
 /** عيّنة من توزيع Beta (Marsaglia–Tsang عبر Gamma) لحساب احتمال أن تكون كل نسخة هي الأفضل */
@@ -301,6 +314,14 @@ export function probabilityBest(arms, draws = 20000) {
 }
 
 function quickSummary(testId) {
+  const t = db.prepare('SELECT project_id, slug, mode, started_at, created_at FROM split_tests WHERE id = ?').get(testId);
+  // وضع Shopify: زوار رابط الاختبار من عدّاد المتجر (كل صفحة تحمل erp_v=<slug>.<حرف>)
+  if (t?.mode === 'shopify') {
+    const r = db
+      .prepare('SELECT COUNT(DISTINCT visitor) AS visitors, COALESCE(SUM(views), 0) AS clicks FROM page_visits WHERE project_id = ? AND ab LIKE ? AND day >= ?')
+      .get(t.project_id, `${t.slug.toLowerCase()}.%`, dzDay(t.started_at || t.created_at));
+    return { visitors: r.visitors, clicks: r.clicks };
+  }
   const r = db
     .prepare('SELECT COUNT(DISTINCT visitor) AS visitors, COUNT(*) AS clicks FROM split_clicks WHERE test_id = ? AND is_bot = 0 AND direct = 0')
     .get(testId);
@@ -311,15 +332,20 @@ export function results(id) {
   const test = getTest(id);
   const cfg = projectConfig(test.project_id);
   const goal = test.goal;
+  const sinceDay = dzDay(test.started_at || test.created_at);
   const variants = test.variants.map((v) => {
-    const human = db
-      .prepare(
-        `SELECT COUNT(DISTINCT CASE WHEN is_bot = 0 THEN visitor END) AS visitors, COALESCE(SUM(is_bot = 0), 0) AS clicks,
-           COALESCE(SUM(is_bot = 0 AND from_ad = 1), 0) AS from_ad, COALESCE(SUM(is_bot), 0) AS bots FROM split_clicks WHERE variant_id = ? AND direct = 0`,
-      )
-      .get(v.id);
+    // وضع Shopify: عدّاد المتجر (الروبوتات لا تُسجَّل أصلاً)؛ وضع التحويل ‎/go/‎: نقرات الرابط
+    const human =
+      test.mode === 'shopify'
+        ? (({ visitors, from_ad }) => ({ visitors, clicks: visitors, from_ad, bots: 0 }))(visitorsWhere(test.project_id, { ab: `${test.slug}.${v.label}`, sinceDay }))
+        : db
+            .prepare(
+              `SELECT COUNT(DISTINCT CASE WHEN is_bot = 0 THEN visitor END) AS visitors, COALESCE(SUM(is_bot = 0), 0) AS clicks,
+                 COALESCE(SUM(is_bot = 0 AND from_ad = 1), 0) AS from_ad, COALESCE(SUM(is_bot), 0) AS bots FROM split_clicks WHERE variant_id = ? AND direct = 0`,
+            )
+            .get(v.id);
     const orders = variantOrders(test, v);
-    const direct = directStats(test, v);
+    const page = test.mode === 'shopify' ? pageStats(test, v) : null;
     const confirmed = orders.filter((o) => ['confirmed', ...SHIPPED_EVER].includes(o.status)).length;
     const delivered = orders.filter((o) => o.status === 'delivered');
     const returned = orders.filter((o) => o.status === 'returned').length;
@@ -342,7 +368,8 @@ export function results(id) {
       delivery_rate: delivered.length + returned ? round((100 * delivered.length) / (delivered.length + returned)) : null,
       goal_rate: human.visitors ? round((100 * successes) / human.visitors, 2) : null,
       successes,
-      direct,
+      page,
+      direct: page?.direct || null,
     };
   });
   const arms = variants.filter((v) => v.active || v.visitors || v.successes);
@@ -429,35 +456,40 @@ export const RENDER_LINE = "{% render 'erp-split' %}";
 const STRAY_AFTER_RENDER = /\{%-?\s*render\s+'erp-split'\s*-?%\}(?:[ \t]*%\})+/;
 
 /**
- * السنيبت: يقرأ الإعدادات من metafield المتجر. لا يلمس صفحة المنتج العادية أبداً:
- *  - رابط الاختبار وحده (‎?erp_t=<slug>‎، يوضع في الإعلان) يُوزَّع على النسخ؛ زائر المتجر من الأقسام يرى صفحة المنتج كما هي؛
- *  - من يفتح رابط صفحة هبوط بعينها (‎?view=lp-…‎) يبقى عليها، وتُعدّ زيارته «مباشرة» لها خارج حكم الاختبار.
+ * السنيبت (v3) في رأس كل صفحات المتجر — يقرأ الإعدادات من metafield المتجر:
+ *  1) عدّاد زوار مخفي: زيارة واحدة لكل صفحة تُرسل إلى الـ ERP (sendBeacon، لا يؤخر الصفحة)، و«بدأ النموذج» عند أول لمسة له؛
+ *     لا يُعدّ: محرر القالب، المعاينة، الصفحات المحمّلة مسبقاً قبل فتحها، ومن فتح المتجر مرة بـ ‎?erp_me=1‎ (جهاز التاجر)؛
+ *  2) اختبار A/B: رابط الإعلان وحده (‎?erp_t=<slug>‎) يُوزَّع على النسخ؛ صفحة المنتج العادية لا تتغيّر لأحد،
+ *     ورابط صفحة هبوط بعينها (‎?view=lp-…‎) يبقى عليها. النسخة تُعرف من ‎erp_v‎ في رابط الصفحة (العدّاد والطلبية معاً).
  */
 export function snippetLiquid() {
-  return `{%- comment -%} ERP TOURECHE · اختبار صفحات الهبوط A/B — يُدار من الـ ERP، لا تعدّله يدوياً. صفحة المنتج العادية لا تتغيّر: التوزيع لرابط الإعلان (?erp_t=) فقط {%- endcomment -%}
+  return `{%- comment -%} ERP TOURECHE · عدّاد الزوار + اختبار صفحات الهبوط A/B — يُحدَّث تلقائياً من الـ ERP، لا تعدّله يدوياً {%- endcomment -%}
 {%- assign erp_ab = shop.metafields.${shopify.SPLIT_NAMESPACE}.${shopify.SPLIT_KEY}.value -%}
-{%- if erp_ab and erp_ab.tests.size > 0 -%}
+{%- if erp_ab.b or erp_ab.tests.size > 0 -%}
 <script>
-(function(){try{
-var C={{ erp_ab | json }};if(!C||C.v!==2)return;
-var L=location,q=new URLSearchParams(L.search),key=q.get('erp_t'),vw=q.get('view'),i,j,t;
-if(q.has('erp_v')||q.has('preview_theme_id')||q.has('oseid'))return;
-var beat=function(t,l,d){if(!C.b||!t.c)return;try{var vid=localStorage.getItem('erp_vid');if(!vid){vid=(Math.random().toString(16).slice(2)+'0000000000000000').slice(0,16);localStorage.setItem('erp_vid',vid);}navigator.sendBeacon(C.b+'/'+t.s+'/hit',JSON.stringify({v:l,vid:vid,d:d,ad:q.has('fbclid')?1:0,c:q.get('utm_campaign')||''}));}catch(e){}};
-for(i=0;i<C.tests.length;i++){t=C.tests[i];
-if(key===t.s){var pick=null,ck='erp_sv_'+t.s;
-if(t.st){var m=document.cookie.match(new RegExp('(?:^|; )'+ck+'=([A-F])'));if(m)for(j=0;j<t.v.length;j++)if(t.v[j].l===m[1])pick=t.v[j];}
+(function(){var D=document,H=D.documentElement;try{
+var C={{ erp_ab | json }};if(!C||C.v!==3)return;
+var L=location,q=new URLSearchParams(L.search),key=q.get('erp_t'),i,j,t;
+if(q.has('preview_theme_id')||q.has('oseid')||(window.Shopify&&Shopify.designMode))return;
+var st=function(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);}catch(e){return null;}};
+if(q.get('erp_me')==='1')st('erp_me','1');if(q.get('erp_me')==='0')st('erp_me','');
+if(key&&!q.has('erp_v')&&C.tests)for(i=0;i<C.tests.length;i++){t=C.tests[i];if(key!==t.s)continue;
+var pick=null,ck='erp_sv_'+t.s;
+if(t.st){var m=D.cookie.match(new RegExp('(?:^|; )'+ck+'=([A-F])'));if(m)for(j=0;j<t.v.length;j++)if(t.v[j].l===m[1])pick=t.v[j];}
 if(!pick){var tot=0;for(j=0;j<t.v.length;j++)tot+=t.v[j].w;var r=Math.random()*tot;for(j=0;j<t.v.length;j++){r-=t.v[j].w;if(r<0){pick=t.v[j];break;}}if(!pick)pick=t.v[t.v.length-1];}
-if(t.st)document.cookie=ck+'='+pick.l+'; path=/; max-age=2592000; SameSite=Lax';
+if(t.st)D.cookie=ck+'='+pick.l+'; path=/; max-age=2592000; SameSite=Lax';
 var u=new URL(pick.u,L.origin),pre=(L.pathname.match(/^\\/[a-z]{2}(-[a-z]{2})?(?=\\/)/i)||[''])[0];
 if(pre&&u.pathname.indexOf(pre+'/')!==0)u.pathname=pre+u.pathname;
 q.forEach(function(v,k){if(k!=='erp_t'&&k!=='view'&&!u.searchParams.has(k))u.searchParams.set(k,v);});
-u.searchParams.set('utm_content',t.s+'-'+pick.l.toLowerCase());u.searchParams.set('erp_v',t.s+'.'+pick.l);
-beat(t,pick.l,0);
-document.documentElement.style.opacity='0';setTimeout(function(){document.documentElement.style.opacity='';},2500);
+u.searchParams.set('erp_v',t.s+'.'+pick.l);
+H.style.opacity='0';setTimeout(function(){H.style.opacity='';},2500);
 L.replace(u.toString());return;}
-if(vw&&!key)for(j=0;j<t.v.length;j++)if(t.v[j].u.indexOf('view='+vw)>-1){beat(t,t.v[j].l,1);return;}
-}
-}catch(e){document.documentElement.style.opacity='';}})();
+if(!C.b||!C.k||st('erp_me')==='1'||navigator.webdriver)return;
+var vid=st('erp_vid');if(!/^[a-f0-9]{16}$/.test(vid||'')){vid=(Math.random().toString(16).slice(2)+Math.random().toString(16).slice(2)+'0000000000000000').slice(0,16);st('erp_vid',vid);}
+var send=function(e){try{navigator.sendBeacon(C.b+'/sp/'+C.k,JSON.stringify({e:e,u:(L.pathname+L.search).slice(0,1400),r:e==='v'?D.referrer:'',vid:vid,t:{{ request.page_type | json }}}));}catch(x){}};
+var go=function(){send('v');};if(D.prerendering)D.addEventListener('prerenderingchange',go,{once:true});else go();
+var f=0;D.addEventListener('focusin',function(ev){var x=ev.target;if(f||!x||!x.closest||!x.closest('[data-lead-form]'))return;f=1;send('f');},true);
+}catch(e){H.style.opacity='';}})();
 </script>
 {%- endif -%}
 `;
@@ -491,8 +523,8 @@ export function shopifyConfig(projectId) {
     }
   }
   const base = publicBase(cfg);
-  // v2: التوزيع بمفتاح رابط الإعلان (erp_t) لا بمسار الصفحة؛ السنيبت القديم (v1) لا يجد «p» فلا يحوّل أحداً
-  return { v: 2, b: base ? `${base}/api/hooks/split` : null, tests };
+  // v3: عدّاد الزوار على كل الصفحات (k = المشروع) + التوزيع بمفتاح رابط الإعلان (erp_t). السنيبتات القديمة (v1/v2) لا تعمل بهذه الإعدادات
+  return { v: 3, b: base ? `${base}/api/hooks` : null, k: getProject(projectId)?.slug || null, tests };
 }
 
 const syncState = new Map();
@@ -512,7 +544,7 @@ function syncShopifyQuiet(projectId) {
 export async function shopifyStatus(projectId) {
   const cfg = projectConfig(projectId);
   if (!shopify.isConfigured(cfg)) return { configured: false };
-  const out = { configured: true, sync: syncState.get(projectId) || null, render_line: RENDER_LINE, snippet: snippetLiquid(), beacon: shopifyConfig(projectId).b, attribution: attributionHealth([projectId]) };
+  const out = { configured: true, sync: syncState.get(projectId) || null, render_line: RENDER_LINE, snippet: snippetLiquid(), beacon: shopifyConfig(projectId).b, attribution: attributionHealth([projectId]), tracking: trackingHealth([projectId]) };
   try {
     const theme = await shopify.mainTheme(cfg);
     out.theme = theme;
@@ -521,16 +553,46 @@ export async function shopifyStatus(projectId) {
       const layout = files.find((f) => f.filename === 'layout/theme.liquid')?.content || '';
       const snippet = files.find((f) => f.filename === SNIPPET_FILE);
       out.snippet_present = Boolean(snippet);
-      // لصق يدوي فيه زيادة، أو سنيبت قديم/معدّل: «تثبيت على القالب» يعيدهما كما يجب
+      // لصق يدوي فيه زيادة: «تثبيت على القالب» يصلحه
       out.paste_broken = STRAY_AFTER_RENDER.test(layout) || /endif\s*-?%\}\s*(?:%\}\s*)+$/.test(snippet?.content || '');
-      out.snippet_outdated = Boolean(snippet && snippet.content !== null && snippet.content.trim() !== snippetLiquid().trim());
       out.installed = out.snippet_present && layout.includes("render 'erp-split'") && !out.paste_broken;
+      out.snippet_outdated = Boolean(snippet && snippet.content !== null && snippet.content.trim() !== snippetLiquid().trim());
+      // سنيبت قديم في قالب مثبّت أصلاً: يُحدَّث هنا مباشرة (كان يبقى قديماً حتى يضغط التاجر «تثبيت» فلا يُعدّ أي زائر)
+      if (out.installed && out.snippet_outdated) {
+        await refreshSnippet(cfg, theme.id, projectId);
+        out.snippet_outdated = false;
+        out.auto_updated = true;
+      }
     }
   } catch (e) {
     out.theme_error = e.message;
     if (/access_denied/.test(e.message)) out.missing_scopes = await missingScopes(cfg, ['read_themes', 'write_themes']);
   }
   return out;
+}
+
+async function refreshSnippet(cfg, themeId, projectId) {
+  await shopify.upsertThemeFiles(cfg, themeId, [{ filename: SNIPPET_FILE, content: snippetLiquid() }]);
+  await syncShopify(projectId);
+}
+
+/**
+ * عند تشغيل الـ ERP (بعد كل تحديث) وكل ساعة: إن كان السنيبت مثبتاً في القالب المنشور وتغيّر في هذه النسخة، يُحدَّث وحده،
+ * وتُكتب الإعدادات (رابط العدّ، الاختبارات). تثبيت أول مرة أو قالب جديد بلا سطر التثبيت: يبقى قراراً للتاجر (كلمة المرور الحساسة).
+ */
+export async function ensureTracking(projectId) {
+  const cfg = projectConfig(projectId);
+  if (!shopify.isConfigured(cfg)) return { state: 'no_shopify' };
+  const theme = await shopify.mainTheme(cfg);
+  if (!theme) return { state: 'no_theme' };
+  const files = await shopify.themeFiles(cfg, theme.id, ['layout/theme.liquid', SNIPPET_FILE]);
+  const layout = files.find((f) => f.filename === 'layout/theme.liquid')?.content || '';
+  const snippet = files.find((f) => f.filename === SNIPPET_FILE);
+  if (!layout.includes("render 'erp-split'") || !snippet) return { state: 'not_installed' };
+  const outdated = snippet.content !== null && snippet.content.trim() !== snippetLiquid().trim();
+  if (outdated) await refreshSnippet(cfg, theme.id, projectId);
+  else await syncShopify(projectId);
+  return { state: 'ok', updated: outdated };
 }
 
 /** بعد رفض Shopify (access_denied): أي الصلاحيات ينقص الرمز فعلاً؟ null إن تعذّر السؤال */
@@ -574,7 +636,7 @@ export async function installShopify(projectId) {
 
 export async function uninstallShopify(projectId) {
   const cfg = projectConfig(projectId);
-  await shopify.setShopJsonMetafield(cfg, shopify.SPLIT_NAMESPACE, shopify.SPLIT_KEY, { v: 2, b: null, tests: [] });
+  await shopify.setShopJsonMetafield(cfg, shopify.SPLIT_NAMESPACE, shopify.SPLIT_KEY, { v: 3, b: null, k: null, tests: [] });
   const theme = await shopify.mainTheme(cfg);
   const [layoutFile] = theme ? await shopify.themeFiles(cfg, theme.id, ['layout/theme.liquid']) : [];
   if (layoutFile?.content?.includes(RENDER_LINE)) await shopify.upsertThemeFiles(cfg, theme.id, [{ filename: 'layout/theme.liquid', content: layoutFile.content.replace(`\n    ${RENDER_LINE}`, '').replace(RENDER_LINE, '') }]);
