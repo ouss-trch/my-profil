@@ -452,27 +452,42 @@ export async function shopifyStatus(projectId) {
     }
   } catch (e) {
     out.theme_error = e.message;
+    if (/access_denied/.test(e.message)) out.missing_scopes = await missingScopes(cfg, ['read_themes', 'write_themes']);
   }
   return out;
+}
+
+/** بعد رفض Shopify (access_denied): أي الصلاحيات ينقص الرمز فعلاً؟ null إن تعذّر السؤال */
+async function missingScopes(cfg, needed) {
+  const granted = await shopify.grantedScopes(cfg).catch(() => null);
+  return granted ? needed.filter((s) => !shopify.hasScope(granted, s)) : null;
 }
 
 /** تثبيت تلقائي على القالب المنشور (مع نسخة احتياطية لـ theme.liquid). إن رفضت Shopify: التثبيت يدوي */
 export async function installShopify(projectId) {
   const cfg = projectConfig(projectId);
-  const theme = await shopify.mainTheme(cfg);
-  if (!theme) throw new HttpError(404, 'theme_not_found');
-  const [layoutFile] = await shopify.themeFiles(cfg, theme.id, ['layout/theme.liquid']);
-  const layout = layoutFile?.content;
-  if (!layout) throw new HttpError(409, 'theme_layout_unreadable');
-  const files = [{ filename: SNIPPET_FILE, content: snippetLiquid() }];
-  if (!layout.includes("render 'erp-split'")) {
-    const m = /<head[^>]*>/i.exec(layout);
-    if (!m) throw new HttpError(409, 'theme_head_not_found');
-    fs.mkdirSync(config.backupsDir, { recursive: true });
-    fs.writeFileSync(path.join(config.backupsDir, `theme-${projectId}-${Date.now()}.liquid`), layout);
-    files.push({ filename: 'layout/theme.liquid', content: `${layout.slice(0, m.index + m[0].length)}\n    ${RENDER_LINE}${layout.slice(m.index + m[0].length)}` });
+  let theme;
+  try {
+    theme = await shopify.mainTheme(cfg);
+    if (!theme) throw new HttpError(404, 'theme_not_found');
+    const [layoutFile] = await shopify.themeFiles(cfg, theme.id, ['layout/theme.liquid']);
+    const layout = layoutFile?.content;
+    if (!layout) throw new HttpError(409, 'theme_layout_unreadable');
+    const files = [{ filename: SNIPPET_FILE, content: snippetLiquid() }];
+    if (!layout.includes("render 'erp-split'")) {
+      const m = /<head[^>]*>/i.exec(layout);
+      if (!m) throw new HttpError(409, 'theme_head_not_found');
+      fs.mkdirSync(config.backupsDir, { recursive: true });
+      fs.writeFileSync(path.join(config.backupsDir, `theme-${projectId}-${Date.now()}.liquid`), layout);
+      files.push({ filename: 'layout/theme.liquid', content: `${layout.slice(0, m.index + m[0].length)}\n    ${RENDER_LINE}${layout.slice(m.index + m[0].length)}` });
+    }
+    await shopify.upsertThemeFiles(cfg, theme.id, files);
+  } catch (e) {
+    if (!/access_denied/.test(e.message)) throw e;
+    // صلاحية ناقصة (أو أُضيفت في Dev Dashboard ولم يُوافَق عليها في المتجر)، أم رفض من Shopify نفسها رغم وجودها
+    const missing = await missingScopes(cfg, ['read_themes', 'write_themes']);
+    throw new HttpError(403, missing?.length ? 'theme_scopes_missing' : 'theme_write_refused', null, { missing_scopes: missing });
   }
-  await shopify.upsertThemeFiles(cfg, theme.id, files);
   await syncShopify(projectId);
   return { installed: true, theme: theme.name };
 }

@@ -86,18 +86,50 @@ function ShopifyPanel() {
         {data.theme && <Badge>{data.theme.name}</Badge>}
         {data.installed ? (
           <Badge tone="good">{t(['السنيبت مثبت ويعمل', 'Snippet installé'])}</Badge>
+        ) : data.missing_scopes?.length ? (
+          <Badge tone="warn">
+            {t(['ينقص تطبيق Shopify الإذن', 'Autorisation Shopify manquante'])} <span className="ltr">{data.missing_scopes.join('\u00a0+\u00a0')}</span>
+          </Badge>
         ) : data.theme_error ? (
-          <Badge tone="warn">{t(['تعذّر قراءة القالب — استعمل التثبيت اليدوي', 'Thème illisible — installation manuelle'])}</Badge>
+          <Badge tone="warn" title={data.theme_error}>
+            {t(['تعذّر قراءة القالب — استعمل التثبيت اليدوي', 'Thème illisible — installation manuelle'])}
+          </Badge>
         ) : (
           <Badge tone="warn">{t(['غير مثبت بعد', 'Pas encore installé'])}</Badge>
         )}
         {data.sync?.at && (data.sync.error ? <Badge tone="bad" title={data.sync.error}>{t(['فشلت آخر مزامنة', 'Dernière synchro en échec'])}</Badge> : <Badge tone="good">{t(['آخر مزامنة', 'Synchro'])} · {data.sync.tests}</Badge>)}
         <span className="text-xs text-muted">{data.beacon ? t(['عدّ الزوار مفعّل', 'Comptage des visiteurs actif']) : t(['عدّ الزوار غير مفعّل: الحكم بالطلبيات مقارنة بنِسب التوزيع (دقيق إحصائياً)', 'Visiteurs non comptés : jugement sur les commandes rapportées aux poids (statistiquement valide)'])}</span>
       </div>
-      <Modal open={Boolean(manual)} onClose={() => setManual(null)} size="lg" title={t(['التثبيت اليدوي (مرة واحدة، دقيقتان)', 'Installation manuelle (une fois, 2 min)'])}>
+      {!data.installed && data.missing_scopes?.length > 0 && (
+        <p className="mt-3 rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
+          {t([
+            'أضِف الإذن في Dev Dashboard ← تطبيقك ← Versions ← Release، ثم وافق عليه في المتجر: افتح التطبيق من «Applications» في لوحة Shopify. الإذن لا يعمل قبل هذه الموافقة. بعدها اضغط «تثبيت على القالب».',
+            'Ajoutez l’autorisation dans Dev Dashboard → votre app → Versions → Release, puis approuvez-la dans la boutique : ouvrez l’app depuis « Applications ». Elle ne compte qu’après cette approbation. Ensuite : « Installer sur le thème ».',
+          ])}
+        </p>
+      )}
+      <Modal
+        open={Boolean(manual)}
+        onClose={() => {
+          setManual(null);
+          reload(true); // بعد اللصق اليدوي: الحالة تصبح «مثبت» دون تحديث الصفحة
+        }}
+        size="lg"
+        title={t(['التثبيت اليدوي (مرة واحدة، دقيقتان)', 'Installation manuelle (une fois, 2 min)'])}
+      >
         {manual && (
           <div className="space-y-3 text-sm">
-            {manual.error && <ErrorBox error={{ code: `${t(['التثبيت التلقائي غير مسموح من Shopify لهذا الرمز', 'Installation auto refusée par Shopify'])}: ${manual.error}` }} />}
+            {manual.error && (
+              <ErrorBox
+                error={{
+                  code: manual.missing_scopes?.length
+                    ? `theme_scopes_missing:${manual.missing_scopes.join('\u00a0+\u00a0')}`
+                    : /^theme_/.test(manual.error)
+                      ? manual.error
+                      : `${t(['التثبيت التلقائي غير مسموح من Shopify لهذا الرمز', 'Installation auto refusée par Shopify'])}: ${manual.error}`,
+                }}
+              />
+            )}
             <ol className="list-decimal space-y-2 ps-5 leading-7">
               <li>{t(['Shopify ← المتجر الإلكتروني ← القوالب ← … ← تعديل الكود.', 'Shopify → Boutique en ligne → Thèmes → … → Modifier le code.'])}</li>
               <li>

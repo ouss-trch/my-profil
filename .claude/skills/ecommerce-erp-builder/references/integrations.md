@@ -27,7 +27,8 @@ General rules for every adapter:
   - Liquid reads it with `shop.metafields.erp_toureche.splits.value`.
   - The storefront keeps working while the ERP computer is off.
 - **Writing theme files:**
-  - `themeFilesUpsert` may be refused for apps without a Shopify exemption.
+  - Needs `write_themes` (reading needs `read_themes`), approved on the store, not only declared in the Dev Dashboard. Shopify's extra exemption is for public-distribution apps; a store's own app normally doesn't need it.
+  - On `access_denied`, ask `currentAppInstallation { accessScopes { handle } }` and name the missing scope instead of a generic error.
   - Always ship a manual fallback: show the snippet and the one render line to paste after `<head>` in `layout/theme.liquid`.
   - Back up `theme.liquid` before every automatic edit.
 - **Order numbers:** a Shopify order's ERP number is its Shopify number (`#1037` becomes `1037`).

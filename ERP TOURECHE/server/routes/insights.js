@@ -80,7 +80,7 @@ splitsRouter.post('/shopify/install', requireRole('admin'), requireSensitive, as
     audit(req, 'split_snippet_installed', { projectId: pid(req), details: out });
     res.json({ ok: true, ...out });
   } catch (e) {
-    res.json({ ok: false, manual: true, error: e.message || e.code, snippet: splits.snippetLiquid(), render_line: splits.RENDER_LINE });
+    res.json({ ok: false, manual: true, error: e.code || e.message, missing_scopes: e.details?.missing_scopes || null, snippet: splits.snippetLiquid(), render_line: splits.RENDER_LINE });
   }
 });
 

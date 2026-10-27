@@ -485,6 +485,14 @@ export async function setShopJsonMetafield(cfg, namespace, key, value) {
   return d.metafieldsSet.metafields?.[0]?.id || null;
 }
 
+/** الصلاحيات الممنوحة فعلاً على المتجر (لا تحتاج صلاحية). صلاحية أُضيفت في Dev Dashboard لا تُحسب قبل الموافقة عليها في المتجر */
+export async function grantedScopes(cfg) {
+  const d = await gql(cfg, '{ currentAppInstallation { accessScopes { handle } } }');
+  return (d.currentAppInstallation?.accessScopes || []).map((s) => s.handle);
+}
+// صلاحية الكتابة تشمل القراءة
+export const hasScope = (granted, scope) => granted.includes(scope) || (scope.startsWith('read_') && granted.includes(`write_${scope.slice(5)}`));
+
 export async function mainTheme(cfg) {
   const d = await gql(cfg, '{ themes(first: 1, roles: [MAIN]) { nodes { id name } } }');
   return d.themes.nodes[0] || null;
@@ -497,7 +505,7 @@ export async function themeFiles(cfg, themeId, filenames) {
   return (d.theme?.files?.nodes || []).map((n) => ({ filename: n.filename, content: n.body?.content ?? null }));
 }
 
-/** كتابة ملفات القالب — قد ترفضها Shopify إن لم يكن للتطبيق استثناء (عندها التثبيت يدوي بنسخ/لصق) */
+/** كتابة ملفات القالب (write_themes). Shopify تشترط استثناءً إضافياً على تطبيقات التوزيع العام فقط؛ إن رُفضت: التثبيت يدوي بنسخ/لصق */
 export async function upsertThemeFiles(cfg, themeId, files) {
   const d = await gql(
     cfg,
