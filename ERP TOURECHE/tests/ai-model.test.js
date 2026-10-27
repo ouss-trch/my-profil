@@ -40,3 +40,22 @@ test('ai model: a 404 from Claude reads as «model not found», not raw JSON', a
     srv.close();
   }
 });
+
+test('ai: a schema Claude cannot compile reads as a clear ERP error, not raw JSON', async () => {
+  const srv = http.createServer((req, res) => {
+    req.resume();
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'The compiled grammar is too large, which would cause performance issues. Simplify your tool schemas or reduce the number of strict tools.' } }));
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${srv.address().port}`;
+  setSetting('anthropic_api_key', 'sk-test-400');
+  setSetting('ai_model', 'claude-opus-5-5');
+  try {
+    const schema = { type: 'object', additionalProperties: false, required: ['a'], properties: { a: { type: 'string' } } };
+    await assert.rejects(ai.structured({ system: 's', prompt: 'p', schema, maxTokens: 1024 }), (e) => e.kind === 'invalid' && e.message === 'ai: ai_schema_too_large');
+  } finally {
+    delete process.env.ANTHROPIC_BASE_URL;
+    srv.close();
+  }
+});

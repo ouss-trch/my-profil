@@ -112,7 +112,11 @@ test('landing: Claude writes by the rules, with the store’s real offers and po
   assert.equal(l.slug, 'thermos-mickey-cadeau');
   assert.equal(l.copy.hero.bullets.length, 4);
   assert.equal(l.copy.faq.length, 6);
-  const sent = aiCalls.at(-1);
+  // طلبان: النصوص، ثم أقسام الزاوية + خطة الصور (مخطط واحد كبير تجاوز حدّ Claude: «compiled grammar is too large»)
+  const pair = aiCalls.slice(-2);
+  const sent = pair.find((c) => c.output_config.format.schema.required.includes('hero'));
+  const plan = pair.find((c) => c !== sent);
+  assert.ok(sent && plan, 'copy and plan are two requests');
   assert.match(sent.system, /الصدق التام/);
   assert.match(sent.system, /الدارجة الجزائرية/);
   assert.doesNotMatch(sent.system, /\{tone\}/);
@@ -127,7 +131,16 @@ test('landing: Claude writes by the rules, with the store’s real offers and po
   assert.match(facts.layout.brief, /occasions/);
   assert.match(facts.layout.shots, /gift/i);
   assert.equal(l.copy.layout, 'gift');
-  for (const k of ['trust', 'occasions', 'compare', 'moments', 'specs']) assert.ok(sent.output_config.format.schema.required.includes(k), k);
+  assert.ok(sent.output_config.format.schema.required.includes('trust'));
+  for (const k of ['occasions', 'compare', 'moments', 'specs', 'visuals']) assert.ok(!sent.output_config.format.schema.required.includes(k), `${k} is not in the copy request`);
+  // تصميم الهدية يستعمل «المناسبات» وحدها: الطلب الثاني لا يحمل إلا ما يعرضه التصميم
+  assert.deepEqual(plan.output_config.format.schema.required, ['occasions', 'visuals']);
+  assert.deepEqual(landing.layoutExtras('value'), ['compare', 'specs']);
+  assert.deepEqual(landing.layoutExtras('classic'), []);
+  // كل طلب أصغر من المخطط الذي كان يعمل قبل أقسام الزوايا
+  const leaves = (x) => (x.type === 'object' ? Object.values(x.properties).reduce((n, y) => n + leaves(y), 0) : x.type === 'array' ? leaves(x.items) : 1);
+  assert.ok(leaves(sent.output_config.format.schema) <= 27, `copy schema leaves ${leaves(sent.output_config.format.schema)}`);
+  assert.ok(leaves(landing.planSchema(landing.layoutExtras('value'))) <= 16);
   // نفس الزاوية مرة ثانية: رابط مختلف
   const again = await landing.generateLanding(project.id, { product_id: product.id, angle: 'هدية', framework: 'aida' });
   assert.equal(again.slug, 'thermos-mickey-cadeau-2');

@@ -108,6 +108,7 @@ const files = {
 const redirects = [];
 const shopFiles = [];
 const geminiCalls = [];
+let planSize = 99; // خطة الصور: كل اللقطات (تُقصّ إلى 6)؛ إعادة التخطيط في اختبارها: لقطتان
 const geminiFailures = [];
 // أجسام أخطاء Gemini كما يرسلها Google (429 RESOURCE_EXHAUSTED مع QuotaFailure وRetryInfo)
 const quota = (metric, quotaId, limit, retry) => ({
@@ -149,7 +150,7 @@ globalThis.fetch = async (url, init = {}) => {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(isPlan ? { visuals: visuals.slice(0, 2) } : copy),
+          text: JSON.stringify(isPlan ? { visuals: visuals.slice(0, planSize) } : copy),
         },
       ],
       stop_reason: 'end_turn',
@@ -492,7 +493,9 @@ test('visuals: a draft from before visuals gets a plan on demand; no product pho
     angle: 'التوفير',
   });
   db.prepare("UPDATE landing_pages SET visuals = '[]' WHERE id = ?").run(l.id);
+  planSize = 2;
   const planned = await landing.planVisuals(l.id);
+  planSize = 99;
   assert.equal(planned.visuals.length, 2);
   await assert.rejects(landing.generateVisual(l.id, 'v1'), /visual_needs_product_photos/);
 });

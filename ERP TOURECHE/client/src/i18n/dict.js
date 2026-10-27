@@ -206,6 +206,7 @@ export const DICT = {
   'err.updater_unsupported': ['التحديث من داخل الـ ERP يعمل على الـ VPS فقط.', 'La mise à jour intégrée fonctionne uniquement sur le VPS.'],
   'err.ai_model_not_found': ['النموذج المحفوظ غير موجود عند Claude: اختر نموذجاً من القائمة ثم احفظ', 'Modèle introuvable chez Claude : choisissez-en un dans la liste puis enregistrez'],
   'err.ai_not_configured': ['أضف مفتاح Claude في الإعدادات لتفعيل الذكاء الاصطناعي', 'Ajoutez la clé Claude dans les paramètres'],
+  'err.ai_schema_too_large': ['طلب الذكاء الاصطناعي أكبر مما يقبله Claude (خلل في الـ ERP لا في إعداداتك): حدّث الـ ERP، وإن تكرر أرسل لي هذه الرسالة.', 'Requête IA trop grande pour Claude (problème de l’ERP, pas de vos réglages) : mettez l’ERP à jour ; si ça se répète, envoyez-moi ce message.'],
   'err.split_needs_two_variants': ['يلزم صفحتان على الأقل', 'Au moins deux pages sont nécessaires'],
   'err.split_variant_url_invalid': ['رابط الصفحة {x} غير صالح', "L'URL de la page {x} est invalide"],
   'err.split_no_active_variant': ['يجب أن تبقى صفحة واحدة مفعّلة بوزن أكبر من 0', 'Au moins une page active avec un poids > 0'],

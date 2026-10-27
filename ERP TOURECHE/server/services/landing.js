@@ -162,7 +162,7 @@ export function landingSystem(brand) {
    - headline: 3–7 كلمات بالعربية تقول الفائدة لا الوصف. points: من 0 إلى 3 تسميات قصيرة (2–4 كلمات) تشير لما يُرى في اللقطة.
    - scene: بالإنجليزية لمولّد الصور، جملتان أو ثلاث: المشهد والخلفية، الإضاءة، زاوية الكاميرا، وما حول المنتج. لا تطلب كتابة أي نص في الصورة ولا تصف المنتج بشكل مختلف عن صوره.
    - اتبع أجواء الصور الخاصة بتصميم الصفحة (layout.shots)، حتى تختلف صور كل زاوية عن صور الزوايا الأخرى.
-13. التصميم (layout) يُعطى مع المعطيات، ولكل تصميم أقسامه الخاصة: املأ ما يطلبه layout.brief فقط، واترك غيره فارغاً (عنوان فارغ وقوائم فارغة).
+13. التصميم (layout) يُعطى مع المعطيات، ولكل تصميم أقسامه الخاصة (occasions، compare، moments، specs): اكتب فقط الأقسام الموجودة في المخطط المطلوب، كما يصفها layout.brief.
    - trust: من 3 إلى 4 نقاط ثقة قصيرة جداً (2–5 كلمات) من delivery وstore_policies فقط، مثل: الدفع عند الاستلام، المعاينة قبل الدفع (إن كانت في السياسة)، التوصيل إلى N ولاية، الاستبدال (إن كان في السياسة).
    - العناوين بنفس الأسلوب والزاوية، والأسطر قصيرة تُقرأ على الهاتف في ثانية.
 
@@ -173,20 +173,22 @@ const s = { type: 'string' };
 const sArr = { type: 'array', items: s };
 export const VISUAL_KINDS = ['hero', 'design', 'detail', 'feature', 'in_use', 'size', 'variants'];
 const VISUAL_ITEM = { type: 'object', additionalProperties: false, required: ['kind', 'headline', 'points', 'scene'], properties: { kind: { type: 'string', enum: VISUAL_KINDS }, headline: s, points: sArr, scene: s } };
+/**
+ * مخطط واحد بكل الأقسام (النصوص + أقسام الزوايا الأربعة + خطة الصور) تجاوز حدّ Claude لحجم المخطط
+ * (400: The compiled grammar is too large). لذلك طلبان متوازيان، كلٌّ أصغر من المخطط الذي كان يعمل:
+ *  1) LANDING_SCHEMA: نصوص الصفحة؛
+ *  2) planSchema(extras): أقسام تصميم الزاوية التي يستعملها فعلاً (المناسبات، المقارنة…) + خطة الصور الوصفية.
+ */
 export const LANDING_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['product_short', 'angle_slug', 'hero', 'trust', 'story', 'occasions', 'compare', 'moments', 'specs', 'benefits', 'steps', 'guarantee', 'faq', 'final_cta', 'seo', 'owner_todo', 'visuals'],
+  required: ['product_short', 'angle_slug', 'hero', 'trust', 'story', 'benefits', 'steps', 'guarantee', 'faq', 'final_cta', 'seo', 'owner_todo'],
   properties: {
     product_short: s,
     angle_slug: s,
     hero: { type: 'object', additionalProperties: false, required: ['eyebrow', 'headline', 'subheadline', 'bullets', 'cta', 'note'], properties: { eyebrow: s, headline: s, subheadline: s, bullets: sArr, cta: s, note: s } },
     trust: sArr,
     story: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['stage', 'heading', 'body'], properties: { stage: s, heading: s, body: s } } },
-    occasions: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: sArr } },
-    compare: { type: 'object', additionalProperties: false, required: ['heading', 'without_label', 'with_label', 'without', 'with'], properties: { heading: s, without_label: s, with_label: s, without: sArr, with: sArr } },
-    moments: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['when', 'text'], properties: { when: s, text: s } } } } },
-    specs: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['label', 'value'], properties: { label: s, value: s } } } } },
     benefits: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['title', 'text'], properties: { title: s, text: s } } } } },
     steps: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: sArr } },
     guarantee: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: sArr } },
@@ -194,9 +196,32 @@ export const LANDING_SCHEMA = {
     final_cta: { type: 'object', additionalProperties: false, required: ['headline', 'cta', 'note'], properties: { headline: s, cta: s, note: s } },
     seo: { type: 'object', additionalProperties: false, required: ['title', 'description'], properties: { title: s, description: s } },
     owner_todo: sArr,
-    visuals: { type: 'array', items: VISUAL_ITEM },
   },
 };
+
+const pairs = (a, b) => ({ type: 'array', items: { type: 'object', additionalProperties: false, required: [a, b], properties: { [a]: s, [b]: s } } });
+const EXTRA_SCHEMAS = {
+  occasions: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: sArr } },
+  compare: { type: 'object', additionalProperties: false, required: ['heading', 'without_label', 'with_label', 'without', 'with'], properties: { heading: s, without_label: s, with_label: s, without: sArr, with: sArr } },
+  moments: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: pairs('when', 'text') } },
+  specs: { type: 'object', additionalProperties: false, required: ['heading', 'items'], properties: { heading: s, items: pairs('label', 'value') } },
+};
+
+/** أقسام الزاوية التي يعرضها تصميم الصفحة فعلاً (هدية ← المناسبات، المشكلة ← المقارنة…) */
+export function layoutExtras(id) {
+  const l = LAYOUTS[id] || LAYOUTS.classic;
+  const used = [...l.top, ...l.bottom].map((x) => x.split(':')[0]);
+  return Object.keys(EXTRA_SCHEMAS).filter((k) => used.includes(k));
+}
+
+export const planSchema = (extras = []) => ({
+  type: 'object',
+  additionalProperties: false,
+  required: [...extras, 'visuals'],
+  properties: { ...Object.fromEntries(extras.map((k) => [k, EXTRA_SCHEMAS[k]])), visuals: { type: 'array', items: VISUAL_ITEM } },
+});
+
+const extrasNames = { occasions: 'occasions (المناسبات)', compare: 'compare (بدونه / معه)', moments: 'moments (لحظات اليوم)', specs: 'specs (المواصفات)' };
 
 // ——— المعطيات الحقيقية من القالب: العروض وسياسات المتجر كما تظهر في صفحة المنتج ———
 export const parseTemplate = shopify.parseThemeJson;
@@ -353,14 +378,31 @@ export async function generateLanding(projectId, input, userId = null) {
     layout: { id: layout, brief: LAYOUTS[layout].brief, shots: LAYOUTS[layout].shots },
   };
   const images = await imageBlocks(p.images, 4).catch(() => []);
-  const raw = await ai.structured({
-    system: landingSystem(brand).replace('{tone}', TONES[tone]),
-    prompt: `المعطيات (JSON):\n${JSON.stringify(data, null, 2)}\n\nالصور المرفقة هي صور المنتج الحقيقية.\n\n${input.instructions ? `تعليمات إضافية من التاجر: ${clip(input.instructions, 500)}\n\n` : ''}اكتب صفحة الهبوط كاملة حسب القواعد والإطار، مع خطة الصور الوصفية.`,
-    schema: LANDING_SCHEMA,
-    effort: 'medium',
-    images,
-  });
-  const copy = cleanCopy({ ...raw, layout });
+  const system = landingSystem(brand).replace('{tone}', TONES[tone]);
+  const given = `المعطيات (JSON):\n${JSON.stringify(data, null, 2)}\n\n`;
+  const extra = input.instructions ? `تعليمات إضافية من التاجر: ${clip(input.instructions, 500)}\n\n` : '';
+  const extras = layoutExtras(layout);
+  // طلبان متوازيان (انتظار واحد): النصوص بكل صور المنتج، وأقسام الزاوية + خطة الصور بالصورة الرئيسية وحدها
+  const [raw, plan] = await Promise.all([
+    ai.structured({
+      system,
+      prompt: `${given}الصور المرفقة هي صور المنتج الحقيقية.\n\n${extra}اكتب نصوص صفحة الهبوط حسب القواعد والإطار (خطة الصور وأقسام التصميم الخاصة تُكتب في طلب آخر).`,
+      schema: LANDING_SCHEMA,
+      effort: 'medium',
+      images,
+    }),
+    ai
+      .structured({
+        system,
+        prompt: `${given}الصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text.\n\n${extra}${extras.length ? `اكتب أقسام تصميم الصفحة الخاصة بهذه الزاوية: ${extras.map((k) => extrasNames[k]).join('، ')} (القاعدة 13)، ثم ` : 'اكتب '}خطة الصور الوصفية (القاعدة 12).`,
+        schema: planSchema(extras),
+        effort: 'medium',
+        images: images.slice(0, 1),
+      })
+      // النص هو الأهم: إن فشل هذا الطلب تُحفظ الصفحة دونه، و«خطط الصور» يكمله
+      .catch(() => ({ visuals: [] })),
+  ]);
+  const copy = cleanCopy({ ...raw, ...Object.fromEntries(extras.map((k) => [k, plan[k]])), layout });
   // الرابط: ما كتبه التاجر، وإلا «المنتج-الزاوية» كما تقترحه الواجهة (مقبض لاتيني + زاوية جاهزة)، وإلا اقتراح Claude
   const handlePart = /^[a-z0-9-]+$/.test(p.handle) ? p.handle.split('-').slice(0, 2).join('-') : '';
   const anglePart = ANGLE_PRESETS.find(([ar]) => ar === angle)?.[1] || '';
@@ -369,7 +411,7 @@ export async function generateLanding(projectId, input, userId = null) {
   const now = nowIso();
   const info = db
     .prepare('INSERT INTO landing_pages (project_id, product_id, slug, angle, framework, tone, audience, copy, visuals, status, model, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(projectId, p.id, slug, angle, framework, tone, data.audience, JSON.stringify(copy), JSON.stringify(cleanVisuals(raw.visuals)), 'draft', ai.model(), userId, now, now);
+    .run(projectId, p.id, slug, angle, framework, tone, data.audience, JSON.stringify(copy), JSON.stringify(cleanVisuals(plan.visuals)), 'draft', ai.model(), userId, now, now);
   return getLanding(info.lastInsertRowid);
 }
 
@@ -393,14 +435,19 @@ export async function planVisuals(id) {
   const brand = cfg.brand_name || getProject(l.project_id).name;
   // الصورة الرئيسية وحدها + وصف صفحة المنتج: الشكل من الصورة والتفاصيل من الوصف
   const images = await imageBlocks(p.images, 1).catch(() => []);
-  const layout = LAYOUTS[layoutFor(l.angle, l.framework, l.copy.layout)];
+  const layoutId = layoutFor(l.angle, l.framework, l.copy.layout);
+  const layout = LAYOUTS[layoutId];
+  // أقسام الزاوية التي لم تُكتب بعد (صفحة قديمة، أو فشل طلبها عند الإنشاء) تُكتب مع الخطة؛ المكتوبة لا تُلمس
+  const empty = (x) => !x || !((x.items && x.items.length) || (x.without && x.without.length));
+  const missing = layoutExtras(layoutId).filter((k) => empty(l.copy[k]));
   const raw = await ai.structured({
     system: landingSystem(brand).replace('{tone}', TONES[l.tone] || TONES.ar),
-    prompt: `المعطيات (JSON):\n${JSON.stringify({ product: productFacts(p), angle: l.angle, layout: { shots: layout.shots }, headline: l.copy.hero?.headline, benefits: l.copy.benefits?.items }, null, 2)}\n\nالصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text. اكتب خطة الصور الوصفية فقط (القاعدة 12) لهذه الصفحة.`,
-    schema: { type: 'object', additionalProperties: false, required: ['visuals'], properties: { visuals: { type: 'array', items: VISUAL_ITEM } } },
+    prompt: `المعطيات (JSON):\n${JSON.stringify({ product: productFacts(p), angle: l.angle, delivery: deliveryFacts(l.project_id), layout: { id: layoutId, brief: layout.brief, shots: layout.shots }, headline: l.copy.hero?.headline, benefits: l.copy.benefits?.items }, null, 2)}\n\nالصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text. ${missing.length ? `اكتب أقسام التصميم الناقصة: ${missing.map((k) => extrasNames[k]).join('، ')} (القاعدة 13)، ثم ` : 'اكتب '}خطة الصور الوصفية (القاعدة 12) لهذه الصفحة.`,
+    schema: planSchema(missing),
     effort: 'medium',
     images,
   });
+  if (missing.length) db.prepare('UPDATE landing_pages SET copy = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(cleanCopy({ ...l.copy, ...Object.fromEntries(missing.map((k) => [k, raw[k]])) })), nowIso(), id);
   saveVisuals(id, cleanVisuals(raw.visuals));
   return getLanding(id);
 }
