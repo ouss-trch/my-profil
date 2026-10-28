@@ -7,6 +7,7 @@ import { api } from '../lib/api.js';
 import { n0, pct } from '../lib/format.js';
 import { useApp } from './ProjectContext.jsx';
 import DeliveryCard from './DeliveryCard.jsx';
+import ProductQuestions from './ProductQuestions.jsx';
 import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Spinner, Textarea, Toggle, cx, useAction } from './ui.jsx';
 
 const STATUS = { draft: ['مسودة', 'Brouillon', 'neutral'], published: ['منشورة', 'Publiée', 'good'], unpublished: ['مسحوبة', 'Retirée', 'warn'] };
@@ -346,16 +347,7 @@ function ProductAngles({ productId, picked, onPick, frameworks = [] }) {
               </ul>
             </details>
           )}
-          {data.missing?.length > 0 && (
-            <div className="rounded-lg bg-warn/10 p-2.5 text-xs leading-6 text-sub">
-              <b className="text-ink">{t(['ينقص في صفحة المنتج (أضفه في Shopify، فالصفحة لا تختلقه):', 'Manque sur la fiche (à ajouter dans Shopify, la page ne l’invente pas) :'])}</b>
-              <ul dir="rtl" lang="ar" className="list-disc ps-5">
-                {data.missing.map((m) => (
-                  <li key={m}>{m}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <ProductQuestions insight={data} productId={productId} onInsight={(i) => setSt((x) => ({ ...x, data: i }))} onReanalyze={() => analyze(true)} />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t(['الزوايا المقترحة', 'Angles proposés'])}>
             {data.angles.map((a) => {
               const on = picked === a.name;

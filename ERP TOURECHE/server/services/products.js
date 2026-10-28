@@ -7,7 +7,7 @@ import * as shopify from '../integrations/shopify.js';
 import * as ai from '../integrations/ai.js';
 import * as meta from '../integrations/meta.js';
 import * as n8n from '../integrations/n8n.js';
-import { analyzeSeo } from './seo.js';
+import { analyzeSeo, mergeAnswers, ownerAnswers } from './seo.js';
 import { assertSupplier } from './contacts.js';
 import { uploadPath } from '../integrations/images.js';
 import { getProject, inList } from './projects.js';
@@ -296,6 +296,8 @@ const variantSig = (vs) =>
  */
 export async function publishProduct(id, { status = 'ACTIVE' } = {}) {
   const p = getProduct(id);
+  // أجوبة التاجر عن أسئلة الزبائن تصل مع كل نشر (سطر في المواصفات + الأسئلة الشائعة)، فلا يبقى المتجر متأخراً عن البطاقة
+  p.description_html = mergeAnswers(p.description_html, ownerAnswers(p));
   const cfg = projectConfig(p.project_id);
   if (!shopify.isConfigured(cfg)) throw new HttpError(400, 'shopify_not_configured');
   if (!p.price && !(p.variants || []).some((v) => v.price)) throw badRequest('price_required');
@@ -367,8 +369,8 @@ export async function publishProduct(id, { status = 'ACTIVE' } = {}) {
   const node = await shopify.getProduct(cfg, gid);
   const m = shopify.mapProduct(node);
   db.prepare(
-    `UPDATE products SET shopify_id = ?, shopify_status = ?, handle = ?, images = ?, options = ?, variants = ?, stock = ?, online_url = ?, stage = ?, synced_at = ?, updated_at = ? WHERE id = ?`,
-  ).run(m.shopify_id, m.shopify_status, m.handle, JSON.stringify(m.images), JSON.stringify(m.options), JSON.stringify(m.variants), m.stock ?? p.stock ?? null, m.online_url, status === 'ACTIVE' ? 'published' : 'ready', nowIso(), nowIso(), id);
+    `UPDATE products SET shopify_id = ?, shopify_status = ?, handle = ?, description_html = ?, images = ?, options = ?, variants = ?, stock = ?, online_url = ?, stage = ?, synced_at = ?, updated_at = ? WHERE id = ?`,
+  ).run(m.shopify_id, m.shopify_status, m.handle, p.description_html, JSON.stringify(m.images), JSON.stringify(m.options), JSON.stringify(m.variants), m.stock ?? p.stock ?? null, m.online_url, status === 'ACTIVE' ? 'published' : 'ready', nowIso(), nowIso(), id);
   const saved = refreshScore(id);
   if (status === 'ACTIVE') {
     const opt = m.options[0];
@@ -387,6 +389,25 @@ export async function publishProduct(id, { status = 'ACTIVE' } = {}) {
       .catch((e) => console.warn('[n8n] product.published', e.message));
   }
   return { ...saved, online_store: onlineStore, warnings };
+}
+
+/**
+ * أجوبة التاجر ← صفحة المنتج في Shopify: الوصف كما هو في المتجر الآن (قد يكون عُدّل هناك) + أسطر المواصفات والأسئلة الشائعة،
+ * دون لمس الباقي (السعر، الصور، المتغيرات). الوصف نفسه يُحفظ في الـ ERP فتبقى البطاقة والمتجر متطابقين.
+ */
+export async function publishAnswers(id) {
+  const p = getProduct(id);
+  const cfg = projectConfig(p.project_id);
+  if (!shopify.isConfigured(cfg)) throw new HttpError(400, 'shopify_not_configured');
+  if (!p.shopify_id) throw badRequest('product_not_on_shopify');
+  const answers = ownerAnswers(p);
+  if (!answers.length) throw badRequest('no_answers');
+  const live = shopify.mapProduct(await shopify.getProduct(cfg, p.shopify_id)).description_html;
+  const html = mergeAnswers(live, answers);
+  const changed = html !== live;
+  if (changed) await shopify.updateProduct(cfg, p.shopify_id, { description_html: html });
+  db.prepare('UPDATE products SET description_html = ?, synced_at = ?, updated_at = ? WHERE id = ?').run(html, nowIso(), nowIso(), id);
+  return { ...refreshScore(id), published_answers: answers.length, changed };
 }
 
 /** نشر منشور على صفحة فيسبوك و/أو إنستغرام بصورة المنتج */
@@ -445,7 +466,7 @@ function seoSystem(brand, domain) {
 - seo_description: بين 140 و160 حرفاً، فيه الكلمة المفتاحية وفائدة ملموسة وذكر الدفع عند الاستلام والتوصيل ودعوة لطيفة للطلب.
 - handle: حروف لاتينية صغيرة وشرطات فقط، كلمات فرنسية/لاتينية دالة، 60 حرفاً كحد أقصى (مثال: thermos-enfant-mickey-minnie-320ml).
 - description_html: بين 300 و500 كلمة، بدون <h1>. ابدأ بـ <h2> فيه الكلمة المفتاحية بصياغة طبيعية، ثم فقرتان تذكر الكلمة المفتاحية في أول 100 كلمة،
-  ثم <h3>المواصفات</h3> كجدول <table><tr><th>…</th><td>…</td></tr></table>، ثم <h3>المميزات</h3> كقائمة <ul>، ثم <h3>أسئلة شائعة</h3> (3–5 أسئلة بصيغة <p><strong>السؤال؟</strong> الجواب</p>)، ثم <h3>الطلب والتوصيل</h3>.
+  ثم <h3>المواصفات</h3> كجدول <table><tr><th>…</th><td>…</td></tr></table>، ثم <h3>المميزات</h3> كقائمة <ul>، ثم <h3>أسئلة شائعة</h3> (3–5 أسئلة بصيغة <p><strong>السؤال؟</strong> الجواب</p>، تبدأ بكل answered_questions بنصها: أجوبة التاجر المؤكدة)، ثم <h3>الطلب والتوصيل</h3>.
 - لا تخترع معلومات غير موجودة في المعطيات (مواد، شهادات، أرقام، ضمانات). إن لم تُعطَ معلومة فلا تذكرها، واذكر نقصها في notes.
 - تجنّب الحشو وعلامات الكتابة الآلية: لا شرطات طويلة (—)، ولا عبارات مثل «في عالم اليوم» أو «لا تفوّت الفرصة» أو «تجربة لا مثيل لها». كثافة الكلمة المفتاحية طبيعية (أقل من 3%).
 - image_alts: نص بديل لكل صورة مرفقة بنفس الترتيب، يصف ما يظهر فعلاً في الصورة مع اسم المنتج، 8–16 كلمة، دون «صورة لـ».
@@ -469,7 +490,8 @@ export async function generateSeo(id, { instructions = '' } = {}) {
     options: p.options,
     variants: (p.variants || []).map((v) => v.title),
     technical_notes: p.notes,
-    specs: p.specs,
+    specs: (p.specs || []).map((x) => ({ label: x.label, value: x.value })),
+    answered_questions: ownerAnswers(p).map((x) => ({ q: x.q, a: x.faq || x.value })),
     audience: p.audience,
     existing_description_text: (p.description_html || '').replace(/<[^>]+>/g, ' ').slice(0, 3000),
     existing_tags: p.tags,
@@ -494,6 +516,9 @@ export async function generateSeo(id, { instructions = '' } = {}) {
 }
 
 export function applySeo(id, s) {
+  // أجوبة التاجر تبقى في المواصفات (Claude يقترح جدولاً جديداً)، ويحلّ جوابه محل سطر Claude بنفس الاسم
+  const answers = ownerAnswers(getProduct(id));
+  const specs = s.specs ? [...answers, ...s.specs.filter((x) => !answers.some((a) => a.label === x.label))] : undefined;
   return updateProduct(id, {
     title: s.title,
     handle: s.handle,
@@ -503,7 +528,7 @@ export function applySeo(id, s) {
     description_html: s.description_html,
     product_type: s.product_type,
     tags: s.tags,
-    specs: s.specs,
+    specs,
     ...(s.collections?.length ? { collections: s.collections } : {}),
     ...(s.images ? { images: s.images } : {}),
   });

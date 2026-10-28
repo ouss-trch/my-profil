@@ -6,7 +6,8 @@ import { generateImages, imageProvider, uploadPath } from '../integrations/image
 import * as shopify from '../integrations/shopify.js';
 import { projectConfig } from '../lib/settings.js';
 import { HttpError, badRequest, escapeHtml, nowIso, slugify } from '../lib/util.js';
-import { getProduct, imageBlocks } from './products.js';
+import { getProduct, imageBlocks, updateProduct } from './products.js';
+import { answerOnPage, ownerAnswers } from './seo.js';
 import { getProject, inList } from './projects.js';
 import { deliveryFacts, getDelivery } from './delivery.js';
 import { addPages, storeBase } from './pages.js';
@@ -173,7 +174,7 @@ export function landingSystem(brand) {
    - trust: من 3 إلى 4 نقاط ثقة قصيرة جداً (2–5 كلمات) من delivery وstore_policies فقط، مثل: الدفع عند الاستلام، المعاينة قبل الدفع (إن كانت في السياسة)، التوصيل إلى N ولاية، الاستبدال (إن كان في السياسة).
    - العناوين بنفس الأسلوب والزاوية، والأسطر قصيرة تُقرأ على الهاتف في ثانية.
 
-14. angle_brief (إن وُجد) هو تحليل هذا المنتج لهذه الزاوية: promise هو العنوان الرئيسي تقريباً، pains في الفقرات الأولى، proofs في الفوائد، objections تجيب عنها الأسئلة الشائعة والضمانات. product_facts هي الحقائق التي وُجدت في صفحة المنتج: لا تتجاوزها.
+14. angle_brief (إن وُجد) هو تحليل هذا المنتج لهذه الزاوية: promise هو العنوان الرئيسي تقريباً، pains في الفقرات الأولى، proofs في الفوائد، objections تجيب عنها الأسئلة الشائعة والضمانات. product_facts هي الحقائق التي وُجدت في صفحة المنتج: لا تتجاوزها. product.answered_questions أجوبة التاجر نفسه عن أسئلة الزبائن: حقائق مؤكدة، استعملها في الفوائد، وابدأ بها الأسئلة الشائعة (السؤال بنصه تقريباً).
 
 الإطار المطلوب للفقرات (story) يُعطى مع المعطيات؛ اتبعه بالترتيب، وstage لكل فقرة هو اسم مرحلتها.`;
 }
@@ -238,7 +239,9 @@ export const INSIGHT_SYSTEM = `أنت مسوّق أداء محترف (Direct res
 تحلّل صفحة منتج واحد (العنوان، الوصف، المواصفات، المتغيرات، الصور المرفقة، السعر، العروض) ثم تقترح زوايا تسويقية خاصة بهذا المنتج بالذات.
 
 1. facts: كل حقيقة يمكن إثباتها من الصفحة (المادة، السعة، المقاس، طريقة الإغلاق، الحزام، الألوان، ما في العلبة…)، مع فائدتها للزبون في يومه (benefit) ومصدرها (source). ما لا تراه في الصور ولا تقرؤه في المعطيات لا يُكتب. لا أرقام أو مدد غير مذكورة (مثل «يحفظ الحرارة 12 ساعة» إن لم يُذكر الرقم).
-2. missing: ما يسأل عنه الزبون عادة لهذا النوع من المنتجات وغير موجود في الصفحة (مثل السعة، المقاس، المادة، العمر المناسب)، جملة قصيرة لكل نقص، ليضيفه التاجر.
+2. missing: أسئلة يطرحها الزبون عادة قبل شراء هذا النوع من المنتجات وجوابها غير موجود في الصفحة (التسرب، مدة حفظ الحرارة، العمر المناسب، المقاس، طريقة التنظيف…)، من 0 إلى 6، ليجيب عنها التاجر فتُضاف إلى صفحة المنتج:
+   - question: السؤال كما يطرحه الزبون، قصير وينتهي بـ «؟». label: اسم الخاصية في جدول المواصفات (كلمتان إلى 4، مثل «مانع للتسرب»). hint: مثال قصير لشكل الجواب (مثل «نعم / لا» أو «ساعتان أو أكثر»).
+   - لا تسأل عمّا في specs أو answered_questions (أجاب عنه التاجر)، ولا عن dismissed_questions (قال إنه لا يهم)، ولا عمّا يُرى بوضوح في الصور.
 3. angles: من 4 إلى 6 زوايا، كل زاوية دافع شراء مختلف عند جمهور مختلف (مشكلة يحلها، استعمال يومي محدد، مناسبة هدية، الجودة مقابل السعر، الأطفال والعائلة، التوفير بعرض حقيقي…)، مسمّاة بشكل ملموس خاص بالمنتج، لا بكلمة عامة.
    مثال لترمس أطفال: «مشروب دافئ حتى الاستراحة» لا «الاستعمال اليومي».
    - name: من 2 إلى 6 كلمات بالعربية. slug: كلمة أو كلمتان لاتينية صغيرة (a-z و0-9 و-) للرابط، مثل ecole أو cadeau-aid.
@@ -260,7 +263,7 @@ const INSIGHT_SCHEMA = {
   properties: {
     summary: s,
     facts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['fact', 'benefit', 'source'], properties: { fact: s, benefit: s, source: { type: 'string', enum: ['title', 'description', 'specs', 'variants', 'photo', 'offer'] } } } },
-    missing: sArr,
+    missing: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['question', 'label', 'hint'], properties: { question: s, label: s, hint: s } } },
     angles: {
       type: 'array',
       items: {
@@ -312,6 +315,15 @@ function cleanBrief(a) {
   };
 }
 
+/** سؤال زبون من التحليل: {question, label, hint} — التحليلات المحفوظة قبل الأجوبة كانت نصاً فقط */
+function cleanQuestions(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((m) => (typeof m === 'string' ? { question: m } : m || {}))
+    .map((m) => ({ question: clip(m.question, 200), label: clip(m.label, 60), hint: clip(m.hint, 120) }))
+    .filter((m) => m.question)
+    .slice(0, 8);
+}
+
 export function cleanInsight(raw) {
   const names = new Set();
   return {
@@ -320,7 +332,9 @@ export function cleanInsight(raw) {
       .map((f) => ({ fact: clip(f.fact, 160), benefit: clip(f.benefit, 200), source: clip(f.source, 20) || 'description' }))
       .filter((f) => f.fact)
       .slice(0, 14),
-    missing: clipList(raw?.missing, 6, 200),
+    missing: cleanQuestions(raw?.missing),
+    dismissed: clipList(raw?.dismissed, 30, 200),
+    fresh_answers: Number(raw?.fresh_answers) || 0,
     // اسمان متطابقان = زاوية واحدة: الاسم هو ما يُختار به في الواجهة
     angles: (Array.isArray(raw?.angles) ? raw.angles : [])
       .map(cleanBrief)
@@ -335,17 +349,103 @@ const insightHash = (p) =>
     .update(JSON.stringify({ f: productFacts(p), i: (p.images || []).map((x) => x.url).slice(0, 4), a: p.audience || '' }))
     .digest('hex');
 
+const insightRow = (productId) => db.prepare('SELECT * FROM product_insights WHERE product_id = ?').get(productId);
+const saveInsightData = (p, data) => db.prepare('UPDATE product_insights SET data = ?, source_hash = ? WHERE product_id = ?').run(JSON.stringify(data), insightHash(p), p.id);
+
 export function getInsight(productId) {
-  const r = db.prepare('SELECT * FROM product_insights WHERE product_id = ?').get(productId);
+  const r = insightRow(productId);
   if (!r) return null;
   const p = getProduct(productId);
-  return { ...parseJson(r.data, {}), product_id: r.product_id, at: r.created_at, model: r.model, stale: r.source_hash !== insightHash(p) };
+  const data = cleanInsight(parseJson(r.data, {}));
+  // الأجوبة مصدرها بطاقة المنتج نفسها (المواصفات): سطر حُذف هناك = السؤال يعود مفتوحاً
+  const answers = ownerAnswers(p);
+  const asked = new Set(answers.map((a) => a.q));
+  const dismissed = new Set(data.dismissed);
+  return {
+    ...data,
+    missing: data.missing.filter((m) => !asked.has(m.question) && !dismissed.has(m.question)),
+    answered: answers.map((a) => ({ question: a.q, label: a.label, value: a.value, faq: a.faq || a.value, at: a.at || null, on_store: Boolean(p.shopify_id) && answerOnPage(p.description_html, a) })),
+    product_id: r.product_id,
+    on_shopify: Boolean(p.shopify_id),
+    at: r.created_at,
+    model: r.model,
+    stale: r.source_hash !== insightHash(p),
+  };
 }
 
 /** الزاوية المختارة من تحليل المنتج (بالاسم)، أو لا شيء إن كانت زاوية عامة أو مكتوبة يدوياً */
 export function insightAngle(productId, name) {
   const angle = clip(name, 80);
   return getInsight(productId)?.angles?.find((a) => a.name === angle) || null;
+}
+
+const ANSWER_SCHEMA = { type: 'object', additionalProperties: false, required: ['answers', 'label', 'value', 'faq', 'reason'], properties: { answers: { type: 'boolean' }, label: s, value: s, faq: s, reason: s } };
+const ANSWER_SYSTEM = `تساعد تاجراً جزائرياً على إكمال صفحة منتجه. يصلك سؤال زبون عن المنتج وجواب التاجر عليه، وقد يكون بالدارجة أو بأخطاء الإملاء الصوتي.
+- answers: هل يعطي جواب التاجر معلومة محددة عن السؤال؟ («موجود في الصورة»، «لا أعرف»، أو كلام عن شيء آخر ليس جواباً).
+- label: اسم الخاصية في جدول المواصفات، من كلمتين إلى 4. احتفظ بالاسم المقترح إن كان مناسباً.
+- value: القيمة مختصرة كما تُكتب في جدول مواصفات (حتى 60 حرفاً)، مثل «نعم، مضاد لتسرب الماء» أو «ساعتان أو أكثر».
+- faq: جواب السؤال لصفحة المنتج، جملة أو جملتان بالعربية الفصحى البسيطة.
+- ممنوع إضافة أي معلومة أو رقم أو مدة أو مادة غير موجودة في جواب التاجر، وممنوع تغيير الأرقام. إن كان الجواب يحتمل أكثر من معنى فاكتب أوضح ما فهمته واذكر ذلك في reason ليراجعه.
+- reason: إن كان answers=false فما الذي ينقص، بجملة قصيرة موجهة للتاجر؛ وإلا فارغ أو ملاحظة المراجعة.`;
+
+/**
+ * جواب التاجر عن سؤال زبون ← بطاقة المنتج (سطر في المواصفات + جواب للأسئلة الشائعة)، ومنها إلى صفحات الهبوط وSEO،
+ * وإلى صفحة المنتج في Shopify بزر «انشر الأجوبة» (كلمة المرور الحساسة). Claude يصوغ الجواب فقط، دون إضافة معلومة.
+ * exact: تعديل يدوي لجواب محفوظ (الاسم والقيمة والجملة كما كتبها التاجر، دون Claude).
+ */
+export async function answerQuestion(projectId, productId, input = {}) {
+  const p = getProduct(Number(productId));
+  if (p.project_id !== projectId) throw new HttpError(404, 'product_not_found');
+  const question = clip(input.question, 200);
+  if (!question) throw badRequest('question_required');
+  let out;
+  if (input.exact) {
+    out = { label: clip(input.label, 60), value: clip(input.value, 160), faq: clip(input.faq || input.value, 400) };
+    if (!out.label || !out.value) throw badRequest('answer_required');
+  } else {
+    const answer = clip(input.answer, 600);
+    if (!answer) throw badRequest('answer_required');
+    const label = clip(input.label, 60);
+    out = { label: label || question.replace(/^هل\s+/, '').replace(/[؟?]+$/, '').slice(0, 40), value: answer.slice(0, 160), faq: answer };
+    if (ai.aiConfigured()) {
+      const r = await ai.structured({
+        system: ANSWER_SYSTEM,
+        prompt: JSON.stringify({ product: p.title, question, suggested_label: label || null, owner_answer: answer }, null, 2),
+        schema: ANSWER_SCHEMA,
+        effort: 'low',
+        maxTokens: 2000,
+        meter: { projectId, kind: 'product_answer' },
+      });
+      if (!r.answers) throw new HttpError(400, 'answer_not_a_value', null, { reason: clip(r.reason, 300) });
+      out = { label: clip(r.label, 60) || out.label, value: clip(r.value, 160) || out.value, faq: clip(r.faq, 400) || out.faq, note: clip(r.reason, 300) };
+    }
+  }
+  // سطر واحد لكل سؤال: الجواب الجديد يحلّ محل القديم، وسطر بنفس الاسم يُستبدل بدل أن يتكرر
+  const row = { label: out.label, value: out.value, q: question, faq: out.faq, source: 'owner', at: nowIso() };
+  const specs = (p.specs || []).filter((x) => x.q !== question && x.label !== row.label);
+  const kept = (p.specs || []).findIndex((x) => x.q === question || x.label === row.label);
+  specs.splice(kept >= 0 ? Math.min(kept, specs.length) : specs.length, 0, row);
+  const next = updateProduct(p.id, { specs });
+  // التحليل يبقى صالحاً (تعديلنا نحن)، ويُعرض «حدّث الزوايا بالأجوبة»
+  const r = insightRow(p.id);
+  if (r) {
+    const data = cleanInsight(parseJson(r.data, {}));
+    saveInsightData(next, { ...data, dismissed: data.dismissed.filter((x) => x !== question), fresh_answers: data.fresh_answers + 1 });
+  }
+  return { insight: getInsight(p.id), product: { id: next.id, specs: next.specs, seo_score: next.seo_score }, note: out.note || null };
+}
+
+/** «لا يهم»: السؤال لا يُطرح من جديد (ولا في تحليل لاحق)؛ undo يعيده */
+export function dismissQuestion(projectId, productId, { question, undo = false } = {}) {
+  const p = getProduct(Number(productId));
+  if (p.project_id !== projectId) throw new HttpError(404, 'product_not_found');
+  const r = insightRow(p.id);
+  if (!r) throw new HttpError(404, 'insight_not_found');
+  const q = clip(question, 200);
+  const data = cleanInsight(parseJson(r.data, {}));
+  const dismissed = undo ? data.dismissed.filter((x) => x !== q) : [...new Set([...data.dismissed, q])];
+  db.prepare('UPDATE product_insights SET data = ? WHERE product_id = ?').run(JSON.stringify({ ...data, dismissed }), p.id);
+  return getInsight(p.id);
 }
 
 /** تحليل صفحة المنتج (Claude يقرأ الوصف والمواصفات والصور) → حقائق + نواقص + زوايا خاصة به. محفوظ حتى تتغير الصفحة */
@@ -358,7 +458,8 @@ export async function analyzeProduct(projectId, productId, { fresh = false } = {
   let offers = [];
   if (shopify.isConfigured(cfg)) offers = await mainTemplate(cfg).then(({ tpl }) => templateFacts(tpl).offers).catch(() => []);
   const images = await imageBlocks(p.images, 4).catch(() => []);
-  const data = { product: productFacts(p), store_offers: offers, audience_hint: clip(p.audience, 200) || null };
+  const before = insightRow(p.id) ? cleanInsight(parseJson(insightRow(p.id).data, {})) : null;
+  const data = { product: productFacts(p), store_offers: offers, audience_hint: clip(p.audience, 200) || null, dismissed_questions: before?.dismissed || [] };
   const raw = await ai.structured({
     system: INSIGHT_SYSTEM,
     prompt: `المعطيات (JSON):\n${JSON.stringify(data, null, 2)}\n\n${images.length ? 'الصور المرفقة هي صور المنتج الحقيقية من صفحته.' : 'لا صور للمنتج: اعتمد على النص وحده.'}\n\nحلّل المنتج واقترح زواياه حسب القواعد.`,
@@ -367,7 +468,7 @@ export async function analyzeProduct(projectId, productId, { fresh = false } = {
     images,
     meter: { projectId, kind: 'landing_insight' },
   });
-  const insight = cleanInsight(raw);
+  const insight = { ...cleanInsight(raw), dismissed: before?.dismissed || [], fresh_answers: 0 };
   if (!insight.angles.length) throw new HttpError(502, 'landing_insight_empty');
   db.prepare(
     'INSERT INTO product_insights (product_id, project_id, source_hash, data, model, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(product_id) DO UPDATE SET source_hash = excluded.source_hash, data = excluded.data, model = excluded.model, created_at = excluded.created_at',
@@ -502,7 +603,9 @@ function productFacts(p) {
     price_da: p.price,
     compare_at_price_da: p.compare_at_price && p.compare_at_price > p.price ? p.compare_at_price : null,
     description_text: String(p.description_html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000),
-    specs: p.specs,
+    specs: (p.specs || []).map((x) => ({ label: x.label, value: x.value })),
+    // أجوبة التاجر نفسه عن أسئلة الزبائن: حقائق مؤكدة (تُستعمل في الفوائد والأسئلة الشائعة)
+    ...(ownerAnswers(p).length ? { answered_questions: ownerAnswers(p).map((x) => ({ q: x.q, a: x.faq || x.value })) } : {}),
     notes: p.notes,
     options: p.options,
     variants: (p.variants || []).map((v) => v.title).filter((t) => t && t !== 'Default Title'),

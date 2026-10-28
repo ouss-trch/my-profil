@@ -29,6 +29,7 @@ import { da, money, n0, pct } from '../lib/format.js';
 import { useApp } from '../components/ProjectContext.jsx';
 import { Badge, Bar, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Select, Stat, Tabs, Textarea, Toggle, cx, useAction } from '../components/ui.jsx';
 import LaunchCampaign from '../components/LaunchCampaign.jsx';
+import ProductQuestions from '../components/ProductQuestions.jsx';
 import VariantsEditor from '../components/VariantsEditor.jsx';
 import { STAGES, TEST_STAGES, seoTone } from './Products.jsx';
 
@@ -163,7 +164,7 @@ export default function ProductEditor() {
           { value: 'ad', label: t(['الإعلان والاختبار', 'Pub & test']), icon: Megaphone },
         ]}
       />
-      {tab === 'product' && <ProductTab p={p} f={f} set={set} reload={reload} />}
+      {tab === 'product' && <ProductTab p={p} f={f} set={set} reload={reload} dirty={dirty} />}
       {tab === 'seo' && <SeoTab p={p} f={f} set={set} onApplied={reload} />}
       {tab === 'marketing' && <MarketingTab p={p} onImagesAdded={reload} />}
       {tab === 'publish' && <PublishTab p={p} dirty={dirty.length} onDone={reload} />}
@@ -196,7 +197,61 @@ export default function ProductEditor() {
   );
 }
 
-function ProductTab({ p, f, set, reload }) {
+/**
+ * أسئلة الزبائن عن المنتج (من تحليل صفحته، نفس ما يظهر عند إنشاء صفحة هبوط): الجواب هنا يُحفظ في المواصفات،
+ * ويُنشر في صفحة المنتج على Shopify، وتستعمله صفحات الهبوط وSEO. التعديلات غير المحفوظة تُحفظ أولاً حتى لا تضيع.
+ */
+function CustomerQuestions({ p, dirty, reload }) {
+  const { t } = useI18n();
+  const { run, busy } = useAction();
+  const [insight, setInsight] = useState(undefined);
+  const opts = { project: p.project_id };
+  useEffect(() => {
+    let live = true;
+    api.get(`/pages/landing/insight?product_id=${p.id}`, opts).then(
+      (r) => live && setInsight(r.insight),
+      () => live && setInsight(null),
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.id, p.project_id]);
+  const analyze = () => run('analyze', () => api.post('/pages/landing/analyze', { product_id: p.id, fresh: true }, opts), { success: false }).then((r) => r && setInsight(r));
+  if (insight === undefined) return null;
+  const open = insight?.missing?.length || 0;
+  return (
+    <Card
+      title={t(['أسئلة الزبائن عن هذا المنتج', 'Questions des clients sur ce produit'])}
+      subtitle={t(['من تحليل صفحة المنتج. جوابك يُضاف إلى المواصفات، ثم إلى صفحة المنتج في المتجر، وتستعمله صفحات الهبوط وSEO.', 'D’après l’analyse de la fiche. Votre réponse va dans les caractéristiques, puis sur la fiche en ligne, les landings et le SEO.'])}
+      actions={
+        <Button size="sm" variant="ghost" icon={Sparkles} loading={busy === 'analyze'} onClick={analyze}>
+          {insight ? t(['حلّل من جديد', 'Relancer']) : t(['اكتشف أسئلة الزبائن', 'Trouver les questions'])}
+        </Button>
+      }
+    >
+      {!insight ? (
+        <p className="text-sm text-sub">{t(['Claude يقرأ صفحة المنتج وصوره، ويستخرج ما يسأل عنه الزبون ولا تجيب عنه الصفحة، مع زوايا بيع خاصة بالمنتج.', 'Claude lit la fiche et les photos, et liste ce que les clients demandent sans réponse sur la page, avec des angles de vente.'])}</p>
+      ) : (
+        <>
+          {insight.stale && <p className="mb-2 text-xs text-muted">{t(['تغيّرت صفحة المنتج منذ التحليل: «حلّل من جديد» يحدّث الأسئلة والزوايا.', 'La fiche a changé depuis l’analyse : « Relancer » met à jour.'])}</p>}
+          {!open && !insight.answered?.length && <p className="text-sm text-sub">{t(['لا أسئلة مفتوحة: صفحة المنتج تجيب عمّا يسأل عنه الزبون عادة.', 'Aucune question ouverte.'])}</p>}
+          <ProductQuestions
+            insight={insight}
+            productId={p.id}
+            project={p.project_id}
+            onInsight={setInsight}
+            onProduct={() => reload(true)}
+            onReanalyze={analyze}
+            blocked={dirty.length ? t(['لديك تعديلات غير محفوظة في البطاقة: احفظها أولاً (زر «حفظ» في الأعلى) حتى لا تضيع.', 'Modifications non enregistrées : enregistrez d’abord.']) : null}
+          />
+        </>
+      )}
+    </Card>
+  );
+}
+
+function ProductTab({ p, f, set, reload, dirty = [] }) {
   const { t } = useI18n();
   const { run, busy } = useAction();
   const fileRef = useRef(null);
@@ -330,6 +385,8 @@ function ProductTab({ p, f, set, reload }) {
             </Field>
           </div>
         </Card>
+
+        <CustomerQuestions p={p} dirty={dirty} reload={reload} />
       </div>
 
       <div className="min-w-0 space-y-4">

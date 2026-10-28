@@ -68,3 +68,59 @@ export function buildDescriptionHtml({ intro, specs = [], features = [], faq = [
   if (delivery) html += `<h3>الطلب والتوصيل</h3><p>${esc(delivery)}</p>`;
   return html;
 }
+
+const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * أجوبة التاجر عن أسئلة الزبائن ← وصف صفحة المنتج، دون لمس الباقي: سطر في جدول «المواصفات» (يُستبدل إن وُجد نفس الاسم)
+ * وفقرة في «أسئلة شائعة» (تُستبدل إن وُجد نفس السؤال). قسم غير موجود يُنشأ قبل «الطلب والتوصيل». تطبيقها مرتين = لا تغيير.
+ */
+export function mergeAnswers(html, answers = []) {
+  let out = String(html || '');
+  const before = (section) => {
+    const at = out.search(/<h3[^>]*>\s*الطلب والتوصيل\s*<\/h3>/i);
+    out = at >= 0 ? out.slice(0, at) + section + out.slice(at) : out + section;
+  };
+  const rows = answers.filter((a) => a.label && a.value);
+  if (rows.length) {
+    const m = out.match(/(<h3[^>]*>\s*المواصفات\s*<\/h3>\s*<table[^>]*>)([\s\S]*?)(<\/table>)/i);
+    if (m) {
+      let body = m[2];
+      for (const a of rows) {
+        const row = `<tr><th>${escHtml(a.label)}</th><td>${escHtml(a.value)}</td></tr>`;
+        const same = new RegExp(`<tr[^>]*>\\s*<th[^>]*>\\s*${reEsc(escHtml(a.label))}\\s*</th>[\\s\\S]*?</tr>`, 'i');
+        if (same.test(body)) body = body.replace(same, row);
+        else body = /<\/tbody>/i.test(body) ? body.replace(/<\/tbody>(?![\s\S]*<\/tbody>)/i, `${row}</tbody>`) : body + row;
+      }
+      out = out.replace(m[0], m[1] + body + m[3]);
+    } else {
+      const faqAt = out.search(/<h3[^>]*>\s*أسئلة شائعة\s*<\/h3>/i);
+      const table = `<h3>المواصفات</h3><table>${rows.map((a) => `<tr><th>${escHtml(a.label)}</th><td>${escHtml(a.value)}</td></tr>`).join('')}</table>`;
+      if (faqAt >= 0) out = out.slice(0, faqAt) + table + out.slice(faqAt);
+      else before(table);
+    }
+  }
+  const faqs = answers.filter((a) => a.q && (a.faq || a.value));
+  if (faqs.length) {
+    const head = out.match(/<h3[^>]*>\s*أسئلة شائعة\s*<\/h3>/i);
+    if (head) {
+      const start = head.index + head[0].length;
+      const next = out.slice(start).search(/<h3[\s>]/i);
+      const end = next >= 0 ? start + next : out.length;
+      let body = out.slice(start, end);
+      for (const a of faqs) {
+        const p = `<p><strong>${escHtml(a.q)}</strong> ${escHtml(a.faq || a.value)}</p>`;
+        const same = new RegExp(`<p[^>]*>\\s*<strong>\\s*${reEsc(escHtml(a.q))}\\s*</strong>[\\s\\S]*?</p>`, 'i');
+        body = same.test(body) ? body.replace(same, p) : body + p;
+      }
+      out = out.slice(0, start) + body + out.slice(end);
+    } else before(`<h3>أسئلة شائعة</h3>${faqs.map((a) => `<p><strong>${escHtml(a.q)}</strong> ${escHtml(a.faq || a.value)}</p>`).join('')}`);
+  }
+  return out;
+}
+
+/** أجوبة التاجر المحفوظة في المواصفات (سطر فيه q = سؤال الزبون الذي أجاب عنه) */
+export const ownerAnswers = (p) => (Array.isArray(p?.specs) ? p.specs : []).filter((s) => s && s.q && s.value);
+/** هل الجواب ظاهر في وصف الصفحة كما هو (دمجه لا يغيّر شيئاً)؟ */
+export const answerOnPage = (html, a) => mergeAnswers(html, [a]) === String(html || '');

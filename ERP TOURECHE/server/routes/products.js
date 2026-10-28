@@ -154,6 +154,13 @@ productsRouter.post('/:id/publish', requireRole('admin', 'manager'), requireSens
   res.json(p);
 });
 
+// أجوبة أسئلة الزبائن ← وصف صفحة المنتج في Shopify (المواصفات + الأسئلة الشائعة فقط) = تعديل للمتجر الحي
+productsRouter.post('/:id/answers/publish', requireRole('admin', 'manager'), requireSensitive, async (req, res) => {
+  const p = await products.publishAnswers(Number(req.params.id));
+  audit(req, 'product_answers_published', { entity: 'product', entityId: p.id, projectId: p.project_id, details: { answers: p.published_answers, changed: p.changed } });
+  res.json(p);
+});
+
 productsRouter.post('/:id/social', requireRole('admin', 'manager'), async (req, res) => {
   const platforms = (req.body.platforms || ['facebook']).filter((x) => ['facebook', 'instagram'].includes(x));
   res.json(await products.postToSocial(Number(req.params.id), { platforms, message: v.str(req.body.message, { required: true, max: 2200, name: 'message' }) }));

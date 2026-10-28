@@ -309,6 +309,19 @@ pagesRouter.post('/landing/analyze', requireRole('admin', 'manager'), async (req
   res.json(out);
 });
 
+// جواب التاجر عن سؤال زبون من التحليل ← بطاقة المنتج (المواصفات + الأسئلة الشائعة)؛ «لا يهم» يخفي السؤال
+pagesRouter.post('/landing/insight/:productId/answer', requireRole('admin', 'manager'), async (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const out = await landing.answerQuestion(scope.id, Number(req.params.productId), req.body || {});
+  audit(req, 'product_question_answered', { entity: 'product', entityId: out.product.id, projectId: scope.id, details: { question: String(req.body?.question || '').slice(0, 200), exact: Boolean(req.body?.exact) } });
+  res.json(out);
+});
+
+pagesRouter.post('/landing/insight/:productId/dismiss', requireRole('admin', 'manager'), (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  res.json(landing.dismissQuestion(scope.id, Number(req.params.productId), { question: req.body?.question, undo: Boolean(req.body?.undo) }));
+});
+
 pagesRouter.post('/landing/generate', requireRole('admin', 'manager'), async (req, res) => {
   const scope = projectScope(req, { allowAll: false });
   const out = await landing.generateLanding(scope.id, req.body || {}, req.user.id);
