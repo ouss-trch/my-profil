@@ -413,6 +413,7 @@ export async function launchTest(projectId, productId, o) {
   if (!accountId) throw badRequest('ad_account_required');
   const pageId = o.pageId || cfg.meta_page_id;
   if (!pageId) throw new HttpError(400, 'page_not_configured');
+  if (o.cta && !meta.CTA_TYPES.has(o.cta)) throw badRequest('cta_invalid');
   const acct = await meta.accountInfo(cfg, accountId);
   // رابط الإعلان = الصفحة نفسها، ومعاملات التتبّع في «معاملات URL» (url_tags) لا داخل الرابط
   const link = cleanAdLink(o.link || productLink(cfg, p));
@@ -758,6 +759,7 @@ export async function editCampaign(projectId, campaignId, { section, data }) {
   else if (section === 'adset')
     await meta.updateAdset(cfg, data.id, { name: data.name, endTime: data.end_time, ageMin: data.age_min, ageMax: data.age_max, genders: data.genders, platform: data.platform, countries: data.countries, dailyBudget: data.daily_budget });
   else if (section === 'ad') {
+    if (data.cta && !meta.CTA_TYPES.has(data.cta)) throw badRequest('cta_invalid');
     const row = db.prepare('SELECT account_id FROM ad_campaigns WHERE campaign_id = ?').get(campaignId);
     const accountId = row?.account_id || (await meta.graph(cfg, campaignId, { params: { fields: 'account_id' } })).account_id;
     await meta.updateAdCreative(cfg, accountId, data.id, {

@@ -426,6 +426,16 @@ export async function accountHealth(cfg, accountId) {
  *  - postId (منشور صفحة فيسبوك): يُستعمل كما هو مع إعجاباته وتعليقاته
  *  - igMediaId (منشور إنستغرام): يُستعمل كما هو + زر «تسوّق الآن» برابط المنتج
  */
+/**
+ * أنواع زر الدعوة التي تقبلها Meta (AdCreativeLinkDataCallToAction.type، الإصدار 26): نص الزر نفسه تحدده Meta بحسب النوع ولغة المشاهد،
+ * ولا يقبل نصاً حراً. بعض الأنواع لا يصلح لبعض الأهداف: ترفضه Meta برسالة تُعرض كما هي.
+ */
+export const CTA_TYPES = new Set(
+  'OPEN_LINK LIKE_PAGE SHOP_NOW PLAY_GAME INSTALL_APP USE_APP CALL CALL_ME VIDEO_CALL INSTALL_MOBILE_APP USE_MOBILE_APP MOBILE_DOWNLOAD BOOK_TRAVEL LISTEN_MUSIC WATCH_VIDEO LEARN_MORE SIGN_UP DOWNLOAD WATCH_MORE NO_BUTTON VISIT_PAGES_FEED CALL_NOW APPLY_NOW CONTACT BUY_NOW GET_OFFER GET_OFFER_VIEW BUY_TICKETS UPDATE_APP GET_DIRECTIONS BUY SEND_UPDATES MESSAGE_PAGE DONATE SUBSCRIBE SAY_THANKS SELL_NOW SHARE DONATE_NOW GET_QUOTE CONTACT_US ORDER_NOW START_ORDER ADD_TO_CART VIEW_CART VIEW_IN_CART VIDEO_ANNOTATION RECORD_NOW INQUIRE_NOW CONFIRM REFER_FRIENDS REQUEST_TIME GET_SHOWTIMES LISTEN_NOW TRY_DEMO WOODHENGE_SUPPORT SOTTO_SUBSCRIBE FOLLOW_USER RAISE_MONEY SEE_SHOP GET_DETAILS FIND_OUT_MORE VISIT_WEBSITE BROWSE_SHOP EVENT_RSVP WHATSAPP_MESSAGE FOLLOW_NEWS_STORYLINE SEE_MORE BOOK_NOW FIND_A_GROUP FIND_YOUR_GROUPS PAY_TO_ACCESS PURCHASE_GIFT_CARDS FOLLOW_PAGE SEND_A_GIFT SWIPE_UP_SHOP SWIPE_UP_PRODUCT SEND_GIFT_MONEY PLAY_GAME_ON_FACEBOOK GET_STARTED OPEN_INSTANT_APP AUDIO_CALL GET_PROMOTIONS JOIN_CHANNEL MAKE_AN_APPOINTMENT ASK_ABOUT_SERVICES BOOK_A_CONSULTATION GET_A_QUOTE BUY_VIA_MESSAGE ASK_FOR_MORE_INFO CHAT_WITH_US VIEW_PRODUCT VIEW_CHANNEL GET_IN_TOUCH ASK_A_QUESTION START_A_CHAT CHAT_NOW ASK_US WATCH_LIVE_VIDEO JOIN_LIVE_VIDEO SHOP_WITH_AI TRY_ON_WITH_AI WATCH_NOW STREAM_NOW BUY_ACTIVITY_TICKETS'.split(' '),
+);
+/** الزر في التصميم: «بلا زر» لا يُرسل call_to_action أصلاً */
+const callToAction = (o) => (o.cta === 'NO_BUTTON' ? undefined : { type: o.cta || 'SHOP_NOW', value: { link: o.link } });
+
 export async function createCreative(cfg, accountId, o) {
   let body;
   if (o.igMediaId) {
@@ -434,7 +444,7 @@ export async function createCreative(cfg, accountId, o) {
       object_id: o.pageId,
       instagram_user_id: o.igUserId,
       source_instagram_media_id: o.igMediaId,
-      call_to_action: { type: o.cta || 'SHOP_NOW', value: { link: o.link } },
+      call_to_action: callToAction(o),
     };
   } else if (o.postId) {
     body = { name: `${o.name} · Page post`, object_story_id: o.postId.includes('_') ? o.postId : `${o.pageId}_${o.postId}` };
@@ -450,7 +460,7 @@ export async function createCreative(cfg, accountId, o) {
           name: o.headline,
           description: o.description || undefined,
           image_hash: o.imageHash,
-          call_to_action: { type: o.cta || 'SHOP_NOW', value: { link: o.link } },
+          call_to_action: callToAction(o),
         },
       },
     };
@@ -505,7 +515,7 @@ export async function campaignTree(cfg, campaignId) {
         headline: ld.name || '',
         description: ld.description || '',
         link: ld.link || ld.call_to_action?.value?.link || '',
-        cta: ld.call_to_action?.type || 'SHOP_NOW',
+        cta: ld.call_to_action?.type || 'NO_BUTTON',
         image_hash: ld.image_hash || null,
         page_id: a.creative?.object_story_spec?.page_id || (a.creative?.object_story_id ? String(a.creative.object_story_id).split('_')[0] : null),
         ig_user_id: a.creative?.object_story_spec?.instagram_user_id || null,

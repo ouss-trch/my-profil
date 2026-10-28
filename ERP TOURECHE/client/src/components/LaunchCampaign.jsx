@@ -5,8 +5,9 @@ import { api } from '../lib/api.js';
 import { da, money, n0 } from '../lib/format.js';
 import { Badge, Button, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, Toggle, cx, useAction } from './ui.jsx';
 import PageSuggest from './PageSuggest.jsx';
+import CtaField from './CtaField.jsx';
+import { CTA_CODES, ctaLabel } from '../lib/cta.js';
 
-const CTAS = ['SHOP_NOW', 'ORDER_NOW', 'BUY_NOW', 'LEARN_MORE', 'GET_OFFER', 'SEND_MESSAGE'];
 const ACCOUNT_STATUS = { 1: ['نشط', 'Actif', 'good'], 2: ['معطّل', 'Désactivé', 'bad'], 3: ['غير مسدد', 'Impayé', 'bad'], 7: ['قيد المراجعة', 'En revue', 'warn'], 9: ['فترة سماح', 'Grâce', 'warn'], 101: ['مغلق', 'Fermé', 'bad'] };
 
 /** محوّل العملة: كم ديناراً تساوي ميزانية يومية بعملة الحساب */
@@ -143,6 +144,7 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
     if (!(Number(f.daily_budget) >= 1)) problems.push(t(['حدد الميزانية اليومية', 'Indiquez le budget journalier']));
     if (!f.link && f.source !== 'fb_post') problems.push(t(['رابط المنتج مفقود (انشر المنتج أو ضع رابطاً)', 'Lien produit manquant (publiez ou saisissez un lien)']));
     if (f.source === 'image' && !f.image_url) problems.push(t(['اختر صورة', 'Choisissez une image']));
+    if (f.cta && !CTA_CODES.includes(f.cta)) problems.push(t(['نوع زر الدعوة غير معروف عند Meta', 'Type de bouton inconnu chez Meta']));
     if (f.source === 'fb_post' && !f.post_id) problems.push(t(['اختر منشوراً', 'Choisissez une publication']));
     if (f.source === 'ig_post' && !f.ig_media_id) problems.push(t(['اختر منشور إنستغرام', 'Choisissez une publication Instagram']));
     if (f.source === 'image' && !f.primary_text?.trim()) problems.push(t(['اكتب النص الأساسي', 'Rédigez le texte principal']));
@@ -350,7 +352,7 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
                   {(f.source === 'fb_post' ? posts?.facebook : posts?.instagram)?.map((p) => {
                     const sel = f.source === 'fb_post' ? f.post_id === p.id : f.ig_media_id === p.id;
                     return (
-                      <button key={p.id} type="button" onClick={() => set(f.source === 'fb_post' ? { post_id: p.id } : { ig_media_id: p.id })} className={cx('card overflow-hidden text-start', sel && 'border-brand ring-2 ring-brand/30')}>
+                      <button key={p.id} type="button" onClick={() => set(f.source === 'fb_post' ? { post_id: p.id, ...(p.store_link ? {} : { primary_text: p.text || f.primary_text }) } : { ig_media_id: p.id })} className={cx('card overflow-hidden text-start', sel && 'border-brand ring-2 ring-brand/30')}>
                         {p.image && <img src={p.image} alt="" className="h-24 w-full object-cover" loading="lazy" />}
                         <div className="p-2 text-[11px]">
                           <div className="line-clamp-2 text-ink">{p.text || '—'}</div>
@@ -371,7 +373,7 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
                     : t(['هذا المنشور يحمل رابط المتجر: يُستعمل كما هو بتفاعلاته.', 'Cette publication porte le lien de la boutique : utilisée telle quelle, avec ses réactions.'])}
                 </p>
               )}
-              {f.source !== 'fb_post' && (
+              {(f.source !== 'fb_post' || rebuilt) && (
                 <div className="mt-3 space-y-3">
                   {ctx.ad_copy?.variants?.length > 0 && f.source === 'image' && (
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -384,13 +386,13 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
                       ))}
                     </div>
                   )}
-                  {f.source === 'image' && (
+                  {(f.source === 'image' || rebuilt) && (
                     <>
                       <Field label={t(['النص الأساسي', 'Texte principal'])}>
                         <Textarea className="min-h-[110px]" value={f.primary_text} onChange={(e) => set({ primary_text: e.target.value })} />
                       </Field>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <Field label={t(['العنوان', 'Titre'])}>
+                        <Field label={t(['العنوان (نص حر يظهر بجانب الزر)', 'Titre (texte libre affiché à côté du bouton)'])}>
                           <Input value={f.headline} maxLength={60} onChange={(e) => set({ headline: e.target.value })} />
                         </Field>
                         <Field label={t(['الوصف', 'Description'])}>
@@ -400,15 +402,13 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
                     </>
                   )}
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label={t(['زر الدعوة', 'Bouton'])}>
-                      <Select value={f.cta} onChange={(e) => set({ cta: e.target.value })} options={CTAS.map((c) => ({ value: c, label: c }))} />
-                    </Field>
+                    <CtaField value={f.cta} onChange={(cta) => set({ cta })} />
                     <Field label={t(['رابط الوجهة', 'Lien de destination'])} hint={!ctx.published ? t(['المنتج غير منشور: انشره من محرر المنتج أو ضع رابط صفحة هبوط / اختبار A/B', 'Produit non publié : publiez-le ou utilisez une landing / test A/B']) : t(['يمكنك وضع رابط اختبار A/B ‎/go/…‎', 'Vous pouvez mettre un lien de test A/B /go/…'])}>
                       <Input className="ltr" list="pinned-urls-launch" value={f.link} onChange={(e) => set({ link: e.target.value })} />
                     </Field>
                   </div>
                   <PageSuggest id="pinned-urls-launch" />
-                  {f.source !== 'fb_post' && <LinkCheck link={f.link} pixelId={f.pixel_id} projectId={projectId} onUse={(link) => set({ link })} onResult={setLinkCheck} />}
+                  {(f.source !== 'fb_post' || rebuilt) && <LinkCheck link={f.link} pixelId={f.pixel_id} projectId={projectId} onUse={(link) => set({ link })} onResult={setLinkCheck} />}
                 </div>
               )}
             </Section>
@@ -430,7 +430,7 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
                   <div className="truncate text-[11px] uppercase text-muted">{f.link ? hostOf(f.link) : '—'}</div>
                   <div className="truncate text-sm font-semibold">{f.headline}</div>
                 </div>
-                <span className="btn btn-sm shrink-0">{f.cta.replace('_', ' ')}</span>
+                {f.cta !== 'NO_BUTTON' && <span className="btn btn-sm shrink-0">{ctaLabel(f.cta, lang)}</span>}
               </div>
             </div>
             {problems.length > 0 ? (

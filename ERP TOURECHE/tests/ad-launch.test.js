@@ -104,3 +104,29 @@ test('launch: the post picker says which posts carry the store link', async () =
   assert.deepEqual(posts.facebook.map((x) => [x.id, x.kind, x.store_link]), [['777_100', 'photo', false], ['777_101', 'link', true], ['777_102', 'video', false]]);
   assert.equal('links' in posts.facebook[0], false, 'the browser does not need the raw links');
 });
+
+test('button: the type comes from Meta’s list (no free text), is checked before anything is created, and “no button” sends none', async () => {
+  const image = { imageUrl: 'https://scontent.example/p100.jpg', primaryText: 'نص', headline: 'اطلب الآن والدفع عند الاستلام' };
+  // نص حر ليس نوعاً عند Meta: يُرفض قبل أي طلب إلى Meta
+  calls.length = 0;
+  await assert.rejects(launch({ ...image, cta: 'اطلب الآن' }), (e) => e.code === 'cta_invalid');
+  assert.equal(calls.length, 0);
+  // نوع صالح من قائمة Meta خارج القائمة المختصرة: يمرّ كما هو
+  calls.length = 0;
+  await launch({ ...image, cta: 'VIEW_PRODUCT' });
+  const spec = JSON.parse(creativeOf().object_story_spec).link_data;
+  assert.deepEqual(spec.call_to_action, { type: 'VIEW_PRODUCT', value: { link: LINK } });
+  // العبارة الحرة هي «العنوان»: تصل إلى Meta كما كُتبت
+  assert.equal(spec.name, 'اطلب الآن والدفع عند الاستلام');
+  // بلا زر: لا call_to_action في التصميم
+  calls.length = 0;
+  await launch({ ...image, cta: 'NO_BUTTON' });
+  assert.equal(JSON.parse(creativeOf().object_story_spec).link_data.call_to_action, undefined);
+});
+
+test('button: an ad that is already live can change its button, and an invalid type is refused before Meta is called', async () => {
+  const { editCampaign } = await import('../server/services/ads.js');
+  calls.length = 0;
+  await assert.rejects(editCampaign(p.id, '1', { section: 'ad', data: { id: '2', cta: 'MY_OWN_TEXT' } }), (e) => e.code === 'cta_invalid');
+  assert.equal(calls.length, 0);
+});

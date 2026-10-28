@@ -25,6 +25,7 @@ import { ago, da, dateOnly, money, n0, n2, pct } from '../lib/format.js';
 import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import { Badge, Button, Card, Drawer, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Stat, Tabs, Textarea, Toggle, cx, useAction } from '../components/ui.jsx';
+import CtaField from '../components/CtaField.jsx';
 import LaunchCampaign, { LaunchButton } from '../components/LaunchCampaign.jsx';
 import FxEditor from '../components/FxEditor.jsx';
 import { VERDICT } from './ProductEditor.jsx';
@@ -652,12 +653,13 @@ function CampaignEditor({ id, onClose, onChanged }) {
                       <Textarea value={a.message} onChange={(e) => setAds(ads.map((x, j) => (j === k ? { ...x, message: e.target.value } : x)))} />
                     </Field>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label={t(['العنوان', 'Titre'])}>
+                      <Field label={t(['العنوان (نص حر يظهر بجانب الزر)', 'Titre (texte libre affiché à côté du bouton)'])}>
                         <Input value={a.headline} onChange={(e) => setAds(ads.map((x, j) => (j === k ? { ...x, headline: e.target.value } : x)))} />
                       </Field>
                       <Field label={t(['الوصف', 'Description'])}>
                         <Input value={a.description} onChange={(e) => setAds(ads.map((x, j) => (j === k ? { ...x, description: e.target.value } : x)))} />
                       </Field>
+                      <CtaField value={a.cta} onChange={(cta) => setAds(ads.map((x, j) => (j === k ? { ...x, cta } : x)))} />
                       <Field label={t(['الرابط', 'Lien'])} className="sm:col-span-2">
                         <Input className="ltr" value={a.link} onChange={(e) => setAds(ads.map((x, j) => (j === k ? { ...x, link: e.target.value } : x)))} />
                       </Field>
