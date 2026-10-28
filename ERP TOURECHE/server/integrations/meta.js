@@ -359,9 +359,9 @@ export async function connectionCheck(cfg, { capiTest } = {}) {
   if (capiTest) {
     try {
       const r = await capiTest();
-      out.capi = { ok: r?.events_received === 1, events_received: r?.events_received ?? 0, fbtrace_id: r?.fbtrace_id || null };
+      out.capi = { ok: r?.events_received === 1, events_received: r?.events_received ?? 0, fbtrace_id: r?.fbtrace_id || null, token: cfg.meta_capi_token ? 'capi' : 'general' };
     } catch (e) {
-      out.capi = { ok: false, error: e.message };
+      out.capi = { ok: false, error: e.message, token: cfg.meta_capi_token ? 'capi' : 'general' };
     }
   }
   return out;
@@ -373,7 +373,8 @@ export async function connectionCheck(cfg, { capiTest } = {}) {
  */
 export function sendEvents(cfg, events, { testCode } = {}) {
   if (!cfg.meta_pixel_id) throw new IntegrationError('meta', 'config', 'pixel_missing');
-  return graph(cfg, `${cfg.meta_pixel_id}/events`, { method: 'POST', body: { data: events, ...(testCode ? { test_event_code: testCode } : {}) } });
+  // رمز API التحويلات الخاص بالبيكسل إن وُضع (لا ينتهي ولا يموت بحذف تطبيق أو مستخدم نظام)، وإلا الرمز العام
+  return graph(cfg, `${cfg.meta_pixel_id}/events`, { method: 'POST', token: cfg.meta_capi_token || undefined, body: { data: events, ...(testCode ? { test_event_code: testCode } : {}) } });
 }
 
 // ——— النشر على الصفحة وإنستغرام ———

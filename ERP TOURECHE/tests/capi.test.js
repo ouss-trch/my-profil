@@ -31,7 +31,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (u.pathname.endsWith('/2111277745999858/events')) {
     const form = new URLSearchParams(init.body);
     if (reject) return json({ error: { message: reject, type: 'OAuthException', code: 100 } }, 400);
-    sent.push({ data: JSON.parse(form.get('data')), test: form.get('test_event_code') });
+    sent.push({ data: JSON.parse(form.get('data')), test: form.get('test_event_code'), token: form.get('access_token') });
     return json({ events_received: 1, messages: [], fbtrace_id: 'trace' });
   }
   if (u.pathname.endsWith('/debug_token')) return json({ data: { app_id: '42', application: 'Toureche ERP', is_valid: true, expires_at: 0, scopes, ...tokenExtra } });
@@ -163,7 +163,7 @@ test('meta check: the token, its permissions, the accounts, pixel and page, and 
   assert.equal(r.pixel.ok, true);
   assert.deepEqual(r.pixel.events_24h, [{ name: 'Purchase', count: 3 }]);
   assert.deepEqual(r.page, { id: '777', name: 'SOU9NA page', ok: true, token: false });
-  assert.deepEqual(r.capi, { ok: true, events_received: 1, fbtrace_id: 'trace' });
+  assert.deepEqual(r.capi, { ok: true, events_received: 1, fbtrace_id: 'trace', token: 'general' });
   assert.equal(sent.at(-1).test, 'TEST9');
   scopes = [...scopes, 'ads_management'];
   assert.deepEqual((await connectionCheck(cfg)).scopes.missing, []);
@@ -218,4 +218,23 @@ test('test code: it works for a few hours, then production events resume on thei
   assert.equal(activeTestCode(p.id).expired, false);
   setSetting('meta_test_event_code', '', p.id);
   assert.deepEqual(activeTestCode(p.id), { code: '', set: false, until: null, expired: false });
+});
+
+test('capi token: the pixel’s own token carries the ERP events when set (so a user token that expires or dies does not stop them), the general one otherwise', async () => {
+  sent.length = 0;
+  const cfgOf = () => import('../server/lib/settings.js').then((m) => m.projectConfig(p.id));
+  await sendTestEvent(p.id, 'TEST1');
+  assert.equal(sent.at(-1).token, 'EAAtest', 'no dedicated token: the general one');
+  setSetting('meta_capi_token', 'EAAcapi-dataset', p.id);
+  await sendTestEvent(p.id, 'TEST2');
+  assert.equal(sent.at(-1).token, 'EAAcapi-dataset');
+  const a = order();
+  changeStatus(a, 'confirmed');
+  await drain();
+  assert.equal(sent.at(-1).token, 'EAAcapi-dataset', 'real order events too');
+  const r = await connectionCheck(await cfgOf(), { capiTest: () => sendTestEvent(p.id, 'TEST3') });
+  assert.equal(r.capi.token, 'capi', 'the check says which token carried the test event');
+  setSetting('meta_capi_token', '', p.id);
+  await sendTestEvent(p.id, 'TEST4');
+  assert.equal(sent.at(-1).token, 'EAAtest', 'clearing it goes back to the general token');
 });

@@ -62,6 +62,14 @@ const PROJECT_GROUPS = [
       { k: 'meta_page_token', label: ['رمز الصفحة (للنشر ومنشوراتها)', 'Jeton de page (publication)'] },
       { k: 'meta_ig_user_id', label: ['معرّف حساب إنستغرام', 'ID Instagram'], ltr: true },
       { k: 'meta_pixel_id', label: ['معرّف البيكسل', 'ID du pixel'], ltr: true, hint: ['نفس بيكسل المتجر: المتجر وn8n يرسلان «Purchase» عند كل طلبية، والـ ERP يرسل «أُكّدت» و«سُلّمت» إن فعّلتهما أدناه', 'Le même pixel que la boutique : boutique et n8n envoient « Purchase », l’ERP envoie « confirmée » et « livrée » si activés'] },
+      {
+        k: 'meta_capi_token',
+        label: ['رمز API التحويلات (اختياري، لا ينتهي)', 'Jeton API de conversion (facultatif, permanent)'],
+        hint: [
+          'Events Manager ← مصدر البيانات (البيكسل) ← الإعدادات ← قسم «API de conversion» ← «Générer un jeton d’accès». خاص بهذا البيكسل ولا ينتهي ولا يموت بحذف تطبيق أو مستخدم نظام. تُرسل به أحداث الـ ERP، وهو نفسه الذي يوضع في n8n (Credentials ← access_token). فارغاً: يُستعمل الرمز العام أعلاه (ينتهي إن كان رمز مستخدم).',
+          'Events Manager → source de données (pixel) → Paramètres → section « API de conversion » → « Générer un jeton d’accès ». Propre à ce pixel, permanent, il ne meurt pas si une app ou un utilisateur système est supprimé. L’ERP envoie ses événements avec lui, et c’est le même à mettre dans n8n (Credentials → access_token). Vide : le jeton général ci-dessus est utilisé (il expire si c’est un jeton utilisateur).',
+        ],
+      },
       { k: 'meta_capi_confirmed', label: ['إرسال «طلبية أُكّدت» إلى Meta (CAPI)', 'Envoyer « commande confirmée » à Meta (CAPI)'], type: 'bool', hint: ['عند التأكيد بالهاتف، مربوطة بطلبية المتجر نفسها: Meta تعرف أي إعلان يجلب طلبيات حقيقية، في نفس اليوم', 'À la confirmation téléphonique, liée à la commande d’origine : Meta voit quelle annonce amène de vraies commandes, le jour même'] },
       { k: 'meta_capi_confirmed_event', label: ['اسم حدث التأكيد', "Nom de l'événement de confirmation"], ltr: true },
       { k: 'meta_capi_delivered', label: ['إرسال «طلبية سُلّمت» إلى Meta (CAPI)', 'Envoyer « commande livrée » à Meta (CAPI)'], type: 'bool', hint: ['يعلّم الخوارزمية من يستلم فعلاً لا من يطلب فقط', 'Apprend à l’algorithme qui reçoit vraiment'] },
@@ -312,7 +320,12 @@ function MetaCheck({ result: r }) {
         : row(false, t(['البيكسل', 'Pixel']), t(['غير محدد', 'non défini']), 'pixel')}
       {r.page ? row(r.page.ok, t(['الصفحة', 'Page']), r.page.ok ? r.page.name : t(['لا وصول: أسند الصفحة لمستخدم النظام', 'Pas d’accès : assignez la page']), 'page') : row(null, t(['الصفحة', 'Page']), t(['غير محددة', 'non définie']), 'page')}
       {r.capi
-        ? row(r.capi.ok, t(['إرسال الأحداث (CAPI)', 'Envoi d’événements (CAPI)']), r.capi.ok ? t(['وصل الحدث التجريبي: افتح «اختبار الأحداث» في Events Manager لتراه، ثم امسح الرمز', 'Événement d’essai reçu : visible dans « Tester les événements », videz ensuite le code']) : r.capi.error, 'capi')
+        ? row(
+            r.capi.ok,
+            t(['إرسال الأحداث (CAPI)', 'Envoi d’événements (CAPI)']),
+            `${r.capi.ok ? t(['وصل الحدث التجريبي: افتح «اختبار الأحداث» في Events Manager لتراه، ثم امسح الرمز', 'Événement d’essai reçu : visible dans « Tester les événements », videz ensuite le code']) : r.capi.error} · ${r.capi.token === 'capi' ? t(['بالرمز المخصص للبيكسل', 'avec le jeton dédié au pixel']) : t(['بالرمز العام', 'avec le jeton général'])}`,
+            'capi',
+          )
         : row(null, t(['إرسال الأحداث (CAPI)', 'Envoi d’événements (CAPI)']), t(['لتجربته: ضع رمز «اختبار الأحداث» أعلاه واحفظ ثم اختبر', 'Pour l’essayer : code « Tester les événements » ci-dessus, enregistrez, testez']), 'capi')}
     </ul>
   );

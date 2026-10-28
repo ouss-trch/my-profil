@@ -66,6 +66,8 @@ export const SETTINGS = {
   meta_page_token: { scope: 'project', type: 'string', secret: true },
   meta_ig_user_id: { scope: 'project', type: 'string', def: '' },
   meta_pixel_id: { scope: 'project', type: 'string', def: '' },
+  // رمز «API التحويلات» من Events Manager (خاص بالبيكسل ولا ينتهي): يُرسل به الـ ERP أحداثه، فلا يتأثر بانتهاء رمز المستخدم. فارغاً: يُستعمل الرمز العام
+  meta_capi_token: { scope: 'project', type: 'string', secret: true },
   meta_graph_version: { scope: 'project', type: 'string', def: 'v25.0' },
   meta_capi_confirmed: { scope: 'project', type: 'bool', def: false },
   meta_capi_confirmed_event: { scope: 'project', type: 'string', def: 'OrderConfirmed' },

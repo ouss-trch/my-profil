@@ -28,6 +28,7 @@ import { Badge, Button, Card, Drawer, Empty, ErrorBox, Field, Input, Loading, Mo
 import CtaField from '../components/CtaField.jsx';
 import LaunchCampaign, { LaunchButton } from '../components/LaunchCampaign.jsx';
 import FxEditor from '../components/FxEditor.jsx';
+import Readiness from '../components/Readiness.jsx';
 import { VERDICT } from './ProductEditor.jsx';
 import { TEST_STAGES } from './Products.jsx';
 
@@ -976,9 +977,16 @@ function Health() {
   const { data, error, loading, reload } = useApi('/ads/health');
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
-  if (!data.configured) return <Card><Empty icon={ShieldCheck} title={t(['Meta غير مربوط', 'Meta non connecté'])} /></Card>;
+  if (!data.configured)
+    return (
+      <div className="space-y-4">
+        <Readiness />
+        <Card><Empty icon={ShieldCheck} title={t(['Meta غير مربوط', 'Meta non connecté'])} /></Card>
+      </div>
+    );
   return (
     <div className="space-y-4">
+      <Readiness />
       {!data.fx.set && (
         <ErrorBox error={{ code: t(['حدد سعر صرف الدولار واليورو الفعلي في الإعدادات حتى تُحسب تكلفة الإعلانات بالدينار بدقة', 'Définissez les taux USD/EUR réels pour convertir correctement la dépense']) }} />
       )}

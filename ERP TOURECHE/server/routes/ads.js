@@ -6,6 +6,7 @@ import { projectScope } from '../services/projects.js';
 import * as ads from '../services/ads.js';
 import { runJob } from '../services/sync.js';
 import { checkAdLink } from '../services/links.js';
+import { readiness } from '../services/readiness.js';
 
 export const adsRouter = Router();
 const pid = (req) => projectScope(req, { allowAll: false }).id;
@@ -15,6 +16,7 @@ adsRouter.get('/decisions', (req, res) => res.json(ads.decisions(pid(req), days(
 adsRouter.get('/tests', (req, res) => res.json(ads.productTests(pid(req), days(req))));
 adsRouter.get('/campaigns', async (req, res) => res.json(await ads.campaignsOverview(pid(req), days(req))));
 adsRouter.get('/health', async (req, res) => res.json(await ads.accountsHealth(pid(req))));
+adsRouter.get('/readiness', async (req, res) => res.json(await readiness(pid(req), { fresh: req.query.fresh === '1' })));
 adsRouter.get('/posts', async (req, res) => res.json(await ads.socialPosts(pid(req), String(req.query.link || '') || undefined)));
 adsRouter.get('/platform-history', (req, res) => res.json(ads.platformHistory(pid(req))));
 

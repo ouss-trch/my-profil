@@ -15,7 +15,7 @@ import { metaAlerts } from './metaHealth.js';
 /**
  * «الإعلانات والاختبارات»: من المنتج إلى الحملة إلى القرار — بأرقام الطلبيات الحقيقية (المؤكدة والمسلّمة) لا بأرقام البيكسل.
  */
-const fxSet = () => Boolean(db.prepare("SELECT 1 FROM settings WHERE scope = 'global' AND key IN ('fx_usd_dza','fx_eur_dza')").get());
+export const fxSet = () => Boolean(db.prepare("SELECT 1 FROM settings WHERE scope = 'global' AND key IN ('fx_usd_dza','fx_eur_dza')").get());
 
 // ——— مزامنة الحملات والإنفاق ———
 export async function syncCampaigns(projectId) {
