@@ -133,6 +133,9 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
     draft_id: draftId || undefined,
   });
 
+  // منشور الصفحة: إن حمل رابط المتجر يُستعمل كما هو، وإلا يُبنى منه إعلان رابط (صورته ونصه + زر + رابط المنتج)
+  const selPost = f?.source === 'fb_post' ? posts?.facebook?.find((x) => x.id === f.post_id) : null;
+  const rebuilt = Boolean(selPost && !selPost.store_link);
   const problems = [];
   if (f) {
     if (!f.account_id) problems.push(t(['اختر الحساب الإعلاني', 'Choisissez le compte publicitaire']));
@@ -361,6 +364,13 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
                   {posts && !(f.source === 'fb_post' ? posts.facebook : posts.instagram)?.length && <p className="col-span-full text-xs text-muted">{t(['لا منشورات (تحقق من رمز الصفحة في الإعدادات)', 'Aucune publication (vérifiez le jeton de page)'])}</p>}
                 </div>
               )}
+              {selPost && (
+                <p className={cx('mt-2 rounded-lg border p-2 text-xs text-ink', rebuilt ? 'border-warn/40 bg-warn/5' : 'border-good/30 bg-good/5')}>
+                  {rebuilt
+                    ? t(['هذا المنشور بلا رابط المنتج ولا زر شراء، ومن دونهما ترفض Meta حملة الطلبات. سيبني الـ ERP إعلاناً من صورة المنشور ونصه مع زر «تسوّق الآن» ورابط المنتج. تفاعلات المنشور القديمة لا تنتقل.', 'Cette publication n’a ni lien produit ni bouton d’achat, sans lesquels Meta refuse une campagne de commandes. L’ERP crée une annonce avec son image et son texte, un bouton « Acheter » et le lien produit. Ses réactions ne sont pas reprises.'])
+                    : t(['هذا المنشور يحمل رابط المتجر: يُستعمل كما هو بتفاعلاته.', 'Cette publication porte le lien de la boutique : utilisée telle quelle, avec ses réactions.'])}
+                </p>
+              )}
               {f.source !== 'fb_post' && (
                 <div className="mt-3 space-y-3">
                   {ctx.ad_copy?.variants?.length > 0 && f.source === 'image' && (
@@ -412,9 +422,9 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
             <div className="card overflow-hidden">
               <div className="border-b border-line px-3 py-2 text-xs font-semibold text-sub">{t(['معاينة تقريبية', 'Aperçu approximatif'])}</div>
               <div className="p-3 text-sm">
-                <p className="line-clamp-4 whitespace-pre-wrap text-[13px] leading-5">{f.source === 'image' ? f.primary_text || '…' : t(['المنشور كما هو بتفاعلاته', 'La publication telle quelle'])}</p>
+                <p className="line-clamp-4 whitespace-pre-wrap text-[13px] leading-5">{f.source === 'image' ? f.primary_text || '…' : rebuilt ? selPost.text || '…' : t(['المنشور كما هو بتفاعلاته', 'La publication telle quelle'])}</p>
               </div>
-              {f.source === 'image' && f.image_url && <img src={f.image_url} alt="" className="aspect-square w-full object-cover" />}
+              {(f.source === 'image' ? f.image_url : rebuilt && selPost.image) && <img src={f.source === 'image' ? f.image_url : selPost.image} alt="" className="aspect-square w-full object-cover" />}
               <div className="flex items-center justify-between gap-2 bg-raised px-3 py-2">
                 <div className="min-w-0">
                   <div className="truncate text-[11px] uppercase text-muted">{f.link ? hostOf(f.link) : '—'}</div>

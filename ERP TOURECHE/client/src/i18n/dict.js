@@ -203,6 +203,8 @@ export const DICT = {
   'err.ad_link_http_error': ['صفحة رابط الإعلان لا تفتح (خطأ من المتجر): جرّبها في هاتفك وصحّحها قبل الإطلاق', 'La page du lien ne s’ouvre pas (erreur boutique) : vérifiez-la avant de lancer'],
   'err.ad_link_redirect_loop': ['رابط الإعلان يدور في تحويلات لا تنتهي: ضع رابط الصفحة النهائية مباشرة', 'Le lien tourne en redirections sans fin : mettez directement la page finale'],
   'err.ad_link_redirect_unsafe': ['رابط الإعلان يحوّل إلى عنوان غير آمن (http أو داخلي): ضع رابط الصفحة النهائية https', 'Le lien redirige vers une adresse non sûre : mettez la page finale en https'],
+  'err.ad_post_video_no_link': ['هذا المنشور فيديو بلا رابط المنتج، ولا يصلح لحملة طلبات. ارفع الفيديو كإعلان جديد، أو انشر نسخة منه برابط المنتج وزر «تسوّق الآن»', 'Cette publication est une vidéo sans lien produit : elle ne convient pas à une campagne de commandes. Importez la vidéo comme nouvelle annonce, ou publiez-la avec le lien produit et le bouton « Acheter »'],
+  'err.ad_post_no_image': ['هذا المنشور بلا صورة، فلا يمكن بناء إعلان منه. اختر منشوراً بصورة أو ارفع صورة', 'Cette publication n’a pas d’image : impossible d’en faire une annonce. Choisissez-en une avec image ou importez une image'],
   'err.ad_link_sold_out': ['المنتج في رابط الإعلان نفد مخزونه: أضف مخزوناً أو اختر منتجاً آخر قبل الإطلاق', 'Le produit du lien est en rupture : réapprovisionnez ou changez de produit avant de lancer'],
   'err.image_required': ['اختر صورة أو منشوراً للإعلان', 'Choisissez une image ou une publication'],
   'err.budget_required': ['حدد الميزانية اليومية (1 على الأقل بعملة الحساب)', 'Indiquez le budget journalier (≥ 1 dans la devise du compte)'],

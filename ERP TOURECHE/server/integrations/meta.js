@@ -230,24 +230,31 @@ export async function createPausedCampaign(cfg, o) {
         : { publisher_platforms: ['facebook'], facebook_positions: ['feed', 'story', 'facebook_reels', 'video_feeds', 'marketplace'] }
       : {}),
   };
-  const adset = await graph(cfg, `${account}/adsets`, {
-    method: 'POST',
-    body: {
-      name: `${o.name} · AdSet`,
-      campaign_id: campaign.id,
-      billing_event: 'IMPRESSIONS',
-      optimization_goal: hasPixel ? 'OFFSITE_CONVERSIONS' : 'LANDING_PAGE_VIEWS',
-      ...(hasPixel ? { promoted_object: { pixel_id: o.pixelId, custom_event_type: o.conversionEvent || 'PURCHASE' } } : {}),
-      targeting,
-      status: 'PAUSED',
-    },
-  });
-  const creative = await createCreative(cfg, o.accountId, o);
-  const ad = await graph(cfg, `${account}/ads`, {
-    method: 'POST',
-    body: { name: `${o.name} · Ad`, adset_id: adset.id, creative: { creative_id: creative.id }, status: 'PAUSED' },
-  });
-  return { campaign_id: campaign.id, adset_id: adset.id, creative_id: creative.id, ad_id: ad.id };
+  let adset = null;
+  try {
+    adset = await graph(cfg, `${account}/adsets`, {
+      method: 'POST',
+      body: {
+        name: `${o.name} · AdSet`,
+        campaign_id: campaign.id,
+        billing_event: 'IMPRESSIONS',
+        optimization_goal: hasPixel ? 'OFFSITE_CONVERSIONS' : 'LANDING_PAGE_VIEWS',
+        ...(hasPixel ? { promoted_object: { pixel_id: o.pixelId, custom_event_type: o.conversionEvent || 'PURCHASE' } } : {}),
+        targeting,
+        status: 'PAUSED',
+      },
+    });
+    const creative = await createCreative(cfg, o.accountId, o);
+    const ad = await graph(cfg, `${account}/ads`, {
+      method: 'POST',
+      body: { name: `${o.name} · Ad`, adset_id: adset.id, creative: { creative_id: creative.id }, status: 'PAUSED' },
+    });
+    return { campaign_id: campaign.id, adset_id: adset.id, creative_id: creative.id, ad_id: ad.id };
+  } catch (e) {
+    // فشل في منتصف الطريق (مثلاً رفض Meta للتصميم): لا تبقى حملة ومجموعة ناقصتان في الحساب. لم يُنفق عليهما شيء، وكانتا متوقفتين
+    for (const id of [adset?.id, campaign.id].filter(Boolean)) await graph(cfg, id, { method: 'POST', body: { status: 'DELETED' } }).catch(() => {});
+    throw e;
+  }
 }
 
 // ——— Pixel ———
@@ -541,13 +548,43 @@ export async function activateCascade(cfg, campaignId) {
 }
 
 /** منشورات الصفحة وإنستغرام لاستعمالها كإعلانات (مع الإعجابات والتعليقات) */
+// منشور الصفحة: نصه وصورته ونوعه والروابط التي يحملها (فيسبوك يغلّف الرابط، فنقرأ unshimmed_url)
+const POST_FIELDS = 'id,message,full_picture,created_time,permalink_url,attachments{media_type,url,unshimmed_url,target{id,url}},likes.summary(true).limit(0),comments.summary(true).limit(0)';
+const hostOf = (u) => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return '';
+  }
+};
+const postShape = (p) => {
+  const att = p.attachments?.data || [];
+  const kind = att[0]?.media_type;
+  return {
+    id: p.id,
+    text: p.message || '',
+    image: p.full_picture || null,
+    at: p.created_time,
+    url: p.permalink_url,
+    likes: p.likes?.summary?.total_count || 0,
+    comments: p.comments?.summary?.total_count || 0,
+    kind: kind === 'video' ? 'video' : kind === 'link' ? 'link' : kind === 'photo' ? 'photo' : 'status',
+    links: att.flatMap((x) => [x.unshimmed_url, x.target?.url, x.url]).filter(Boolean),
+  };
+};
+/** هل يحمل المنشور رابط هذا الموقع؟ (منشور رابط إلى المتجر يصلح لحملة طلبات كما هو، والمنشور العادي لا يصلح) */
+export const postLinksTo = (post, link) => {
+  const host = hostOf(link);
+  return Boolean(host) && post.links.some((u) => hostOf(u) === host);
+};
 export async function pagePosts(cfg, limit = 24) {
   if (!cfg.meta_page_id || !cfg.meta_page_token) return [];
-  const d = await graph(cfg, `${cfg.meta_page_id}/posts`, {
-    token: cfg.meta_page_token,
-    params: { fields: 'id,message,full_picture,created_time,permalink_url,likes.summary(true).limit(0),comments.summary(true).limit(0)', limit },
-  });
-  return (d?.data || []).map((p) => ({ id: p.id, text: p.message || '', image: p.full_picture, at: p.created_time, url: p.permalink_url, likes: p.likes?.summary?.total_count || 0, comments: p.comments?.summary?.total_count || 0 }));
+  const d = await graph(cfg, `${cfg.meta_page_id}/posts`, { token: cfg.meta_page_token, params: { fields: POST_FIELDS, limit } });
+  return (d?.data || []).map(postShape);
+}
+export async function pagePost(cfg, postId) {
+  const id = String(postId).includes('_') ? String(postId) : `${cfg.meta_page_id}_${postId}`;
+  return postShape(await graph(cfg, id, { token: cfg.meta_page_token, params: { fields: POST_FIELDS } }));
 }
 
 export async function igMedia(cfg, limit = 24) {

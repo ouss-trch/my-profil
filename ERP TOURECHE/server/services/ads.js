@@ -421,6 +421,18 @@ export async function launchTest(projectId, productId, o) {
   const check = await checkAdLink(projectId, link, { pixelId: o.pixelId === 'none' ? null : o.pixelId }).catch(() => null);
   const blocker = check?.problems.find((x) => LINK_BLOCKERS.has(x.code));
   if (blocker) throw badRequest(`ad_link_${blocker.code}`);
+  // منشور صفحة عادي (صورة ونص بلا رابط المنتج) لا يصلح لحملة طلبات على الموقع: Meta ترفضه («الهدف يتطلب رابط موقع خارجي»).
+  // فيُبنى إعلان رابط من صورته ونصه مع الزر والرابط. وإن كان المنشور نفسه رابطاً إلى المتجر فيُستعمل كما هو بتفاعلاته.
+  let rebuilt = false;
+  if (o.postId) {
+    const post = await meta.pagePost(cfg, o.postId);
+    if (!meta.postLinksTo(post, link)) {
+      if (post.kind === 'video') throw badRequest('ad_post_video_no_link');
+      if (!post.image) throw badRequest('ad_post_no_image');
+      o = { ...o, postId: undefined, imageUrl: post.image, primaryText: o.primaryText || post.text, headline: o.headline || p.title.slice(0, 80) };
+      rebuilt = true;
+    }
+  }
   if (!o.imageUrl && !o.postId && !o.igMediaId) throw badRequest('image_required');
   // الميزانية اليومية بعملة الحساب (مثلاً 5 يورو) أو بالدينار وتُحوَّل
   const fx = acct.currency === 'DZD' ? 1 : acct.currency === 'EUR' ? getSetting('fx_eur_dza') || 270 : getSetting('fx_usd_dza') || 250;
@@ -481,7 +493,7 @@ export async function launchTest(projectId, productId, o) {
   await syncCampaigns(projectId).catch(() => {});
   if (o.activate) await meta.activateCascade(cfg, ids.campaign_id);
   cache.clear();
-  return { ...ids, name, currency: acct.currency, daily_budget: round(daily, 2), activated: Boolean(o.activate), ads_manager_url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${accountId}&selected_campaign_ids=${ids.campaign_id}` };
+  return { ...ids, name, currency: acct.currency, daily_budget: round(daily, 2), activated: Boolean(o.activate), rebuilt_from_post: rebuilt, ads_manager_url: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${accountId}&selected_campaign_ids=${ids.campaign_id}` };
 }
 
 /** إعدادات الإطلاق الدائمة لكل مشروع: آخر حساب/صفحة/بيكسل/استهداف/ميزانية اختارها المستخدم */
@@ -771,5 +783,7 @@ export async function editCampaign(projectId, campaignId, { section, data }) {
 export async function socialPosts(projectId) {
   const cfg = projectConfig(projectId);
   const [facebook, instagram] = await Promise.all([meta.pagePosts(cfg).catch(() => []), meta.igMedia(cfg).catch(() => [])]);
-  return { facebook, instagram };
+  // المنشور الذي يحمل رابط المتجر يُستعمل كما هو؛ غيره يُبنى منه إعلان رابط (انظر launchTest)
+  const store = cfg.store_domain ? `https://${cfg.store_domain}` : '';
+  return { facebook: facebook.map(({ links, ...x }) => ({ ...x, store_link: meta.postLinksTo({ links }, store) })), instagram };
 }
