@@ -198,6 +198,8 @@ export function parseOrder(node) {
     utm_campaign: attr(node, 'utm_campaign') || utm.campaign || fromLanding('utm_campaign') || null,
     utm_content: attr(node, 'utm_content') || utm.content || fromLanding('utm_content') || null,
     landing_url: landing ? String(landing).slice(0, 1000) : null,
+    // event_id المشترك بين البيكسل و n8n: تُربط به أحداث «أُكّدت / سُلّمت» المرسلة إلى Meta
+    meta_event_id: attr(node, 'event_id') || null,
     tags,
     created_at: node.createdAt,
     cancelled: Boolean(node.cancelledAt),

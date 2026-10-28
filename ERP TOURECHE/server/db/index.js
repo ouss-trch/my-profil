@@ -641,6 +641,11 @@ ${STORE_PAGES_SQL}
     )`);
     db.exec('CREATE INDEX IF NOT EXISTS idx_api_usage_day ON api_usage(day, project_id)');
   },
+  // معرّف حدث الطلبية عند Meta (event_id المشترك بين بيكسل المتجر و n8n): تُربط به أحداث ما بعد الطلبية (أُكّدت، سُلّمت)
+  // بالطلبية الأصلية فتنسبها Meta إلى الإعلان نفسه
+  (db) => {
+    if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'meta_event_id')) db.exec('ALTER TABLE orders ADD COLUMN meta_event_id TEXT');
+  },
 ];
 
 export function openDb(file = config.dbFile) {

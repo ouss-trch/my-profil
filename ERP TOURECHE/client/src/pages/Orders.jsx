@@ -1044,11 +1044,21 @@ export function OrderDrawer({ id, onClose, onChanged }) {
                   <li key={e.id} className="text-sm">
                     <span className="absolute -start-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-surface bg-brand" />
                     <div className="flex flex-wrap items-center gap-2">
-                      {e.to_status && e.type !== 'note' ? <StatusBadge status={e.to_status} /> : <Badge>{e.type}</Badge>}
+                      {e.type === 'meta' ? (
+                        <Badge tone={e.note === 'ok' ? 'good' : e.note === 'test' ? 'info' : 'bad'}>Meta · {e.raw}</Badge>
+                      ) : e.to_status && e.type !== 'note' ? (
+                        <StatusBadge status={e.to_status} />
+                      ) : (
+                        <Badge>{e.type}</Badge>
+                      )}
                       <span className="text-xs text-muted">{dateTime(e.at, lang)}</span>
                       <span className="text-xs text-muted">· {e.user_name || e.source}</span>
                     </div>
-                    {(e.note || e.raw || e.location) && <div className="mt-1 text-xs text-sub">{[e.raw, e.location, e.note].filter(Boolean).join(' · ')}</div>}
+                    {e.type === 'meta' ? (
+                      <div className="mt-1 text-xs text-sub">{e.note === 'ok' ? t(['وصل إلى Meta (Conversions API)، مربوطاً بطلبية المتجر', 'Reçu par Meta (Conversions API), lié à la commande d’origine']) : e.note === 'test' ? t(['أُرسل في وضع التجربة («اختبار الأحداث»): لا يُستعمل في الإعلانات', 'Envoyé en mode test : non utilisé par les annonces']) : e.note}</div>
+                    ) : (
+                      (e.note || e.raw || e.location) && <div className="mt-1 text-xs text-sub">{[e.raw, e.location, e.note].filter(Boolean).join(' · ')}</div>
+                    )}
                   </li>
                 ))}
             </ol>

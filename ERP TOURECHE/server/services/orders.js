@@ -9,7 +9,7 @@ import { customerProfile, listCustomerProfiles } from './customers.js';
 import { onReturned, onUnreturned, returnView } from './returns.js';
 import * as n8n from '../integrations/n8n.js';
 import * as shopify from '../integrations/shopify.js';
-import * as meta from '../integrations/meta.js';
+import * as capi from './capi.js';
 
 export function hydrate(row) {
   if (!row) return null;
@@ -210,9 +210,9 @@ export function createOrder(projectId, input, { source = 'manual', userId = null
   const info = db
     .prepare(
       `INSERT INTO orders (project_id, ref, source, external_id, shopify_name, status, customer_name, phone, phone2, wilaya_code, commune, commune_fr, address,
-        delivery_type, items, subtotal, discount, shipping_fee, total, cogs, notes, tags, utm_source, utm_campaign, utm_content, landing_url, sheet_row, created_at, updated_at, cancelled_at, closed_at)
+        delivery_type, items, subtotal, discount, shipping_fee, total, cogs, notes, tags, utm_source, utm_campaign, utm_content, landing_url, meta_event_id, sheet_row, created_at, updated_at, cancelled_at, closed_at)
        VALUES (@project_id, @ref, @source, @external_id, @shopify_name, @status, @customer_name, @phone, @phone2, @wilaya_code, @commune, @commune_fr, @address,
-        @delivery_type, @items, @subtotal, @discount, @shipping_fee, @total, @cogs, @notes, @tags, @utm_source, @utm_campaign, @utm_content, @landing_url, @sheet_row, @created_at, @updated_at, @cancelled_at, @closed_at)`,
+        @delivery_type, @items, @subtotal, @discount, @shipping_fee, @total, @cogs, @notes, @tags, @utm_source, @utm_campaign, @utm_content, @landing_url, @meta_event_id, @sheet_row, @created_at, @updated_at, @cancelled_at, @closed_at)`,
     )
     .run({
       project_id: projectId,
@@ -241,6 +241,7 @@ export function createOrder(projectId, input, { source = 'manual', userId = null
       utm_campaign: input.utm_campaign || null,
       utm_content: input.utm_content ? String(input.utm_content).slice(0, 120) : null,
       landing_url: input.landing_url ? String(input.landing_url).slice(0, 1000) : null,
+      meta_event_id: metaEventId(input.meta_event_id),
       sheet_row: input.sheet_row || null,
       created_at: input.created_at || now,
       updated_at: now,
@@ -250,6 +251,9 @@ export function createOrder(projectId, input, { source = 'manual', userId = null
   addEvent(info.lastInsertRowid, { type: 'created', to_status: status, source, user_id: userId, note: input.offer ? `offer: ${input.offer}` : null, at: input.created_at || now });
   return { id: Number(info.lastInsertRowid), created: true };
 }
+
+/** event_id الطلبية عند Meta (من المتجر: حروف وأرقام فقط) */
+const metaEventId = (v) => (/^[\w.-]{4,64}$/.test(String(v || '').trim()) ? String(v).trim() : null);
 
 /** طلبية قادمة من Shopify (بما فيها طلبيات سير COD في n8n) — دمج حسب المعرّف أو المرجع */
 export function upsertFromShopify(projectId, parsed) {
@@ -267,6 +271,7 @@ export function upsertFromShopify(projectId, parsed) {
   const updates = { external_id: parsed.external_id, shopify_name: parsed.shopify_name };
   // مصدر الزيارة يُستكمل إن كان ناقصاً (طلبيات الجدول لا تحمله دائماً)
   for (const k of ['utm_source', 'utm_campaign', 'utm_content', 'landing_url']) if (!row[k] && parsed[k]) updates[k] = parsed[k];
+  if (!row.meta_event_id && metaEventId(parsed.meta_event_id)) updates.meta_event_id = metaEventId(parsed.meta_event_id);
   // الطلبيات الآتية من الجدول (مثلاً «abandoned» ثم اكتملت) تُستكمل ببيانات Shopify
   if (row.status === 'abandoned' || row.source === 'sheet') {
     Object.assign(updates, {
@@ -354,7 +359,6 @@ export const SHEET_STATUS = {
 
 function afterStatusChange(o, from, to, opts) {
   const cfg = projectConfig(o.project_id);
-  const items = parseJson(o.items, []);
   n8n.emit('order.status_changed', { ref: o.ref, number: orderNumber(o), customer_name: o.customer_name, phone: o.phone, total: o.total, from, to }, o.project_id);
   if (to === 'attempt_failed')
     n8n.emit(
@@ -377,21 +381,8 @@ function afterStatusChange(o, from, to, opts) {
     });
   }
 
-  // حدث «سُلّمت» إلى Conversions API: تحسين الإعلانات بالطلبيات المسلّمة فعلاً لا بالنقرات
-  if (to === 'delivered' && cfg.meta_capi_delivered && cfg.meta_pixel_id && cfg.meta_access_token) {
-    enqueue(`capi:${o.project_id}`, `capi ${o.ref}`, () =>
-      meta.sendCapiEvent(cfg, {
-        eventName: cfg.meta_capi_event || 'OrderDelivered',
-        eventId: `delivered-${o.ref}`,
-        value: o.total,
-        phone: o.phone,
-        firstName: String(o.customer_name || '').split(' ')[0],
-        wilaya: wilayaByCode(o.wilaya_code)?.fr,
-        contentIds: items.map((i) => (i.shopify_product_id || '').replace(/\D/g, '')).filter(Boolean),
-        orderId: o.ref,
-      }),
-    );
-  }
+  // ما بعد الطلبية إلى Meta: «أُكّدت» و«سُلّمت» (Conversions API، مربوطة بطلبية المتجر الأصلية)
+  if (to === 'confirmed' || to === 'delivered') capi.queueOrderEvent(o, to);
 }
 
 async function writeSheetStatus(cfg, rowNumber, value) {

@@ -10,6 +10,7 @@ import { WILAYAS } from '../lib/wilayas.js';
 import { STATUSES, MANUAL } from '../lib/statuses.js';
 import * as shopify from '../integrations/shopify.js';
 import * as meta from '../integrations/meta.js';
+import * as capi from '../services/capi.js';
 import * as n8n from '../integrations/n8n.js';
 import * as ai from '../integrations/ai.js';
 import { CARRIERS } from '../integrations/carriers/index.js';
@@ -119,9 +120,9 @@ coreRouter.post('/settings/test/:service', requireRole('admin', 'manager'), asyn
   try {
     if (s === 'shopify') result = await shopify.shopInfo(cfg);
     else if (s === 'meta') {
-      const accounts = [];
-      for (const id of cfg.meta_ad_account_ids || []) accounts.push(await meta.accountInfo(cfg, id));
-      result = { accounts, pixel: await meta.pixelInfo(cfg).catch((e) => ({ error: e.message })) };
+      // رمز «اختبار الأحداث» محفوظ: يُرسل حدث تجريبي يظهر في Events Manager فقط ويؤكد أن الرمز يرسل إلى البيكسل
+      const code = String(cfg.meta_test_event_code || '').trim();
+      result = await meta.connectionCheck(cfg, { capiTest: code && cfg.meta_pixel_id ? () => capi.sendTestEvent(projectId, code) : null });
     } else if (CARRIERS[s]) result = { ok: await CARRIERS[s].test(cfg) };
     else if (['events', 'products', 'report'].includes(s)) result = await n8n.send(s, 'test', { from: 'ERP TOURECHE' }, projectId || null);
     else if (s === 'sheets') {
@@ -213,6 +214,7 @@ hooksRouter.post('/:slug/orders', (req, res) => {
       utm_campaign: v.str(b.utm_campaign, { max: 120 }),
       utm_content: v.str(b.utm_content, { max: 120 }),
       landing_url: v.str(b.landing_url || b.landing_page, { max: 1000 }),
+      meta_event_id: v.str(b.event_id, { max: 64 }),
       status: b.status === 'abandoned' ? 'abandoned' : 'new',
       notes: v.str(b.notes, { max: 1000 }),
     },

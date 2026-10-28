@@ -135,6 +135,7 @@ export async function syncSheet(projectId) {
           utm_campaign: get(row, 'utm_campaign') || null,
           utm_content: get(row, 'utm_content') || null,
           landing_url: get(row, 'landing_page') || get(row, 'landing_url') || null,
+          meta_event_id: get(row, 'event_id') || null,
           tags: sheetStatus === 'NOT CREATED' ? ['not-created-in-shopify'] : [],
           status: target === 'abandoned' ? 'abandoned' : 'new',
           sheet_row: sheetRow,

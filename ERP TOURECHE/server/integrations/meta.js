@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { request, IntegrationError } from '../lib/http.js';
 import { num } from '../lib/util.js';
 
@@ -265,26 +264,78 @@ export async function pixelInfo(cfg) {
   return { ...info, events_24h: events };
 }
 
-const sha = (s) => crypto.createHash('sha256').update(String(s).trim().toLowerCase()).digest('hex');
+/** صلاحيات الرمز التي يحتاجها الـ ERP: الأساسية لكل شيء، والإضافية لميزة بعينها */
+export const TOKEN_SCOPES = {
+  required: ['ads_read', 'ads_management', 'business_management', 'pages_show_list', 'pages_read_engagement'],
+  optional: ['pages_manage_posts', 'instagram_basic', 'instagram_content_publish', 'catalog_management'],
+};
 
-/** حدث Conversions API (مثلاً «طلبية سُلّمت») لتحسين خوارزمية الإعلانات بالطلبيات الحقيقية */
-export async function sendCapiEvent(cfg, { eventName, eventId, value, currency = 'DZD', phone, firstName, wilaya, contentIds = [], orderId }) {
+/**
+ * فحص الربط بعد إنشاء التطبيق والرمز: الرمز (صالح، لا ينتهي، صلاحياته)، الحسابات الإعلانية، البيكسل، الصفحة،
+ * وتجربة Conversions API إن وُضع رمز «اختبار الأحداث». كل سطر يقول ما ينقص بالضبط.
+ */
+export async function connectionCheck(cfg, { capiTest } = {}) {
+  const out = { app: null, token: null, scopes: null, accounts: [], pixel: null, page: null, capi: null };
+  let info = null;
+  try {
+    info = (await graph(cfg, 'debug_token', { params: { input_token: cfg.meta_access_token } }))?.data || null;
+  } catch {
+    /* بعض الرموز لا ترى نفسها: نكتفي بالصلاحيات */
+  }
+  let granted = info?.scopes || null;
+  if (!granted) {
+    try {
+      granted = ((await graph(cfg, 'me/permissions'))?.data || []).filter((p) => p.status === 'granted').map((p) => p.permission);
+    } catch (e) {
+      out.token = { valid: false, error: e.message };
+      return out;
+    }
+  }
+  out.app = info?.app_id ? { id: info.app_id, name: info.application || null } : null;
+  out.token = { valid: info ? Boolean(info.is_valid) : true, expires_at: info?.expires_at ?? null, never_expires: info ? info.expires_at === 0 : null };
+  out.scopes = { granted, missing: TOKEN_SCOPES.required.filter((s) => !granted.includes(s)), optional_missing: TOKEN_SCOPES.optional.filter((s) => !granted.includes(s)) };
+  for (const id of cfg.meta_ad_account_ids || []) {
+    try {
+      const a = await graph(cfg, actId(id), { params: { fields: 'id,name,account_status,currency' } });
+      out.accounts.push({ id: String(id).replace(/^act_/, ''), name: a.name, status: a.account_status, ok: a.account_status === 1 });
+    } catch (e) {
+      out.accounts.push({ id: String(id).replace(/^act_/, ''), ok: false, error: e.message });
+    }
+  }
+  if (cfg.meta_pixel_id) {
+    try {
+      const p = await pixelInfo(cfg);
+      out.pixel = { id: p.id, name: p.name, last_fired_time: p.last_fired_time || null, events_24h: p.events_24h || [], ok: true };
+    } catch (e) {
+      out.pixel = { id: cfg.meta_pixel_id, ok: false, error: e.message };
+    }
+  }
+  if (cfg.meta_page_id) {
+    try {
+      const pg = await graph(cfg, cfg.meta_page_id, { params: { fields: 'id,name' } });
+      out.page = { id: pg.id, name: pg.name, ok: true, token: Boolean(cfg.meta_page_token) };
+    } catch (e) {
+      out.page = { id: cfg.meta_page_id, ok: false, error: e.message };
+    }
+  }
+  if (capiTest) {
+    try {
+      const r = await capiTest();
+      out.capi = { ok: r?.events_received === 1, events_received: r?.events_received ?? 0, fbtrace_id: r?.fbtrace_id || null };
+    } catch (e) {
+      out.capi = { ok: false, error: e.message };
+    }
+  }
+  return out;
+}
+
+/**
+ * إرسال أحداث إلى Conversions API (بيكسل المشروع). testCode: رمز «اختبار الأحداث» من Events Manager —
+ * الحدث يظهر هناك فقط ولا يُستعمل في الإعلانات. يُرجع { events_received, messages, fbtrace_id }.
+ */
+export function sendEvents(cfg, events, { testCode } = {}) {
   if (!cfg.meta_pixel_id) throw new IntegrationError('meta', 'config', 'pixel_missing');
-  const intl = phone ? '213' + String(phone).replace(/\D/g, '').replace(/^0/, '') : null;
-  const event = {
-    event_name: eventName,
-    event_time: Math.floor(Date.now() / 1000),
-    event_id: eventId,
-    action_source: 'system_generated',
-    user_data: {
-      ...(intl ? { ph: [sha(intl)], external_id: [sha(intl)] } : {}),
-      ...(firstName ? { fn: [sha(firstName)] } : {}),
-      ...(wilaya ? { st: [sha(wilaya)] } : {}),
-      country: [sha('dz')],
-    },
-    custom_data: { currency, value, content_ids: contentIds, content_type: 'product', order_id: orderId },
-  };
-  return graph(cfg, `${cfg.meta_pixel_id}/events`, { method: 'POST', body: { data: [event] } });
+  return graph(cfg, `${cfg.meta_pixel_id}/events`, { method: 'POST', body: { data: events, ...(testCode ? { test_event_code: testCode } : {}) } });
 }
 
 // ——— النشر على الصفحة وإنستغرام ———

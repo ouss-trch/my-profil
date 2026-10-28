@@ -61,9 +61,20 @@ const PROJECT_GROUPS = [
       { k: 'meta_page_id', label: ['معرّف الصفحة', 'ID de la page'], ltr: true },
       { k: 'meta_page_token', label: ['رمز الصفحة (للنشر ومنشوراتها)', 'Jeton de page (publication)'] },
       { k: 'meta_ig_user_id', label: ['معرّف حساب إنستغرام', 'ID Instagram'], ltr: true },
-      { k: 'meta_pixel_id', label: ['معرّف البيكسل', 'ID du pixel'], ltr: true, hint: ['نفس بيكسل المتجر: n8n يرسل له «Purchase» عند كل طلبية، والـ ERP يرسل «طلبية سُلّمت» إن فعّلتها أدناه', 'Le même pixel que la boutique : n8n envoie « Purchase », l’ERP envoie « livrée » si activé'] },
-      { k: 'meta_capi_delivered', label: ['إرسال حدث «طلبية سُلّمت» إلى Meta (CAPI)', 'Envoyer « commande livrée » à Meta (CAPI)'], type: 'bool', hint: ['يعلّم الخوارزمية من يستلم فعلاً لا من يطلب فقط', 'Apprend à l’algorithme qui reçoit vraiment'] },
-      { k: 'meta_capi_event', label: ['اسم الحدث', "Nom de l'événement"], ltr: true },
+      { k: 'meta_pixel_id', label: ['معرّف البيكسل', 'ID du pixel'], ltr: true, hint: ['نفس بيكسل المتجر: المتجر وn8n يرسلان «Purchase» عند كل طلبية، والـ ERP يرسل «أُكّدت» و«سُلّمت» إن فعّلتهما أدناه', 'Le même pixel que la boutique : boutique et n8n envoient « Purchase », l’ERP envoie « confirmée » et « livrée » si activés'] },
+      { k: 'meta_capi_confirmed', label: ['إرسال «طلبية أُكّدت» إلى Meta (CAPI)', 'Envoyer « commande confirmée » à Meta (CAPI)'], type: 'bool', hint: ['عند التأكيد بالهاتف، مربوطة بطلبية المتجر نفسها: Meta تعرف أي إعلان يجلب طلبيات حقيقية، في نفس اليوم', 'À la confirmation téléphonique, liée à la commande d’origine : Meta voit quelle annonce amène de vraies commandes, le jour même'] },
+      { k: 'meta_capi_confirmed_event', label: ['اسم حدث التأكيد', "Nom de l'événement de confirmation"], ltr: true },
+      { k: 'meta_capi_delivered', label: ['إرسال «طلبية سُلّمت» إلى Meta (CAPI)', 'Envoyer « commande livrée » à Meta (CAPI)'], type: 'bool', hint: ['يعلّم الخوارزمية من يستلم فعلاً لا من يطلب فقط', 'Apprend à l’algorithme qui reçoit vraiment'] },
+      { k: 'meta_capi_event', label: ['اسم حدث التسليم', "Nom de l'événement de livraison"], ltr: true },
+      {
+        k: 'meta_test_event_code',
+        label: ['رمز «اختبار الأحداث» (للتجربة فقط)', 'Code « Tester les événements » (essai seulement)'],
+        ltr: true,
+        hint: (vals, t) =>
+          vals.meta_test_event_code
+            ? t(['⚠ وضع التجربة مفعّل: أحداث الـ ERP تذهب إلى «اختبار الأحداث» فقط ولا تُستعمل في الإعلانات. امسح الرمز بعد التجربة.', '⚠ Mode test actif : les événements de l’ERP vont seulement dans « Tester les événements ». Videz le code après l’essai.'])
+            : t(['من Events Manager ← البيكسل ← «اختبار الأحداث». ضعه واحفظ ثم اضغط «اختبار»: يُرسل حدث تجريبي يتأكد أن الرمز يصل إلى البيكسل. امسحه بعدها.', 'Events Manager → pixel → « Tester les événements ». Enregistrez puis « Tester » : un événement d’essai vérifie l’envoi au pixel. Videz-le ensuite.']),
+      },
       { k: 'meta_graph_version', label: ['إصدار Graph API', 'Version Graph API'], ltr: true },
     ],
   },
@@ -233,6 +244,52 @@ function SettingInput({ def, value, onChange, id, placeholder }) {
 }
 
 // ——— إعداد Meta بنقرة: اختيار الحسابات والبيكسل والصفحة بالأسماء بدل نسخ المعرّفات ———
+const SCOPE_USE = {
+  ads_read: ['قراءة الإنفاق والنتائج', 'lire dépenses et résultats'],
+  ads_management: ['إنشاء الحملات وتعديلها', 'créer et modifier les campagnes'],
+  business_management: ['«اكتشاف من Meta» (الحسابات والبيكسل والصفحات)', '« Détecter depuis Meta »'],
+  pages_show_list: ['اختيار الصفحة', 'choisir la page'],
+  pages_read_engagement: ['منشورات الصفحة للإعلان', 'publications de la page'],
+  pages_manage_posts: ['النشر على الصفحة', 'publier sur la page'],
+  instagram_basic: ['حساب إنستغرام', 'compte Instagram'],
+  instagram_content_publish: ['النشر على إنستغرام', 'publier sur Instagram'],
+  catalog_management: ['كتالوج المنتجات', 'catalogue produits'],
+};
+
+/** نتيجة «اختبار» Meta مقروءة: كل سطر صحيح أو ناقص مع ما يجب فعله */
+function MetaCheck({ result: r }) {
+  const { t, lang } = useI18n();
+  const row = (ok, label, detail, key) => (
+    <li key={key || label} className="flex items-start gap-1.5">
+      {ok === null ? <span className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border border-line" /> : ok ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-good" /> : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-bad" />}
+      <span className="min-w-0">
+        <span className="text-ink">{label}</span>
+        {detail && <span className="text-muted"> · {detail}</span>}
+      </span>
+    </li>
+  );
+  const scopeList = (list) => list.map((x) => `${x} (${t(SCOPE_USE[x] || [x, x])})`).join(lang === 'ar' ? '، ' : ', ');
+  if (r?.token?.valid === false && !r.scopes) return <p className="mt-3 rounded-lg bg-bad/5 p-2 text-xs text-bad">{t(['الرمز مرفوض من Meta: أنشئ رمزاً جديداً لمستخدم النظام وضعه هنا.', 'Jeton refusé par Meta : générez un nouveau jeton System User.'])}</p>;
+  return (
+    <ul className="mt-3 space-y-1.5 rounded-lg border border-line p-3 text-xs">
+      {r.app && row(true, t(['التطبيق', 'Application']), `${r.app.name || ''} (${r.app.id})`, 'app')}
+      {row(r.token?.valid ?? null, t(['الرمز صالح', 'Jeton valide']), null, 'valid')}
+      {row(r.token?.never_expires ?? null, t(['الرمز لا ينتهي', 'Jeton permanent']), r.token?.never_expires === false ? t(['ينتهي: أنشئه من «مستخدمو النظام» بمدة «أبداً»', 'Expire : générez-le depuis « Utilisateurs système », durée « Jamais »']) : null, 'expiry')}
+      {r.scopes && row(!r.scopes.missing.length, t(['الصلاحيات الأساسية', 'Autorisations de base']), r.scopes.missing.length ? t(['ناقصة: {x}', 'Manquantes : {x}'], { x: scopeList(r.scopes.missing) }) : null, 'scopes')}
+      {r.scopes?.optional_missing?.length > 0 && row(null, t(['صلاحيات إضافية غير مفعّلة (عند الحاجة)', 'Autorisations facultatives absentes']), scopeList(r.scopes.optional_missing), 'optional')}
+      {(r.accounts || []).map((a) => row(a.ok, t(['الحساب الإعلاني', 'Compte pub']), a.error ? t(['لا وصول: أسنده لمستخدم النظام في Business Manager', 'Pas d’accès : assignez-le à l’utilisateur système']) : `${a.name || a.id}${a.ok ? '' : ` · ${t(['غير نشط', 'inactif'])}`}`, `acc-${a.id}`))}
+      {!(r.accounts || []).length && row(false, t(['الحساب الإعلاني', 'Compte pub']), t(['لا حساب في المشروع: اضغط «اكتشاف من Meta»', 'Aucun compte : « Détecter depuis Meta »']), 'acc-none')}
+      {r.pixel
+        ? row(r.pixel.ok, t(['البيكسل', 'Pixel']), r.pixel.ok ? [r.pixel.name, r.pixel.last_fired_time && t(['آخر حدث {x}', 'dernier événement {x}'], { x: ago(r.pixel.last_fired_time, lang) }), r.pixel.events_24h?.length ? r.pixel.events_24h.map((e) => `${e.name} ${e.count}`).join(' · ') : null].filter(Boolean).join(' · ') : t(['لا وصول: أسند البيكسل (Dataset) لمستخدم النظام', 'Pas d’accès : assignez le pixel (dataset) à l’utilisateur système']), 'pixel')
+        : row(false, t(['البيكسل', 'Pixel']), t(['غير محدد', 'non défini']), 'pixel')}
+      {r.page ? row(r.page.ok, t(['الصفحة', 'Page']), r.page.ok ? r.page.name : t(['لا وصول: أسند الصفحة لمستخدم النظام', 'Pas d’accès : assignez la page']), 'page') : row(null, t(['الصفحة', 'Page']), t(['غير محددة', 'non définie']), 'page')}
+      {r.capi
+        ? row(r.capi.ok, t(['إرسال الأحداث (CAPI)', 'Envoi d’événements (CAPI)']), r.capi.ok ? t(['وصل الحدث التجريبي: افتح «اختبار الأحداث» في Events Manager لتراه، ثم امسح الرمز', 'Événement d’essai reçu : visible dans « Tester les événements », videz ensuite le code']) : r.capi.error, 'capi')
+        : row(null, t(['إرسال الأحداث (CAPI)', 'Envoi d’événements (CAPI)']), t(['لتجربته: ضع رمز «اختبار الأحداث» أعلاه واحفظ ثم اختبر', 'Pour l’essayer : code « Tester les événements » ci-dessus, enregistrez, testez']), 'capi')}
+    </ul>
+  );
+}
+
 function MetaSetup({ projectId, tokenSet, current, onApplied }) {
   const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
@@ -490,7 +547,9 @@ function SettingsForm({ groups, load, save, projectId }) {
           {Object.entries(tests)
             .filter(([s, r]) => (g.tests || [g.test]).includes(s) && r && !r.loading)
             .map(([s, r]) =>
-              r.ok ? (
+              s === 'meta' && r.ok ? (
+                <MetaCheck key={s} result={r.result} />
+              ) : r.ok ? (
                 <pre key={s} className="ltr mt-3 max-h-40 overflow-auto rounded-lg bg-good/5 p-2 text-[11px] text-good">
                   {s}: {JSON.stringify(r.result, null, 1).slice(0, 800)}
                 </pre>

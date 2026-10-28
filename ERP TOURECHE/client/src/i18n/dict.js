@@ -198,6 +198,7 @@ export const DICT = {
   'err.page_not_configured': ['اختر صفحة فيسبوك', 'Choisissez une page Facebook'],
   'err.product_link_missing': ['المنتج غير منشور على المتجر: انشره أولاً أو ضع رابطاً', 'Produit non publié : publiez-le ou saisissez un lien'],
   'err.link_invalid': ['رابط غير صالح: ضع رابطاً كاملاً يبدأ بـ https://', 'Lien invalide : saisissez un lien complet en https://'],
+  'err.capi_test_code_required': ['ضع رمز «اختبار الأحداث» من Events Manager أولاً', 'Saisissez d’abord le code « Tester les événements » d’Events Manager'],
   'err.ad_link_not_found': ['رابط الإعلان يفتح صفحة «غير موجودة» (404): صحّحه قبل الإطلاق، وإلا دفعت ثمن نقرات لا تصل', 'Le lien de l’annonce mène à une page introuvable (404) : corrigez-le avant de lancer'],
   'err.ad_link_http_error': ['صفحة رابط الإعلان لا تفتح (خطأ من المتجر): جرّبها في هاتفك وصحّحها قبل الإطلاق', 'La page du lien ne s’ouvre pas (erreur boutique) : vérifiez-la avant de lancer'],
   'err.ad_link_redirect_loop': ['رابط الإعلان يدور في تحويلات لا تنتهي: ضع رابط الصفحة النهائية مباشرة', 'Le lien tourne en redirections sans fin : mettez directement la page finale'],
