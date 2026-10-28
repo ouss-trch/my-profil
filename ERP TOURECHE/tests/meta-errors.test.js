@@ -9,9 +9,11 @@ const refuse = (error) => {
 const cfg = { meta_access_token: 'EAAtest' };
 
 test('meta errors: a dead token and an unpublished app get a message that says what to do, other errors keep Meta’s words', async () => {
-  // حُذف مستخدم النظام الذي أنشأ الرمز
-  refuse({ message: 'Error validating access token: The session has been invalidated.', type: 'OAuthException', code: 190, error_subcode: 460 });
+  // حُذف التطبيق الذي أُنشئ به الرمز، أو مستخدم النظام
+  refuse({ message: 'Error validating application. Application has been deleted.', type: 'OAuthException', code: 190 });
   await assert.rejects(graph(cfg, 'me'), (e) => e.kind === 'auth' && e.message === 'meta: meta_token_invalid' && e.details.code === 190);
+  refuse({ message: 'Error validating access token: The session has been invalidated.', type: 'OAuthException', code: 190, error_subcode: 460 });
+  await assert.rejects(graph(cfg, 'me'), (e) => e.message === 'meta: meta_token_invalid');
 
   // تطبيق جديد لم يُنشر: يمرّ إنشاء الحملة ثم ترفض Meta تصميم الإعلان
   refuse({

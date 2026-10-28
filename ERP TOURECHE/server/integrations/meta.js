@@ -37,7 +37,7 @@ export async function graph(cfg, path, { method = 'GET', params = {}, body, toke
     if (err) {
       const kind = err.code === 190 || err.code === 102 ? 'auth' : err.code === 17 || err.code === 4 || err.code === 80004 ? 'rate_limit' : e.kind;
       // خطآن يقعان عند تغيير التطبيق أو مستخدم النظام، ورسالة Meta لهما بالإنجليزية لا تقول ما العمل: رمز يُترجم في الواجهة
-      //  - 190: الرمز ميت (انتهى، أُلغي، أو حُذف مستخدم النظام الذي أنشأه)
+      //  - 190: الرمز ميت (انتهى، أُلغي، أو حُذف التطبيق أو مستخدم النظام الذي أُنشئ به)
       //  - 1885183: التطبيق في وضع التطوير، فترفض Meta تصميم الإعلان حتى يُنشر (Live)
       const known = err.error_subcode === 1885183 ? 'meta_app_dev_mode' : err.code === 190 ? 'meta_token_invalid' : null;
       throw new IntegrationError('meta', kind, known || err.error_user_msg || err.message || e.message, { code: err.code, subcode: err.error_subcode });

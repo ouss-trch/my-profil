@@ -4,13 +4,17 @@
 الفكرة: **تطبيق واحد منشور + مستخدم نظام واحد + رمز لا ينتهي**، والـ ERP يفحص كل شيء ويقول لك ما ينقص بالضبط.
 أسماء الأزرار أدناه كما تظهر في Meta بالفرنسية.
 
-> **قبل حذف أي شيء في Meta:** حذف مستخدم نظام يُبطل كل رموزه فوراً (الـ ERP، n8n، أي سير).
-> لا تحذف **«Conversions API System User»**: رمز n8n الذي يرسل Purchase يعمل (تحقّقنا منه في 28/10 بعد حذف المستخدم القديم «Toureche ERP»).
+> **قبل حذف أي شيء في Meta:** حذف تطبيق أو مستخدم نظام يُبطل فوراً كل الرموز المبنية عليه (الـ ERP، n8n، أي سير).
+> في 28/10 حُذف التطبيق القديم «Toureche ERP»، وبقي مستخدم النظام الذي يحمل الاسم نفسه. رمز n8n الذي يرسل Purchase ما زال يعمل (تحققنا منه بعد الحذف).
+> لا تحذف **«Conversions API System User»** ولا **«Toureche ERP»** قبل أمرين: أن يعمل الرمز الجديد في الـ ERP، وأن تمرّ طلبية في n8n بنجاح.
 
 ## 1) التطبيق
 
 1. **إن كان عندك تطبيق جديد**: Paramètres de l’entreprise ← Comptes ← **Applications**. إن ظهر فيها فهو مربوط بالـ BM، انتقل إلى الخطوة 5.
-2. **إن لم يكن**: في نفس الصفحة **Ajouter ← Créer un nouvel identifiant d’app** (يُنشأ مربوطاً بالـ BM مباشرة)، أو من developers.facebook.com ← Créer une app.
+   تطبيق SOU9NA الجديد: **Erp_souqnna** (‏4534522960162075، Appartient à: BM 1). يحمل اسم مستخدم النظام نفسه، وهذا لا يضرّ.
+2. **إن لم يظهر**: في نفس الصفحة **Ajouter**، ثم:
+   - **Connecter un identifiant d’app**: إن أنشأته من developers.facebook.com دون اختيار الـ BM. ضع معرّفه (Paramètres de l’app ← Général) ← Ajouter l’app.
+   - أو **Créer un nouvel identifiant d’app**: تطبيق جديد مربوط بالـ BM مباشرة.
 3. الاسم مثل `Toureche ERP`. حالة الاستعمال: **Créer et gérer des publicités avec l’API Marketing**.
    تضيف: `ads_management`، `ads_read`، `business_management`، `pages_read_engagement`، `pages_show_list`.
    - للنشر على الصفحة وإنستغرام من الـ ERP: أضف حالة الاستعمال الخاصة بإدارة الصفحة وإنستغرام (`pages_manage_posts`، `instagram_basic`، `instagram_content_publish`).
@@ -31,19 +35,23 @@
 - الاسم مثل `Erp_souqnna`.
 - الدور **Employé (Employee)**: يرى فقط ما تسنده له، وهو أكثر أماناً من Admin.
 
-**الإسناد:** نفس الطريقة لكل عنصر، كما فعلت مع الصفحة. افتح العنصر من مكانه ← **Attribuer des personnes** ← **Utilisateurs système** ← اختر `Erp_souqnna` ← فعّل **Contrôle total** ← **Attribuer**.
+**الإسناد:** نفس الطريقة لكل عنصر، كما فعلت مع الصفحة. افتح العنصر من مكانه ← **Affecter des personnes** (أو «Attribuer des personnes») ← اختر `Erp_souqnna`، وإن ظهر قسمان فهو في Utilisateurs système ← فعّل **Contrôle total** ← **Affecter**.
 
 | العنصر | مكانه في Paramètres de l’entreprise | اختر |
 |---|---|---|
 | أ. الحساب الإعلاني | Comptes ← **Comptes publicitaires** | **ADCompte 3** (‏1021341893008834)، وكل حساب تُطلق منه حملات SOU9NA |
 | ب. البيكسل | Sources de données ← **Ensembles de données** | **SOU9NA** (‏2111277745999858) فقط |
-| ج. التطبيق | Comptes ← **Applications** | تطبيقك الجديد |
+| ج. التطبيق | Comptes ← **Applications** | **Erp_souqnna** (‏4534522960162075). Contrôle total = **Gérer l’app** |
 | د. الصفحة | Comptes ← **Pages** | **Sou9na** |
 | هـ. إنستغرام | Comptes ← **Comptes Instagram** | **sou9nna_**. في لوحة مستخدم النظام، إن ظهر «Aucun élément affecté» بجانبه: **Gérer** ← Contrôle total |
 
-> **انتبه في (ب):** في الـ BM مصدران أُنشئا في 28/10 بلا أي حدث: **«Souqnna»** (09:43) و**«Erp.system»** (10:03).
-> لا تختر أياً منهما كبيكسل. البيكسل الذي يرسل إليه المتجر وn8n هو **SOU9NA** وحده.
-> إن كان «Erp.system» اسم تطبيقك، فظهوره هناك طبيعي: Meta تعرض التطبيقات بين مصادر البيانات.
+> **انتبه في (ب):** في الـ BM مصدران أُنشئا في 28/10 بلا أي حدث، فلا تختر أياً منهما كبيكسل:
+> - **«Souqnna»** (09:43): بيكسل فارغ.
+> - **«Erp.system»** (10:03): مصدر فارغ آخر، وليس التطبيق. التطبيق هو «Erp_souqnna» في Applications.
+>
+> البيكسل الذي يرسل إليه المتجر وn8n هو **SOU9NA** وحده.
+>
+> إن رفضت Meta الإسناد («Impossible d’affecter…» أو «…d’attribuer…»): أعد إدخال كلمة السر أو رمز المصادقة الثنائية حين تطلبه. وتأكد من بريدك في Informations sur le portefeuille ← Mes informations.
 
 SOU9NA مربوط أصلاً بـ ADCompte 3، وsou9nna_ مربوط بـ ADCompte 3 (تحققنا منهما في 28/10): لا حاجة لـ «Éléments connectés».
 
@@ -99,6 +107,7 @@ SOU9NA مربوط أصلاً بـ ADCompte 3، وsou9nna_ مربوط بـ ADComp
 |---|---|---|
 | «Aucune autorisation disponible» عند إنشاء الرمز | التطبيق غير مُسند لمستخدم النظام | 2-ج |
 | التطبيق لا يظهر في «Générer un token» | التطبيق ليس في هذا الـ BM | 1-1 و1-2، ثم 2-ج |
+| لا يقبل Erp_souqnna الحساب الإعلاني | | مستخدم النظام القديم «Toureche ERP» ما زال يملك ADCompte 3 والصفحة والبيكسل وإنستغرام: أسند له التطبيق الجديد (2-ج) وأنشئ الرمز منه |
 | «Jamais» غير موجودة | Meta تفرض على بعض النشاطات رموزاً تنتهي | اختر 60 يوماً وجدّده قبل انتهائه. «اختبار» يُظهر أنه ينتهي |
 | الـ ERP: «رمز Meta لم يعد صالحاً» | حُذف مستخدم النظام، أو أُلغي الرمز، أو انتهى | رمز جديد (القسم 2) ← بطاقة Meta |
 | الـ ERP: «تطبيق Meta غير منشور» | وضع التطوير (1885183) | 1-5 |
@@ -110,6 +119,7 @@ SOU9NA مربوط أصلاً بـ ADCompte 3، وsou9nna_ مربوط بـ ADComp
 
 - احذف التطبيقات ومستخدمي النظام القديمة غير المستعملة، أو ألغِ رموزها (Utilisateurs système ← Révoquer les tokens).
   قبل الحذف، تأكد أن لا شيء يستعمل رموزها: الـ ERP، n8n، وأي سير.
+  «Toureche ERP» (مستخدم النظام القديم) يُحذف بعد أمرين: أن يعمل الرمز الجديد في الـ ERP، وأن تمرّ طلبية في n8n بنجاح.
 - حدّث كل مكان كان فيه الرمز القديم: الـ ERP (بطاقة Meta)، وأي سير يكتب رمزاً **نصاً داخل العقدة** (انقله إلى Credentials).
 - مصادر البيانات الفارغة («Souqnna»، «Erp.system») لا تُحذف من Meta. اتركها دون استعمال.
 - لا ترسل رمزاً في محادثة أو رسالة. الـ ERP يحفظه مشفّراً ولا يعرضه.
