@@ -70,7 +70,7 @@ export default function DeliveryCard({ onChange }) {
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Badge tone="good">{t([`الولايات المخدومة: ${s.served} من 58`, `Wilayas desservies : ${s.served} sur 58`])}</Badge>
+            <Badge tone="good">{t([`التوصيل إلى جميع الولايات (${s.served})`, `Livraison dans toutes les wilayas (${s.served})`])}</Badge>
             {s.desk && (
               <Badge>
                 {t(['المكتب من', 'Bureau dès'])} {da(s.desk.min)}
@@ -86,10 +86,11 @@ export default function DeliveryCard({ onChange }) {
               {t(data.source === 'theme' ? ['من إعدادات القالب', 'depuis le thème'] : ['من صفحة الأسعار', 'depuis la page tarifs'])} · {dateOnly(data.imported_at, lang)}
             </span>
           </div>
-          {s.not_served.length > 0 && (
-            <p className="rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
-              <b className="text-ink">{t(['ولايات دون توصيل:', 'Wilayas non desservies :'])}</b> {s.not_served.join('، ')}.{' '}
-              {t(['صفحات الهبوط تذكر العدد الحقيقي، لا «58 ولاية».', 'Les landing pages citent le vrai nombre, pas « 58 wilayas ».'])}
+          {s.unpriced.length > 0 && s.unpriced.length < 30 && (
+            <p className="text-xs leading-6 text-muted">
+              {t(
+                [`نموذج الطلب في المتجر يأخذ أسعاره من جدول القالب، وهذه الولايات بلا سعر فيه فيرفضها النموذج: ${s.unpriced.join('، ')}. ضع لها سعراً في إعدادات القالب (جدول التوصيل) لتُقبل طلباتها.`, `Le formulaire de la boutique lit ses tarifs dans la grille du thème ; ces wilayas n’y ont pas de prix et il les refuse : ${s.unpriced.join(', ')}. Ajoutez-leur un tarif dans les réglages du thème (grille de livraison).`],
+              )}
             </p>
           )}
 

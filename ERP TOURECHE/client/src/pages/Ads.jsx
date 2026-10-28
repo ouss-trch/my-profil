@@ -32,6 +32,9 @@ import Readiness from '../components/Readiness.jsx';
 import { VERDICT } from './ProductEditor.jsx';
 import { TEST_STAGES } from './Products.jsx';
 
+// لون تكلفة المسلّمة مقابل حد التعادل (نفس عتبات حكم المنتج: ≤ 60% رابحة، ≤ 105% هامش ضيق)
+const ERP_TONE = { winning: 'text-good', thin: 'text-warn', losing: 'text-bad', insufficient: 'text-muted' };
+
 const GROUPS = {
   active: ['قيد التشغيل', 'Active', 'good'],
   paused: ['متوقفة', 'En pause', 'neutral'],
@@ -259,6 +262,9 @@ function Explorer() {
                       <th className="text-end">{t(['الميزانية/يوم', 'Budget/j'])}</th>
                       <th className="text-end">{t(['الإنفاق', 'Dépense'])}</th>
                       <th className="text-end">{t(['مشتريات', 'Achats'])}</th>
+                      <th className="text-end" title={t(['طلبيات الـ ERP المنسوبة لهذه الحملة، والمسلّمة منها. تحتها تكلفة المسلّمة / حد التعادل', 'Commandes ERP attribuées à cette campagne, dont livrées. Dessous : coût par livrée / seuil de rentabilité'])}>
+                        {t(['الـ ERP: طلبيات · مسلّمة', 'ERP : cmd · livrées'])}
+                      </th>
                       <th className="text-end">CTR</th>
                       <th className="text-end">CPM</th>
                       <th className="text-end">{t(['التكرار', 'Fréq.'])}</th>
@@ -319,6 +325,21 @@ function Explorer() {
                         <td className="num text-end">
                           {n0(c.purchases)}
                           {c.cost_per_purchase !== null && <div className="text-[11px] text-muted">{money(c.cost_per_purchase, cur)}</div>}
+                        </td>
+                        <td className="num text-end" title={c.cost_per_delivered_da !== null ? t(['تكلفة المسلّمة / حد التعادل', 'Coût par livrée / seuil'], {}) : undefined}>
+                          {c.erp_orders ? (
+                            <>
+                              {n0(c.erp_orders)} · <span className="text-good">{n0(c.erp_delivered)}</span>
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                          {c.cost_per_delivered_da !== null && (
+                            <div className={cx('text-[11px]', ERP_TONE[c.erp_verdict])}>
+                              {da(c.cost_per_delivered_da)}
+                              {c.break_even_da ? ` / ${da(c.break_even_da)}` : ''}
+                            </div>
+                          )}
                         </td>
                         <td className="num text-end">{pct(c.ctr, 2)}</td>
                         <td className="num text-end">{c.cpm === null ? '—' : n2(c.cpm)}</td>

@@ -148,7 +148,7 @@ export function landingSystem(brand) {
 3. الصدق التام: استعمل فقط الحقائق الموجودة في المعطيات. ممنوع اختلاق: أرقام، نسب، عدد زبائن، تقييمات، آراء زبائن، جوائز، شهادات، مواد أو مقاسات غير مذكورة، أو مدة توصيل غير مذكورة. إن نقصت معلومة يحتاجها الزبون فاكتب أنها تُؤكَّد عند اتصال التأكيد، وأضفها في owner_todo — إلا التوصيل والسياسات (القاعدة 5) فمصدرها delivery.
 4. سياسة Meta: لا ادعاءات صحية أو علاجية، لا «قبل/بعد» بنتائج مضمونة، لا مخاطبة صفات شخصية للزائر (مثل: «هل أنت سمين؟»، «هل تعاني من…؟» عن جسده)، لا عدّاد تنازلي، لا «آخر قطع» أو «ينتهي اليوم» إلا إن كان المخزون الحقيقي في المعطيات قليلاً فتذكر رقمه كما هو. العرض في الصفحة هو نفس العروض المذكورة في المعطيات بالضبط.
 5. الدفع عند الاستلام يطمئن: اذكر الدفع عند الاستلام، واتصال التأكيد قبل الشحن، وسياسات المتجر. مصدر التوصيل والسياسات هو delivery (من موقع المتجر نفسه):
-   - عدد الولايات: wilayas_served كما هو (لا تكتب 58 أو 69 إن كان أقل). الأسعار: «من X دج للمكتب، من Y دج للمنزل»، والسعر الدقيق يظهر في النموذج حسب الولاية.
+   - الولايات: التوصيل متوفر لجميع الولايات (wilayas_served): اكتب «جميع الولايات» ولا تذكر ولايات مستثناة ولا تكتب 58. الأسعار: «من X دج للمكتب، من Y دج للمنزل»، والسعر الدقيق يظهر في النموذج حسب الولاية.
    - مدة التوصيل: delivery_time حرفياً إن وُجدت؛ وإن كانت فارغة فاكتب أنها تختلف حسب الولاية وتُؤكَّد عند اتصال التأكيد (هذا ما تقوله سياسة المتجر)، ولا تضفها إلى owner_todo.
    - المعاينة قبل الدفع، الاسترجاع، الاستبدال، الاسترداد: لخّصها من shipping_policy وreturns_policy بالشروط والمدد المذكورة فيها (مثل عدد الأيام ومن يدفع مصاريف الإرجاع)، دون زيادة ولا حذف لشرط مهم.
    - إن كان delivery فارغاً: اكتفِ بما في store_policies، وأضف «استيراد أسعار التوصيل والسياسات» إلى owner_todo.
@@ -581,7 +581,7 @@ export function buildTemplate(copy, productTpl, { visuals = [], delivery = null,
   const take = (k) => queue.splice(0, k);
   const story = copy.story || [];
   const para = (x, i) => block('text', { heading: x.heading, body: paragraphs(x.body) || `<p>${escapeHtml(x.body)}</p>`, tone: layout === 'problem' && i === 0 ? 'alert' : i % 2 ? 'soft' : 'plain' });
-  const trust = copy.trust?.length ? copy.trust : ['الدفع عند الاستلام', ...(delivery?.served ? [`التوصيل إلى ${delivery.served} ولاية`] : []), 'اتصال تأكيد قبل الشحن'];
+  const trust = copy.trust?.length ? copy.trust : ['الدفع عند الاستلام', ...(delivery?.served ? ['التوصيل إلى جميع الولايات'] : []), 'اتصال تأكيد قبل الشحن'];
   const parts = {
     hero: () => [block('hero', { eyebrow: copy.hero.eyebrow, headline: copy.hero.headline, subheadline: copy.hero.subheadline, bullets: copy.hero.bullets.join('\n'), cta: copy.hero.cta, note: copy.hero.note, show_image: true, image_url: heroShot?.shopify_url || '', image_width: heroShot?.width || 928, image_height: heroShot?.height || 1152 })],
     trust: () => [block('trust', { items: trust.join('\n') })],
@@ -771,9 +771,9 @@ export function sectionLiquid() {
             {%- assign p = row | strip | split: '|' -%}
             {%- if p.size < 3 -%}{%- continue -%}{%- endif -%}
             {%- assign code_n = p[0] | strip | plus: 0 -%}
-            {%- if code_n < 1 or code_n > 58 -%}{%- continue -%}{%- endif -%}
+            {%- if code_n < 1 or code_n > 69 -%}{%- continue -%}{%- endif -%}
             {%- assign h = p[2] | strip -%}{%- assign dk = p[3] | strip -%}
-            {%- if h != blank or dk != blank -%}{%- assign served = served | plus: 1 -%}{%- endif -%}
+            {%- assign served = served | plus: 1 -%}
             {%- if h != blank -%}{%- assign hn = h | plus: 0 -%}{%- if h_from == 0 or hn < h_from -%}{%- assign h_from = hn -%}{%- endif -%}{%- endif -%}
             {%- if dk != blank -%}{%- assign dn = dk | plus: 0 -%}{%- if d_from == 0 or dn < d_from -%}{%- assign d_from = dn -%}{%- endif -%}{%- endif -%}
           {%- endfor -%}
@@ -781,7 +781,7 @@ export function sectionLiquid() {
         <section class="erp-lp__block erp-lp__block--soft" {{ block.shopify_attributes }}>
           {%- if block.settings.heading != blank -%}<h2 class="erp-lp__h2">{{ block.settings.heading | escape }}</h2>{%- endif -%}
           <ul class="erp-lp__ticks">
-            {%- if served > 0 -%}<li>التوصيل إلى {{ served }} {% if served >= 3 and served <= 10 %}ولايات{% else %}ولاية{% endif %}{% if block.settings.carriers != blank %} عبر {{ block.settings.carriers | escape }}{% endif %}، إلى مكتب شركة التوصيل أو إلى باب المنزل</li>{%- endif -%}
+            {%- if served > 0 -%}<li>{% if served >= 58 %}التوصيل إلى جميع الولايات{% else %}التوصيل إلى {{ served }} {% if served >= 3 and served <= 10 %}ولايات{% else %}ولاية{% endif %}{% endif %}{% if block.settings.carriers != blank %} عبر {{ block.settings.carriers | escape }}{% endif %}، إلى مكتب شركة التوصيل أو إلى باب المنزل</li>{%- endif -%}
             {%- if d_from > 0 or h_from > 0 -%}<li>{% if d_from > 0 %}المكتب من {{ d_from | times: 100 | money_without_trailing_zeros }}{% endif %}{% if d_from > 0 and h_from > 0 %} · {% endif %}{% if h_from > 0 %}المنزل من {{ h_from | times: 100 | money_without_trailing_zeros }}{% endif %}. السعر الدقيق لولايتك يظهر في نموذج الطلب قبل التأكيد.</li>{%- endif -%}
             {%- if block.settings.time != blank -%}<li>مدة التوصيل: {{ block.settings.time | escape }}</li>{%- endif -%}
             <li>الدفع نقداً عند الاستلام، بعد معاينة الطرد.</li>

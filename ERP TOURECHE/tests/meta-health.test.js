@@ -90,3 +90,17 @@ test('a ready-made check result (the Settings “Test” button) is saved so the
   saveTokenState(p.id, { valid: true, type: 'SYSTEM_USER', expires_at: 0, data_access_expires_at: 0, ends_at: null });
   assert.deepEqual(kinds(), []);
 });
+
+test('a check that reached no verdict never raises a false alarm nor erases the stored date', () => {
+  setSetting('meta_access_token', 'EAAnew2', p.id);
+  state({ ends_at: sec(5) });
+  // «اختبار» لم يستطع قراءة debug_token (لا نوع ولا تواريخ): الحكم السابق يبقى
+  saveTokenState(p.id, { valid: true, type: null, expires_at: null, data_access_expires_at: null, ends_at: null });
+  assert.deepEqual(metaAlerts(p.id).map((a) => a.kind), ['token_expiring']);
+  // فشل شبكة أثناء الفحص (ليس رفضاً من Meta للرمز): لا «غير صالح»
+  saveTokenState(p.id, { valid: false, error: 'fetch failed', auth: false });
+  assert.deepEqual(metaAlerts(p.id).map((a) => a.kind), ['token_expiring']);
+  // رفض Meta للرمز نفسه: حكم حقيقي
+  saveTokenState(p.id, { valid: false, error: 'meta_token_invalid', auth: true });
+  assert.deepEqual(metaAlerts(p.id).map((a) => a.kind), ['token_invalid']);
+});

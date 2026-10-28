@@ -9,6 +9,9 @@ const fields = (life) => ({ type: life.type, expires_at: life.expires_at, data_a
 /** تحفظ نتيجة فحص جاهزة (من «اختبار» Meta في الإعدادات) فيزول التنبيه فور تجديد الرمز */
 export function saveTokenState(projectId, token) {
   if (!token) return;
+  // فحص لم يصل إلى حكم (شبكة، حد طلبات) لا يُنذر زوراً ولا يمحو تاريخاً محفوظاً: الحكم «غير صالح» لا يُحفظ إلا إن رفضت Meta الرمز نفسه
+  if (token.valid === false && !token.auth) return;
+  if (token.valid !== false && token.type == null && token.expires_at == null && token.ends_at == null) return;
   setSetting('meta_token_state', { checked_at: nowIso(), valid: token.valid === undefined ? null : token.valid, ...fields(token) }, projectId);
 }
 
@@ -23,7 +26,7 @@ export async function refreshTokenState(projectId) {
   }
   try {
     const info = (await meta.graph(cfg, 'debug_token', { params: { input_token: cfg.meta_access_token } }))?.data || null;
-    saveTokenState(projectId, { valid: info ? Boolean(info.is_valid) : null, ...meta.tokenLife(info) });
+    saveTokenState(projectId, { valid: info ? Boolean(info.is_valid) : true, auth: true, ...meta.tokenLife(info) });
   } catch (e) {
     if (e.details?.code !== 190) return getSetting('meta_token_state', projectId);
     setSetting('meta_token_state', { checked_at: nowIso(), valid: false, type: null, expires_at: null, data_access_expires_at: null, ends_at: null }, projectId);

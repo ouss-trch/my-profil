@@ -9,6 +9,7 @@ import { PageHeader } from '../components/Layout.jsx';
 import { Badge, Bar, Button, Card, Empty, ErrorBox, Loading, Stat, cx, rateTone } from '../components/ui.jsx';
 import { BarsChart, TrendChart } from '../components/charts.jsx';
 import { InsightCard } from './Advisor.jsx';
+import { LivePill } from '../components/LiveVisitors.jsx';
 
 /** «اليوم»: ما يجب فعله الآن + أرقام اليوم + اتجاه 14 يوماً */
 export default function Today() {
@@ -63,9 +64,12 @@ export default function Today() {
         title={t('nav.today')}
         subtitle={dateOnly(d.day, lang)}
         actions={
-          <Button icon={Bot} loading={briefBusy} onClick={loadBrief}>
-            {t(['ملخص ذكي لليوم', 'Brief IA du jour'])}
-          </Button>
+          <>
+            <LivePill />
+            <Button icon={Bot} loading={briefBusy} onClick={loadBrief}>
+              {t(['ملخص ذكي لليوم', 'Brief IA du jour'])}
+            </Button>
+          </>
         }
       />
 

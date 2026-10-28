@@ -229,6 +229,69 @@ function labeler(projectIds) {
   };
 }
 
+/**
+ * الزوار الآن: زوار فريدون لهم نشاط (زيارة صفحة أو لمس نموذج الطلب) في آخر N دقائق. العدّاد يعدّ عند تحميل الصفحة،
+ * فمن يقرأ صفحة طويلة دون أن يحمّل شيئاً جديداً يخرج من العدّ بعد المدة، وهذا هو المعنى المعتاد لـ «نشط الآن».
+ */
+export function liveVisitors(projectIds, { minutes = 5, now = Date.now() } = {}) {
+  const mins = Math.min(Math.max(Number(minutes) || 5, 1), 60);
+  const since = new Date(now - mins * 60e3).toISOString();
+  const day = dzDay();
+  const P = inList(projectIds);
+  const base = `FROM page_visits WHERE project_id IN (${P}) AND day >= ?`;
+  const dayFrom = addDays(day, -1); // عبور منتصف الليل: الصف يُنسب ليوم أول زيارة له
+  const live = db.prepare(`SELECT COUNT(DISTINCT visitor) AS n, COUNT(DISTINCT CASE WHEN form = 1 THEN visitor END) AS in_form, COUNT(DISTINCT CASE WHEN from_ad = 1 THEN visitor END) AS from_ad ${base} AND last_at >= ?`).get(...projectIds, dayFrom, since);
+  const last30 = db.prepare(`SELECT COUNT(DISTINCT visitor) AS n ${base} AND last_at >= ?`).get(...projectIds, dayFrom, new Date(now - 30 * 60e3).toISOString()).n;
+  const today = db.prepare(`SELECT COUNT(DISTINCT visitor) AS n, COUNT(DISTINCT CASE WHEN from_ad = 1 THEN visitor END) AS from_ad FROM page_visits WHERE project_id IN (${P}) AND day = ?`).get(...projectIds, day);
+  const label = labeler(projectIds);
+  const pages = db
+    .prepare(`SELECT project_id, page, COUNT(DISTINCT visitor) AS visitors ${base} AND last_at >= ? GROUP BY project_id, page ORDER BY visitors DESC, page LIMIT 6`)
+    .all(...projectIds, dayFrom, since)
+    .map((r) => ({ project_id: r.project_id, key: r.page, visitors: r.visitors, ...label(r.project_id, r.page) }));
+  const last = db.prepare(`SELECT MAX(last_at) AS at FROM page_visits WHERE project_id IN (${P}) AND day >= ?`).get(...projectIds, dayFrom).at || null;
+  return { minutes: mins, now: live.n || 0, in_form: live.in_form || 0, from_ad: live.from_ad || 0, last_30: last30 || 0, today: today.n || 0, today_from_ad: today.from_ad || 0, pages, last_visit_at: last, at: new Date(now).toISOString() };
+}
+
+// ساعة الجزائر (UTC+1 دائماً، دون توقيت صيفي) من وقت ISO بالتوقيت العالمي
+const DZ_HOUR = "((CAST(strftime('%H', {col}) AS INTEGER) + 1) % 24)";
+
+/**
+ * متى يدخل الزوار ومتى تأتي الطلبيات؟ لكل ساعة من اليوم بتوقيت الجزائر في آخر N يوماً: زوار فريدون (ساعة أول زيارة لهم في اليوم)،
+ * منهم من الإعلانات، والطلبيات. تُستعمل لاختيار ساعات الاتصال والتأكيد وجدولة الميزانية والنشر، ولا تُعطي رأياً قبل أن تتجمع بيانات كافية.
+ */
+export function busyHours(projectIds, { days = 14 } = {}) {
+  const r = range(Math.min(Math.max(Number(days) || 14, 1), 90));
+  const P = inList(projectIds);
+  const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, visitors: 0, from_ad: 0, orders: 0 }));
+  for (const v of db
+    .prepare(
+      `SELECT ${DZ_HOUR.replace('{col}', 'first')} AS hour, COUNT(*) AS visitors, SUM(ad) AS from_ad FROM (
+         SELECT MIN(first_at) AS first, MAX(from_ad) AS ad FROM page_visits WHERE project_id IN (${P}) AND day >= ? GROUP BY project_id, day, visitor
+       ) GROUP BY hour`,
+    )
+    .all(...projectIds, r.from)) {
+    hours[v.hour].visitors = v.visitors;
+    hours[v.hour].from_ad = v.from_ad || 0;
+  }
+  for (const o of db
+    .prepare(`SELECT ${DZ_HOUR.replace('{col}', 'created_at')} AS hour, COUNT(*) AS orders FROM orders WHERE project_id IN (${P}) AND created_at >= ? AND ${ORDER_OK} GROUP BY hour`)
+    .all(...projectIds, r.startIso))
+    hours[o.hour].orders = o.orders;
+  const total = hours.reduce((n, h) => n + h.visitors, 0);
+  const totalOrders = hours.reduce((n, h) => n + h.orders, 0);
+  const top = (key, n = 3) => hours.filter((h) => h[key] > 0).sort((a, b) => b[key] - a[key] || a.hour - b.hour).slice(0, n).map((h) => h.hour);
+  // أفضل نافذة من 3 ساعات متتالية (تلتف حول منتصف الليل)
+  const window3 = (key) => {
+    let best = null;
+    for (let h = 0; h < 24; h++) {
+      const sum = hours[h][key] + hours[(h + 1) % 24][key] + hours[(h + 2) % 24][key];
+      if (sum > 0 && (!best || sum > best.sum)) best = { from: h, to: (h + 3) % 24, sum };
+    }
+    return best;
+  };
+  return { days: r.days, hours, total_visitors: total, total_orders: totalOrders, peak_visitors: top('visitors'), peak_orders: top('orders'), best_window: window3('visitors'), best_order_window: window3('orders'), enough: total >= 50 };
+}
+
 /** أرقام كل صفحة في آخر N يوماً (للقوائم: صفحات المتجر، صفحات الهبوط): دالة (المشروع، مفتاح الصفحة) ← الأرقام */
 export function metricsByPage(projectIds, days = 30) {
   const r = range(days);

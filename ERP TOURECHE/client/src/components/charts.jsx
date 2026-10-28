@@ -73,7 +73,7 @@ export function TrendChart({ data, series, height = 240, unit, area = false, xKe
 }
 
 /** أعمدة يومية (سلسلة أو سلسلتان متجاورتان) */
-export function BarsChart({ data, series, height = 220, unit, xKey = 'day' }) {
+export function BarsChart({ data, series, height = 220, unit, xKey = 'day', reverse }) {
   const { lang, dir } = useI18n();
   return (
     <div>
@@ -82,8 +82,8 @@ export function BarsChart({ data, series, height = 220, unit, xKey = 'day' }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={2}>
             <CartesianGrid vertical={false} />
-            <XAxis dataKey={xKey} tickFormatter={(d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? shortDay(d, lang) : d)} tickLine={false} minTickGap={12} reversed={dir === 'rtl'} />
-            <YAxis width={52} tickLine={false} axisLine={false} tickFormatter={(v) => n0(v)} orientation={dir === 'rtl' ? 'right' : 'left'} />
+            <XAxis dataKey={xKey} tickFormatter={(d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? shortDay(d, lang) : d)} tickLine={false} minTickGap={12} reversed={reverse ?? dir === 'rtl'} />
+            <YAxis width={52} tickLine={false} axisLine={false} tickFormatter={(v) => n0(v)} orientation={(reverse ?? dir === 'rtl') ? 'right' : 'left'} allowDecimals={false} />
             <Tooltip content={<Tip series={series} unit={unit} lang={lang} />} cursor={{ fill: 'rgb(var(--line) / 0.35)' }} />
             {series.map((s, i) => (
               <Bar key={s.key} dataKey={s.key} fill={s.color || SERIES[i]} radius={[4, 4, 0, 0]} maxBarSize={28} />

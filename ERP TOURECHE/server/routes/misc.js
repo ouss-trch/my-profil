@@ -244,6 +244,10 @@ pagesRouter.get('/traffic', (req, res) => {
   res.json({ ...tracking.trafficReport(scope.ids, { days }), base: scope.all ? null : pages.storeBase(scope.id) });
 });
 
+// الزوار الآن (يُسأل كل بضع ثوانٍ) ومتى يدخل الزوار وتأتي الطلبيات بتوقيت الجزائر
+pagesRouter.get('/live', (req, res) => res.json(tracking.liveVisitors(projectScope(req).ids, { minutes: v.int(req.query.minutes, { min: 1, max: 60 }) || 5 })));
+pagesRouter.get('/hours', (req, res) => res.json(tracking.busyHours(projectScope(req).ids, { days: v.int(req.query.days, { min: 1, max: 90 }) || 14 })));
+
 pagesRouter.post('/sync', async (req, res) => {
   const scope = projectScope(req);
   const out = [];

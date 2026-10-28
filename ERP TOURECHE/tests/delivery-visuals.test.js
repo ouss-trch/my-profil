@@ -346,8 +346,10 @@ test('delivery: prices come from the theme’s own shipping table, policies from
     { code: 11, name: 'تمنراست', home: null, desk: null, eta: '' },
     'empty price = not served, never free',
   );
-  assert.equal(d.summary.served, 4, 'counted on 58 wilayas like the theme (59 is shipped as its parent)');
-  assert.deepEqual(d.summary.not_served, ['تمنراست']);
+  assert.equal(d.summary.served, 69, 'delivery is to every wilaya: what one carrier does not cover another does');
+  assert.equal(d.summary.priced, 5, 'priced wilayas are a separate fact about the order form');
+  assert.ok(d.summary.unpriced.includes('تمنراست'), 'a wilaya with no price is listed apart (the store form refuses it), never as "not served"');
+  assert.equal('not_served' in d.summary, false);
   assert.deepEqual(d.summary.desk, { min: 400, max: 700 });
   assert.deepEqual(d.summary.home, { min: 500, max: 1200 });
   assert.equal(d.carriers, 'Yalidine · Noest', 'carriers read from the public delivery page');
@@ -388,7 +390,7 @@ test('landing: the writer gets the real delivery facts and plans descriptive vis
   assert.match(sent.system, /wilayas_served/);
   assert.match(sent.system, /12\. visuals/);
   const facts = JSON.parse(sent.messages[0].content.at(-1).text.match(/\{[\s\S]*\}/)[0]);
-  assert.equal(facts.delivery.wilayas_served, 4);
+  assert.equal(facts.delivery.wilayas_served, 69);
   assert.equal(facts.delivery.desk_price_from_da, 400);
   assert.equal(facts.delivery.delivery_time, 'من 24 إلى 72 ساعة حسب الولاية');
   assert.match(facts.delivery.returns_policy, /4 أيام عمل/);
@@ -459,7 +461,7 @@ test('visuals: drawn from the real product photos, portrait, no text; reviewed; 
     heading: 'التوصيل والدفع',
     carriers: 'Yalidine · Noest',
     time: 'من 24 إلى 72 ساعة حسب الولاية',
-    served: 4,
+    served: 69,
     desk_from: 400,
     home_from: 500,
   });

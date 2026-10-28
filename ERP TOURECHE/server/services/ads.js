@@ -637,6 +637,38 @@ const STATUS_GROUP = {
 };
 
 /** حملات أي حساب إعلاني مباشرة من Meta مع الأداء والتشخيص والمنتج المرتبط ومصدرها (من الـ ERP أم لا) */
+/**
+ * الحكم بالطلبيات المسلّمة لكل حملة، لا ببيكسل Meta: كل طلبية تحمل utm_campaign = معرّف الحملة (الإعلان يضعه في «معاملات URL»).
+ * تكلفة المسلّمة = إنفاق الحملة ÷ (المسلّمة + ما في الطريق × نسبة التسليم)، وتُقارن بحد التعادل للمنتج المرتبط بالحملة.
+ * rows: [{ id, spend_da, product_id }] (الإنفاق بالدينار في الفترة نفسها).
+ */
+const IN_FLIGHT = ['confirmed', 'shipped', 'in_transit', 'at_office', 'out_for_delivery', 'attempt_failed'];
+export function campaignErpStats(projectId, sinceIso, rows) {
+  const out = new Map();
+  const ids = rows.map((r) => String(r.id));
+  if (!ids.length) return out;
+  const orders = db
+    .prepare(`SELECT utm_campaign AS campaign, status FROM orders WHERE project_id = ? AND created_at >= ? AND utm_campaign IN (${inList(ids)}) AND status NOT IN ('abandoned','fake')`)
+    .all(projectId, sinceIso, ...ids);
+  const dr = deliveryRate(projectId);
+  const be = new Map();
+  for (const r of rows) {
+    const mine = orders.filter((o) => o.campaign === String(r.id));
+    const delivered = mine.filter((o) => o.status === 'delivered').length;
+    const returned = mine.filter((o) => o.status === 'returned').length;
+    const inFlight = mine.filter((o) => IN_FLIGHT.includes(o.status)).length;
+    const confirmed = mine.filter((o) => !['new', 'no_answer', 'callback', 'cancelled', 'fake'].includes(o.status)).length;
+    const expected = round(delivered + inFlight * dr, 1);
+    if (r.product_id && !be.has(r.product_id)) be.set(r.product_id, breakEven(getProduct(r.product_id), projectId)?.da ?? null);
+    const breakEvenDa = r.product_id ? be.get(r.product_id) : null;
+    const cpd = expected >= 1 && r.spend_da > 0 ? round(r.spend_da / expected) : null;
+    let verdict = 'insufficient';
+    if (breakEvenDa && cpd !== null && expected >= 3) verdict = cpd <= breakEvenDa * 0.6 ? 'winning' : cpd <= breakEvenDa * 1.05 ? 'thin' : 'losing';
+    out.set(String(r.id), { erp_orders: mine.length, erp_confirmed: confirmed, erp_delivered: delivered, erp_returned: returned, erp_in_flight: inFlight, erp_expected_delivered: expected, cost_per_delivered_da: cpd, break_even_da: breakEvenDa || null, erp_verdict: verdict });
+  }
+  return out;
+}
+
 export async function accountCampaigns(projectId, accountId, { days = 7, includeArchived = false } = {}) {
   const cfg = projectConfig(projectId);
   if (!cfg.meta_access_token) throw new HttpError(400, 'meta_not_configured');
@@ -720,6 +752,9 @@ export async function accountCampaigns(projectId, accountId, { days = 7, include
         diagnosis,
       };
     });
+    // الطلبيات المنسوبة لكل حملة بمعرّفها، والحكم بتكلفة المسلّمة مقابل حد التعادل
+    const erp = campaignErpStats(projectId, dzDayStartIso(since), campaigns.map((c) => ({ id: c.id, spend_da: c.spend_da, product_id: c.product?.id })));
+    for (const c of campaigns) Object.assign(c, erp.get(String(c.id)));
     const groups = campaigns.reduce((g, c) => ((g[c.group] = (g[c.group] || 0) + 1), g), {});
     const totals = { spend: round(campaigns.reduce((s, c) => s + c.spend, 0), 2), purchases: campaigns.reduce((s, c) => s + c.purchases, 0), impressions: campaigns.reduce((s, c) => s + c.impressions, 0) };
     return {

@@ -324,7 +324,7 @@ export async function connectionCheck(cfg, { capiTest } = {}) {
     try {
       granted = ((await graph(cfg, 'me/permissions'))?.data || []).filter((p) => p.status === 'granted').map((p) => p.permission);
     } catch (e) {
-      out.token = { valid: false, error: e.message };
+      out.token = { valid: false, error: e.message, auth: e.kind === 'auth' };
       return out;
     }
   }

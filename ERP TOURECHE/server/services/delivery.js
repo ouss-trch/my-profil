@@ -3,6 +3,7 @@ import * as shopify from '../integrations/shopify.js';
 import { request } from '../lib/http.js';
 import { projectConfig } from '../lib/settings.js';
 import { badRequest, daysBetween, nowIso } from '../lib/util.js';
+import { WILAYAS } from '../lib/wilayas.js';
 import { storeBase } from './pages.js';
 
 /**
@@ -155,12 +156,14 @@ export function summarizeRates(rates) {
       .filter((x) => x !== null);
     return v.length ? { min: Math.min(...v), max: Math.max(...v) } : null;
   };
-  // العدد على 58 ولاية (ما يعرفه الزبون وتعمل به شركات التوصيل؛ 59–69 تُشحن باسم ولايتها الأم) — كما يحسبه القالب
-  const classic = rates.filter((r) => r.code <= 58);
+  // التوصيل متوفر لجميع الولايات (69): ما لا تغطيه شركة تغطيه أخرى، فلا يُعرض «51 من 58».
+  // «بلا سعر» معلومة منفصلة تخص نموذج الطلب في المتجر: ولاية بلا سعر في جدول القالب يرفضها النموذج حتى يُوضع لها سعر.
+  const priced = new Set(rates.filter(isServed).map((r) => r.code));
   return {
     wilayas: rates.length,
-    served: classic.filter(isServed).length,
-    not_served: classic.filter((r) => !isServed(r)).map((r) => r.name),
+    served: WILAYAS.length,
+    priced: priced.size,
+    unpriced: WILAYAS.filter((w) => !priced.has(w.code)).map((w) => w.ar),
     desk: range('desk'),
     home: range('home'),
   };
@@ -296,7 +299,6 @@ export function deliveryFacts(projectId) {
   return {
     carriers: d.carriers,
     wilayas_served: s.served || null,
-    not_served: s.not_served,
     desk_price_from_da: s.desk?.min ?? null,
     home_price_from_da: s.home?.min ?? null,
     exact_price: 'يظهر في نموذج الطلب حسب الولاية ونوع التوصيل (مكتب أو منزل) قبل التأكيد',

@@ -10,6 +10,7 @@ import { useApp } from '../components/ProjectContext.jsx';
 import AttributionNotice from '../components/AttributionNotice.jsx';
 import LandingPages from '../components/LandingPages.jsx';
 import TrafficCard from '../components/Traffic.jsx';
+import LiveVisitors from '../components/LiveVisitors.jsx';
 import BrokenLinks from '../components/BrokenLinks.jsx';
 import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, cx, useAction } from '../components/ui.jsx';
 
@@ -129,6 +130,7 @@ export default function StorePages() {
         <p className="text-xs text-muted">{t(['الطلبيات تُنسب للصفحة التي أُرسل منها النموذج، والزوار من عدّاد المتجر (آخر 30 يوماً).', 'Commandes attribuées à la page du formulaire, visiteurs du compteur de la boutique (30 derniers jours).'])}</p>
       </div>
       <AttributionNotice health={data?.attribution} />
+      <LiveVisitors />
       <TrafficCard />
       <BrokenLinks />
       <LandingPages />
