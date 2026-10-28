@@ -905,39 +905,41 @@ function Drafts() {
   if (!data.length) return <Card><Empty icon={FileText} title={t(['لا مسودات', 'Aucun brouillon'])} /></Card>;
   return (
     <Card pad={false}>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t('c.name')}</th>
-            <th>{t('c.product')}</th>
-            <th>{t('c.status')}</th>
-            <th>{t('c.date')}</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((d) => (
-            <tr key={d.id}>
-              <td className="font-medium">{d.name}</td>
-              <td>{d.product_id ? <Link className="link" to={`/products/${d.product_id}`}>{d.product_title}</Link> : '—'}</td>
-              <td>
-                <Badge tone={d.status === 'published' ? 'good' : d.status === 'failed' ? 'bad' : 'neutral'}>{d.status === 'published' ? t(['أُنشئت على Meta', 'Créée sur Meta']) : d.status === 'failed' ? t(['فشلت', 'Échec']) : t(['مسودة', 'Brouillon'])}</Badge>
-              </td>
-              <td className="text-xs text-muted">{dateOnly(d.updated_at || d.created_at, lang)}</td>
-              <td>
-                <div className="flex gap-1">
-                  {d.status !== 'published' && d.product_id && (
-                    <Button size="sm" variant="primary" icon={Rocket} onClick={() => setOpen(d)}>
-                      {t(['متابعة', 'Continuer'])}
-                    </Button>
-                  )}
-                  {d.status !== 'published' && <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/ads/drafts/${d.id}`)).then((r) => r && reload(true))} />}
-                </div>
-              </td>
+      <div className="overflow-x-auto">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('c.name')}</th>
+              <th>{t('c.product')}</th>
+              <th>{t('c.status')}</th>
+              <th>{t('c.date')}</th>
+              <th />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr key={d.id}>
+                <td className="font-medium">{d.name}</td>
+                <td>{d.product_id ? <Link className="link" to={`/products/${d.product_id}`}>{d.product_title}</Link> : '—'}</td>
+                <td>
+                  <Badge tone={d.status === 'published' ? 'good' : d.status === 'failed' ? 'bad' : 'neutral'}>{d.status === 'published' ? t(['أُنشئت على Meta', 'Créée sur Meta']) : d.status === 'failed' ? t(['فشلت', 'Échec']) : t(['مسودة', 'Brouillon'])}</Badge>
+                </td>
+                <td className="text-xs text-muted">{dateOnly(d.updated_at || d.created_at, lang)}</td>
+                <td>
+                  <div className="flex gap-1">
+                    {d.status !== 'published' && d.product_id && (
+                      <Button size="sm" variant="primary" icon={Rocket} onClick={() => setOpen(d)}>
+                        {t(['متابعة', 'Continuer'])}
+                      </Button>
+                    )}
+                    {d.status !== 'published' && <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/ads/drafts/${d.id}`)).then((r) => r && reload(true))} />}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {open && <LaunchCampaign productId={open.product_id} projectId={project} draft={open} open onClose={() => (setOpen(null), reload(true))} />}
     </Card>
   );

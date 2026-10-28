@@ -921,23 +921,25 @@ function AdTab({ p, f, set, onLaunch }) {
       </div>
       <Card title={t(['حملات هذا المنتج', 'Campagnes de ce produit'])} pad={false}>
         {tst?.campaigns?.length ? (
-          <table className="table">
-            <tbody>
-              {tst.campaigns.map((c) => (
-                <tr key={c.campaign_id}>
-                  <td className="font-medium">
-                    <Link className="link" to={`/ads?campaign=${c.campaign_id}&account=${c.account_id}`}>
-                      {c.name}
-                    </Link>
-                  </td>
-                  <td>
-                    <Badge tone={c.effective_status === 'ACTIVE' ? 'good' : c.issues?.length ? 'bad' : 'neutral'}>{c.effective_status}</Badge>
-                  </td>
-                  <td className="num text-end">{c.daily_budget ? money(c.daily_budget, c.currency) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="table">
+              <tbody>
+                {tst.campaigns.map((c) => (
+                  <tr key={c.campaign_id}>
+                    <td className="font-medium">
+                      <Link className="link" to={`/ads?campaign=${c.campaign_id}&account=${c.account_id}`}>
+                        {c.name}
+                      </Link>
+                    </td>
+                    <td>
+                      <Badge tone={c.effective_status === 'ACTIVE' ? 'good' : c.issues?.length ? 'bad' : 'neutral'}>{c.effective_status}</Badge>
+                    </td>
+                    <td className="num text-end">{c.daily_budget ? money(c.daily_budget, c.currency) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <Empty icon={Megaphone} title={t(['لا حملات مرتبطة', 'Aucune campagne liée'])}>
             {t(['أطلق حملة من هنا، أو اربط حملة موجودة من صفحة الإعلانات.', 'Lancez-en une ou liez une campagne existante depuis Pubs.'])}

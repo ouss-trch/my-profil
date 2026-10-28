@@ -93,21 +93,23 @@ export default function Finance() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title={t(['المصاريف المسجلة', 'Dépenses enregistrées'])} pad={false}>
               {data.expenses.length ? (
-                <table className="table">
-                  <tbody>
-                    {data.expenses.map((e) => (
-                      <tr key={e.id}>
-                        <td className="text-xs text-muted">{dateOnly(e.date, lang)}</td>
-                        <td>{e.category}</td>
-                        <td className="text-xs text-sub">{e.note}</td>
-                        <td className="num text-end">{da(e.amount)}</td>
-                        <td>
-                          <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/finance/expenses/${e.id}`)).then((r) => r && reload(true))} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="table">
+                    <tbody>
+                      {data.expenses.map((e) => (
+                        <tr key={e.id}>
+                          <td className="text-xs text-muted">{dateOnly(e.date, lang)}</td>
+                          <td>{e.category}</td>
+                          <td className="text-xs text-sub">{e.note}</td>
+                          <td className="num text-end">{da(e.amount)}</td>
+                          <td>
+                            <Button aria-label={t('c.delete')} size="sm" variant="ghost" icon={Trash2} onClick={() => run('del', () => api.del(`/finance/expenses/${e.id}`)).then((r) => r && reload(true))} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <Empty icon={Wallet} title={t(['لا مصاريف مسجلة', 'Aucune dépense'])} />
               )}

@@ -142,41 +142,45 @@ export default function Today() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={t(['الأكثر طلباً اليوم', 'Top produits du jour'])} icon={ArrowUpRight} pad={false}>
           {d.top_products.length ? (
-            <table className="table">
-              <tbody>
-                {d.top_products.map((p) => (
-                  <tr key={p.title}>
-                    <td className="font-medium">{p.product_id ? <Link className="link" to={`/products/${p.product_id}`}>{p.title}</Link> : p.title}</td>
-                    <td className="num text-end">{n0(p.orders)} {t(['طلبية', 'cmd'])}</td>
-                    <td className="num text-end text-sub">× {n0(p.qty)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="table">
+                <tbody>
+                  {d.top_products.map((p) => (
+                    <tr key={p.title}>
+                      <td className="font-medium">{p.product_id ? <Link className="link" to={`/products/${p.product_id}`}>{p.title}</Link> : p.title}</td>
+                      <td className="num text-end">{n0(p.orders)} {t(['طلبية', 'cmd'])}</td>
+                      <td className="num text-end text-sub">× {n0(p.qty)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <Empty icon={ShoppingBag} title={t(['لا طلبيات اليوم بعد', "Pas encore de commande aujourd'hui"])} />
           )}
         </Card>
         <Card title={t(['مخزون منخفض', 'Stock faible'])} icon={Package} pad={false}>
           {d.low_stock.length ? (
-            <table className="table">
-              <tbody>
-                {d.low_stock.map((p) => (
-                  <tr key={p.id}>
-                    <td className="font-medium">
-                      <Link className="link" to={`/products/${p.id}`}>
-                        {p.title}
-                      </Link>
-                    </td>
-                    <td className="text-end">
-                      <Badge tone={p.stock <= 0 ? 'bad' : 'warn'}>
-                        {n0(p.stock)} / {n0(p.low_stock)}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="table">
+                <tbody>
+                  {d.low_stock.map((p) => (
+                    <tr key={p.id}>
+                      <td className="font-medium">
+                        <Link className="link" to={`/products/${p.id}`}>
+                          {p.title}
+                        </Link>
+                      </td>
+                      <td className="text-end">
+                        <Badge tone={p.stock <= 0 ? 'bad' : 'warn'}>
+                          {n0(p.stock)} / {n0(p.low_stock)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <Empty icon={Truck} title={t(['المخزون جيد', 'Stock OK'])} />
           )}

@@ -255,24 +255,26 @@ function CustomerDrawer({ phone, onClose, onChanged }) {
             <p className="mt-2 text-xs text-muted">{t(['الطلبيات الجديدة من رقم محظور تُوسم تلقائياً للتنبيه.', 'Les nouvelles commandes d’un numéro bloqué sont marquées automatiquement.'])}</p>
           </Card>
           <Card title={t('c.orders')} pad={false}>
-            <table className="table">
-              <tbody>
-                {data.orders.map((o) => (
-                  <tr key={o.id}>
-                    <td>
-                      <button type="button" className="link" onClick={() => setOrderId(o.id)}>
-                        {o.shopify_name || o.ref}
-                      </button>
-                      <div className="text-xs text-muted">{ago(o.created_at, lang)}</div>
-                    </td>
-                    <td>
-                      <StatusBadge status={o.status} />
-                    </td>
-                    <td className="num text-end">{da(o.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="table">
+                <tbody>
+                  {data.orders.map((o) => (
+                    <tr key={o.id}>
+                      <td>
+                        <button type="button" className="link" onClick={() => setOrderId(o.id)}>
+                          {o.shopify_name || o.ref}
+                        </button>
+                        <div className="text-xs text-muted">{ago(o.created_at, lang)}</div>
+                      </td>
+                      <td>
+                        <StatusBadge status={o.status} />
+                      </td>
+                      <td className="num text-end">{da(o.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Card>
         </div>
       )}

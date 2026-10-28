@@ -159,32 +159,34 @@ export default function Dashboard() {
           )}
           {tab === 'products' && (
             <Card pad={false}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{t('c.product')}</th>
-                    <th className="text-end">{t('c.orders')}</th>
-                    <th className="text-end">{t(['الكمية', 'Qté'])}</th>
-                    <th className="text-end">{t(['مؤكدة', 'Conf.'])}</th>
-                    <th className="text-end">{t(['مسلّمة', 'Livr.'])}</th>
-                    <th className="text-end">{t(['مرتجعة', 'Ret.'])}</th>
-                    <th className="text-end">{t(['الإيراد', 'CA'])}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.products.map((p) => (
-                    <tr key={p.product_id || p.title}>
-                      <td className="font-medium">{p.title}</td>
-                      <td className="num text-end">{p.orders}</td>
-                      <td className="num text-end">{p.qty}</td>
-                      <td className="num text-end">{p.confirmed}</td>
-                      <td className="num text-end">{p.delivered}</td>
-                      <td className="num text-end">{p.returned}</td>
-                      <td className="num text-end">{da(p.revenue)}</td>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t('c.product')}</th>
+                      <th className="text-end">{t('c.orders')}</th>
+                      <th className="text-end">{t(['الكمية', 'Qté'])}</th>
+                      <th className="text-end">{t(['مؤكدة', 'Conf.'])}</th>
+                      <th className="text-end">{t(['مسلّمة', 'Livr.'])}</th>
+                      <th className="text-end">{t(['مرتجعة', 'Ret.'])}</th>
+                      <th className="text-end">{t(['الإيراد', 'CA'])}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {d.products.map((p) => (
+                      <tr key={p.product_id || p.title}>
+                        <td className="font-medium">{p.title}</td>
+                        <td className="num text-end">{p.orders}</td>
+                        <td className="num text-end">{p.qty}</td>
+                        <td className="num text-end">{p.confirmed}</td>
+                        <td className="num text-end">{p.delivered}</td>
+                        <td className="num text-end">{p.returned}</td>
+                        <td className="num text-end">{da(p.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {!d.products.length && <Empty />}
             </Card>
           )}
@@ -251,28 +253,30 @@ export default function Dashboard() {
           )}
           {tab === 'agents' && (
             <Card pad={false}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{t(['الموظف', 'Agent'])}</th>
-                    <th className="text-end">{t(['مؤكدة', 'Confirmées'])}</th>
-                    <th className="text-end">{t(['ملغاة', 'Annulées'])}</th>
-                    <th className="text-end">{t(['لا يرد', 'Sans rép.'])}</th>
-                    <th className="text-end">{t(['النسبة', 'Taux'])}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.agents.map((a) => (
-                    <tr key={a.id}>
-                      <td>{a.display_name || a.username}</td>
-                      <td className="num text-end">{a.confirmed}</td>
-                      <td className="num text-end">{a.cancelled}</td>
-                      <td className="num text-end">{a.no_answer}</td>
-                      <td className="num text-end">{a.confirmed + a.cancelled ? pct((100 * a.confirmed) / (a.confirmed + a.cancelled)) : '—'}</td>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t(['الموظف', 'Agent'])}</th>
+                      <th className="text-end">{t(['مؤكدة', 'Confirmées'])}</th>
+                      <th className="text-end">{t(['ملغاة', 'Annulées'])}</th>
+                      <th className="text-end">{t(['لا يرد', 'Sans rép.'])}</th>
+                      <th className="text-end">{t(['النسبة', 'Taux'])}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {d.agents.map((a) => (
+                      <tr key={a.id}>
+                        <td>{a.display_name || a.username}</td>
+                        <td className="num text-end">{a.confirmed}</td>
+                        <td className="num text-end">{a.cancelled}</td>
+                        <td className="num text-end">{a.no_answer}</td>
+                        <td className="num text-end">{a.confirmed + a.cancelled ? pct((100 * a.confirmed) / (a.confirmed + a.cancelled)) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {!d.agents.length && <Empty title={t(['لا نشاط تأكيد مسجّل باسم موظف في هذه الفترة', 'Aucune confirmation enregistrée par un agent'])} />}
             </Card>
           )}

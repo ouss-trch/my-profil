@@ -312,19 +312,21 @@ function ReportsTab() {
           </Card>
           {c.evaluations?.length > 0 && (
             <Card title={t(['التقييمات', 'Évaluations'])} icon={Target} pad={false}>
-              <table className="table">
-                <tbody>
-                  {c.evaluations.map((e, k) => (
-                    <tr key={k}>
-                      <td className="w-14">
-                        <span className={cx('flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold', { A: 'bg-good/15 text-good', B: 'bg-good/10 text-good', C: 'bg-warn/15 text-warn', D: 'bg-bad/10 text-bad', E: 'bg-bad/20 text-bad' }[e.grade])}>{e.grade}</span>
-                      </td>
-                      <td className="w-40 font-medium">{e.area}</td>
-                      <td className="text-sm leading-6 text-sub">{e.comment}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <tbody>
+                    {c.evaluations.map((e, k) => (
+                      <tr key={k}>
+                        <td className="w-14">
+                          <span className={cx('flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold', { A: 'bg-good/15 text-good', B: 'bg-good/10 text-good', C: 'bg-warn/15 text-warn', D: 'bg-bad/10 text-bad', E: 'bg-bad/20 text-bad' }[e.grade])}>{e.grade}</span>
+                        </td>
+                        <td className="w-40 font-medium">{e.area}</td>
+                        <td className="text-sm leading-6 text-sub">{e.comment}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           )}
           {c.conclusions?.length > 0 && (

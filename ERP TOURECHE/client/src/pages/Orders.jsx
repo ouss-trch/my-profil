@@ -943,43 +943,45 @@ export function OrderDrawer({ id, onClose, onChanged }) {
                 </div>
               </div>
             ) : (
-            <table className="table">
-              <tbody>
-                {o.items.map((i, k) => (
-                  <tr key={k}>
-                    <td>
-                      {i.product_id ? (
-                        <Link className="link" to={`/products/${i.product_id}`}>
-                          {i.title}
-                        </Link>
-                      ) : (
-                        i.title
-                      )}
-                      {i.variant && <span className="text-xs text-muted"> · {i.variant}</span>}
-                    </td>
-                    <td className="num text-end">× {i.qty}</td>
-                    <td className="num text-end">{da(i.price * i.qty)}</td>
-                  </tr>
-                ))}
-                <tr>
-                  <td className="text-sub">{t(['التوصيل', 'Livraison'])}</td>
-                  <td />
-                  <td className="num text-end">{da(o.shipping_fee)}</td>
-                </tr>
-                {o.discount > 0 && (
+            <div className="overflow-x-auto">
+              <table className="table">
+                <tbody>
+                  {o.items.map((i, k) => (
+                    <tr key={k}>
+                      <td>
+                        {i.product_id ? (
+                          <Link className="link" to={`/products/${i.product_id}`}>
+                            {i.title}
+                          </Link>
+                        ) : (
+                          i.title
+                        )}
+                        {i.variant && <span className="text-xs text-muted"> · {i.variant}</span>}
+                      </td>
+                      <td className="num text-end">× {i.qty}</td>
+                      <td className="num text-end">{da(i.price * i.qty)}</td>
+                    </tr>
+                  ))}
                   <tr>
-                    <td className="text-sub">{t(['تخفيض', 'Remise'])}</td>
+                    <td className="text-sub">{t(['التوصيل', 'Livraison'])}</td>
                     <td />
-                    <td className="num text-end">−{da(o.discount)}</td>
+                    <td className="num text-end">{da(o.shipping_fee)}</td>
                   </tr>
-                )}
-                <tr>
-                  <td className="font-semibold">{t('c.total')}</td>
-                  <td />
-                  <td className="num text-end font-semibold">{da(o.total)}</td>
-                </tr>
-              </tbody>
-            </table>
+                  {o.discount > 0 && (
+                    <tr>
+                      <td className="text-sub">{t(['تخفيض', 'Remise'])}</td>
+                      <td />
+                      <td className="num text-end">−{da(o.discount)}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="font-semibold">{t('c.total')}</td>
+                    <td />
+                    <td className="num text-end font-semibold">{da(o.total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             )}
           </Card>
 

@@ -670,28 +670,30 @@ function UsersTab() {
         </Button>
       </div>
       <Card pad={false}>
-        <table className="table">
-          <tbody>
-            {data.map((u) => (
-              <tr key={u.id}>
-                <td>
-                  <div className="font-medium">{u.display_name}</div>
-                  <div className="text-xs text-muted">@{u.username}</div>
-                </td>
-                <td>
-                  <Badge tone={u.role === 'admin' ? 'brand' : 'neutral'}>{t(ROLES[u.role])}</Badge>
-                </td>
-                <td>{u.active ? <Badge tone="good">{t('c.active')}</Badge> : <Badge tone="bad">{t(['معطّل', 'Désactivé'])}</Badge>}</td>
-                <td className="text-xs text-muted">{u.last_login_at ? ago(u.last_login_at, lang) : '—'}</td>
-                <td>
-                  <Button size="sm" onClick={() => setEdit({ ...u, password: '' })}>
-                    {t('c.edit')}
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="table">
+            <tbody>
+              {data.map((u) => (
+                <tr key={u.id}>
+                  <td>
+                    <div className="font-medium">{u.display_name}</div>
+                    <div className="text-xs text-muted">@{u.username}</div>
+                  </td>
+                  <td>
+                    <Badge tone={u.role === 'admin' ? 'brand' : 'neutral'}>{t(ROLES[u.role])}</Badge>
+                  </td>
+                  <td>{u.active ? <Badge tone="good">{t('c.active')}</Badge> : <Badge tone="bad">{t(['معطّل', 'Désactivé'])}</Badge>}</td>
+                  <td className="text-xs text-muted">{u.last_login_at ? ago(u.last_login_at, lang) : '—'}</td>
+                  <td>
+                    <Button size="sm" onClick={() => setEdit({ ...u, password: '' })}>
+                      {t('c.edit')}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
       <ul className="list-disc space-y-1 ps-5 text-xs text-muted">
         <li>{t(['المدير: كل شيء، بما فيه الإعدادات والمستخدمون والحذف الجماعي.', 'Admin : tout, y compris paramètres, utilisateurs et suppression en masse.'])}</li>
@@ -1123,42 +1125,58 @@ function System() {
       </div>
       {data.backup && <BackupCard b={data.backup} />}
       <Card title={t(['المهام الدورية', 'Tâches planifiées'])} pad={false}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t(['المهمة', 'Tâche'])}</th>
-              <th>{t('c.project')}</th>
-              <th>{t(['آخر تشغيل', 'Dernier run'])}</th>
-              <th>{t(['آخر نجاح', 'Dernier succès'])}</th>
-              <th>{t('c.status')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data.jobs || []).map((j) => (
-              <tr key={`${j.job}-${j.project_id}`}>
-                <td className="font-medium">{j.label || j.job}</td>
-                <td className="text-xs">{pname(j.project_id)}</td>
-                <td className="text-xs text-muted">{j.last_run_at ? ago(j.last_run_at, lang) : '—'}</td>
-                <td className="text-xs text-muted">{j.last_ok_at ? dateTime(j.last_ok_at, lang) : '—'}</td>
-                <td>{j.fail_count ? <Badge tone="bad" title={j.last_error}>{t(['فشل ×{n}', 'Échec ×{n}'], { n: j.fail_count })}</Badge> : <Badge tone="good">OK</Badge>}</td>
+        <div className="overflow-x-auto">
+          <table className="table max-sm:[&_td]:px-2 max-sm:[&_th]:px-2">
+            <thead>
+              <tr>
+                <th>{t(['المهمة', 'Tâche'])}</th>
+                <th className="hidden sm:table-cell">{t('c.project')}</th>
+                <th>{t(['آخر تشغيل', 'Dernier run'])}</th>
+                <th>{t(['آخر نجاح', 'Dernier succès'])}</th>
+                <th>{t('c.status')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-      {data.effects?.length > 0 && (
-        <Card title={t(['آثار جانبية فشلت (n8n، Shopify، CAPI)', 'Effets en échec (n8n, Shopify, CAPI)'])} pad={false}>
-          <table className="table">
+            </thead>
             <tbody>
-              {data.effects.map((e, k) => (
-                <tr key={k}>
-                  <td className="text-xs">{e.label || e.key}</td>
-                  <td className="ltr text-xs text-bad">{e.error}</td>
-                  <td className="text-xs text-muted">{e.at ? ago(e.at, lang) : ''}</td>
+              {(data.jobs || []).map((j) => (
+                <tr key={`${j.job}-${j.project_id}`}>
+                  <td className="font-medium">
+                    {j.label || j.job}
+                    <span className="block text-xs font-normal text-muted sm:hidden">{pname(j.project_id)}</span>
+                  </td>
+                  <td className="hidden text-xs sm:table-cell">{pname(j.project_id)}</td>
+                  <td className="text-xs text-muted">{j.last_run_at ? ago(j.last_run_at, lang) : '—'}</td>
+                  <td className="text-xs text-muted">
+                    {j.last_ok_at ? (
+                      <>
+                        <span className="sm:hidden">{ago(j.last_ok_at, lang)}</span>
+                        <span className="hidden sm:inline">{dateTime(j.last_ok_at, lang)}</span>
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>{j.fail_count ? <Badge tone="bad" title={j.last_error}>{t(['فشل ×{n}', 'Échec ×{n}'], { n: j.fail_count })}</Badge> : <Badge tone="good">OK</Badge>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      </Card>
+      {data.effects?.length > 0 && (
+        <Card title={t(['آثار جانبية فشلت (n8n، Shopify، CAPI)', 'Effets en échec (n8n, Shopify, CAPI)'])} pad={false}>
+          <div className="overflow-x-auto">
+            <table className="table">
+              <tbody>
+                {data.effects.map((e, k) => (
+                  <tr key={k}>
+                    <td className="text-xs">{e.label || e.key}</td>
+                    <td className="ltr text-xs text-bad">{e.error}</td>
+                    <td className="text-xs text-muted">{e.at ? ago(e.at, lang) : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
     </div>
