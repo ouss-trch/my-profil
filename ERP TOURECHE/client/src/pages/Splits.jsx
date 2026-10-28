@@ -60,7 +60,7 @@ function HowItWorks() {
 
 /** حالة الربط مع Shopify: السنيبت في القالب + مزامنة الإعدادات */
 function ShopifyPanel() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { isAll } = useApp();
   const { data, error, loading, reload } = useApi('/splits/shopify/status', { skip: isAll });
   const { run, busy } = useAction();
@@ -123,6 +123,17 @@ function ShopifyPanel() {
         {data.installed && data.beacon && <TrackingBadge health={data.tracking} />}
         {!data.beacon && <span className="text-xs text-muted">{t(['عدّ الزوار يحتاج الـ ERP على الـ VPS (عنوان عام): الحكم الآن بالطلبيات مقارنة بنِسب التوزيع', 'Le comptage des visiteurs exige l’ERP sur le VPS (adresse publique) : verdict sur les commandes rapportées aux poids'])}</span>}
       </div>
+      {data.sync?.skipped?.length > 0 && (
+        <p className="mt-3 rounded-lg bg-warn/5 p-3 text-xs leading-6 text-sub">
+          {t(
+            [
+              'لا يُوجَّه أي زائر إلى هذه النسخ لأن صفحتها لم تعد في المتجر (سُحبت، أو تغيّر القالب المنشور): {list}. أعد نشر الصفحة من «صفحات الهبوط»، أو أنهِ الاختبار.',
+              'Aucun visiteur n’est envoyé vers ces versions, leur page n’existe plus dans la boutique (retirée, ou thème changé) : {list}. Republiez la page (Landing pages) ou terminez le test.',
+            ],
+            { list: data.sync.skipped.map((x) => `${x.test} · ${x.label}`).join(lang === 'ar' ? '، ' : ', ') },
+          )}
+        </p>
+      )}
       {data.paste_broken && (
         <p className="mt-3 rounded-lg bg-bad/5 p-3 text-xs leading-6 text-bad">
           {t([

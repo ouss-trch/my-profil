@@ -48,7 +48,7 @@ export function pageKey(raw) {
 /** من أين جاء الزائر: إعلان (Meta/Google/TikTok/حملة)، شبكات، بحث، تنقّل داخل المتجر، مباشر */
 export function sourceOf(params, referrer, storeHost) {
   const s = String(params.get('utm_source') || '').toLowerCase();
-  if (params.has('fbclid') || /^(fb|ig|an|msg)$|facebook|instagram|meta|messenger/.test(s)) return 'meta';
+  if (params.has('fbclid') || /^(fb|ig|an|msg|th)$|facebook|instagram|meta|messenger|threads/.test(s)) return 'meta';
   if (params.has('gclid') || params.has('gbraid') || params.has('wbraid') || /google|adwords|youtube/.test(s)) return 'google';
   if (params.has('ttclid') || /tiktok/.test(s)) return 'tiktok';
   if (s) return 'campaign';

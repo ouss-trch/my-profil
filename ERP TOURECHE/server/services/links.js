@@ -116,3 +116,110 @@ export async function fixLink(projectId, { path, target }) {
   const existing = await shopify.findUrlRedirect(cfg, encoded);
   return existing ? shopify.updateUrlRedirect(cfg, existing.id, encoded, dest) : shopify.createUrlRedirect(cfg, encoded, dest);
 }
+
+// ——— فحص رابط الإعلان ———
+const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 13; SM-A145F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+/** عنوان عام فقط (https باسم نطاق، لا IP ولا اسم داخلي ولا منفذ): الـ ERP لا يفتح شبكته الداخلية بطلب من المستخدم */
+const publicHttps = (u) => u.protocol === 'https:' && !u.port && !u.username && /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(u.hostname) && !/\.(local|internal|lan|home|localhost)$/i.test(u.hostname);
+const bareHost = (h) => String(h || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+const pathOf = (u) => decode(u.pathname).replace(/\/+$/, '') || '/';
+
+/** معرّفات البيكسل في الصفحة: إعدادات القالب، fbq('init')، صورة noscript، أو إعدادات بيكسل تطبيق في Shopify */
+export function pixelIdsIn(html) {
+  const ids = new Set();
+  for (const re of [/pixelId["']?\s*:\s*["'](\d{6,20})["']/g, /fbq\(\s*['"]init['"]\s*,\s*['"](\d{6,20})['"]/g, /facebook\.com\/tr\/?\?id=(\d{6,20})/g, /pixel_?id\\*["']\s*:\s*\\*["'](\d{6,20})/gi])
+    for (const m of String(html).matchAll(re)) ids.add(m[1]);
+  return [...ids];
+}
+
+/** موانع الإطلاق: لا زائر يصل إلى صفحة تعمل. البقية (البيكسل، التحويلات، السرعة…) تنبيهات تُعرض للتاجر */
+export const LINK_BLOCKERS = new Set(['not_found', 'http_error', 'redirect_loop', 'redirect_unsafe', 'sold_out']);
+
+/**
+ * يفتح رابط الإعلان كما يفتحه زائر من هاتفه: الوجهة النهائية والتحويلات، الرابط الأساسي (canonical)، البيكسل، نموذج الطلب، التوفر، السرعة.
+ * مؤشرات Meta (مشاهدة الصفحة بعد النقر، تكلفة النتيجة، ما تتعلمه الخوارزمية) تُحسب على هذه الصفحة: رابط مكسور أو تحويل يضيّع النقرة المدفوعة.
+ * ok: true لا مانع، false فيه مانع (LINK_BLOCKERS)، null تعذّر الفحص (لا يُمنع الإطلاق بسببه).
+ */
+export async function checkAdLink(projectId, link, { pixelId } = {}) {
+  const cfg = projectConfig(projectId);
+  let start;
+  try {
+    start = new URL(String(link || '').trim());
+  } catch {
+    throw badRequest('link_invalid');
+  }
+  if (!publicHttps(start)) throw badRequest('link_invalid');
+  const problems = [];
+  const add = (code, level, params) => problems.push(params ? { code, level, params } : { code, level });
+  const hops = [];
+  let url = start;
+  let res;
+  let unsafe = null;
+  const t0 = Date.now();
+  try {
+    for (let i = 0; i < 6; i++) {
+      res = await fetch(url, { redirect: 'manual', headers: { 'user-agent': MOBILE_UA, 'accept-language': 'ar-DZ,ar;q=0.9,fr;q=0.8' }, signal: AbortSignal.timeout(15000) });
+      const loc = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+      if (!loc) break;
+      const next = new URL(loc, url);
+      hops.push({ status: res.status, to: next.href });
+      if (!publicHttps(next)) {
+        unsafe = next.href;
+        break;
+      }
+      url = next;
+    }
+  } catch {
+    return { ok: null, url: start.href, problems: [{ code: 'unreachable', level: 'warn' }] };
+  }
+  const html = res.ok ? (await res.text()).slice(0, 3e6) : '';
+  const ms = Date.now() - t0;
+  if (unsafe) add('redirect_unsafe', 'high', { to: unsafe });
+  else if (res.status === 404) add('not_found', 'high');
+  else if (res.status >= 300 && res.status < 400) add('redirect_loop', 'high');
+  else if (res.status >= 400) add('http_error', 'high', { status: res.status });
+  if (hops.length) add(bareHost(url.hostname) === bareHost(start.hostname) ? 'redirect' : 'redirect_other_domain', 'warn', { to: url.href });
+  const store = bareHost(cfg.store_domain);
+  if (store && bareHost(url.hostname) !== store) add('not_store_domain', 'warn', { store });
+  const canonicalRaw = /<link[^>]+rel=["']canonical["'][^>]*>/i.exec(html)?.[0]?.match(/href=["']([^"']+)["']/i)?.[1] || null;
+  let canonical = null;
+  try {
+    canonical = canonicalRaw ? new URL(canonicalRaw.replace(/&amp;/g, '&'), url) : null;
+  } catch {
+    canonical = null;
+  }
+  if (res.ok && canonical && pathOf(canonical) !== pathOf(url)) add('canonical_mismatch', 'warn', { canonical: canonical.href });
+  const pixels = pixelIdsIn(html);
+  const expected = String(pixelId || cfg.meta_pixel_id || '');
+  if (res.ok && !pixels.length) add('pixel_missing', 'high');
+  else if (res.ok && expected && !pixels.includes(expected)) add('pixel_mismatch', 'high', { expected, found: pixels.join(', ') });
+  const product = /\/products\//.test(url.pathname);
+  const hasForm = /data-lead-form|data-erp-lp|action=["'][^"']*\/cart\/add/i.test(html);
+  if (res.ok && product && !hasForm) add('form_missing', 'warn');
+  if (res.ok && /<meta[^>]+property=["']product:availability["'][^>]+content=["']out of stock["']/i.test(html)) add('sold_out', 'high');
+  if (ms > 3000) add('slow', 'warn', { ms });
+  if (/[?&]utm_/i.test(start.search)) add('params_in_link', 'info');
+  return {
+    ok: !problems.some((p) => LINK_BLOCKERS.has(p.code)),
+    url: start.href,
+    final_url: url.href,
+    status: res.status,
+    hops,
+    ms,
+    canonical: canonical?.href || null,
+    pixels,
+    has_form: hasForm,
+    problems,
+  };
+}
+
+/** الرابط الذي يوضع في الإعلان: الصفحة نفسها دون معاملات التتبّع (تذهب إلى «معاملات URL» في Meta) */
+export function cleanAdLink(link) {
+  try {
+    const u = new URL(String(link).trim());
+    for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid$|gclid$|ttclid$)/i.test(k)) u.searchParams.delete(k);
+    return u.href;
+  } catch {
+    return link;
+  }
+}

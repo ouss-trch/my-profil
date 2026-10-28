@@ -9,6 +9,7 @@ import { toDa } from './analytics.js';
 import { getProduct } from './products.js';
 import { inList } from './projects.js';
 import { lossRate, returnCost as returnCostOf, returnsByOrder } from './returns.js';
+import { LINK_BLOCKERS, checkAdLink, cleanAdLink } from './links.js';
 
 /**
  * «الإعلانات والاختبارات»: من المنتج إلى الحملة إلى القرار — بأرقام الطلبيات الحقيقية (المؤكدة والمسلّمة) لا بأرقام البيكسل.
@@ -390,6 +391,12 @@ export function platformHistory(projectId) {
   return { facebook_orders: count(/fb|facebook/i), instagram_orders: count(/ig|insta/i) };
 }
 
+/**
+ * «معاملات URL» للإعلان (url_tags، تملؤها Meta عند كل نقرة): المنصة الفعلية (fb / ig / msg / an / th) ومعرّفات الحملة
+ * والمجموعة والإعلان، فتُنسب كل طلبية إلى إعلانها بالضبط. تُكتب عند الإنشاء: تغييرها بعد النشر يعيد المجموعة إلى مرحلة التعلّم.
+ */
+export const AD_URL_TAGS = 'utm_source={{site_source_name}}&utm_medium=paid&utm_campaign={{campaign.id}}&utm_term={{adset.id}}&utm_content={{ad.id}}';
+
 export const productLink = (cfg, p) => p.online_url || (cfg.store_domain && p.handle && p.shopify_id ? `https://${cfg.store_domain}/products/${p.handle}` : null);
 
 const DEFAULT_KEYS = ['account_id', 'page_id', 'pixel_id', 'platforms', 'age_min', 'age_max', 'genders', 'countries', 'daily_budget', 'cta'];
@@ -407,8 +414,13 @@ export async function launchTest(projectId, productId, o) {
   const pageId = o.pageId || cfg.meta_page_id;
   if (!pageId) throw new HttpError(400, 'page_not_configured');
   const acct = await meta.accountInfo(cfg, accountId);
-  const link = o.link || productLink(cfg, p);
+  // رابط الإعلان = الصفحة نفسها، ومعاملات التتبّع في «معاملات URL» (url_tags) لا داخل الرابط
+  const link = cleanAdLink(o.link || productLink(cfg, p));
   if (!link) throw badRequest('product_link_missing');
+  // صفحة مكسورة أو نفد مخزونها: Meta تحسب النقرة وتدفع ثمنها، ولا زائر يصل — لا تُنشأ الحملة
+  const check = await checkAdLink(projectId, link, { pixelId: o.pixelId === 'none' ? null : o.pixelId }).catch(() => null);
+  const blocker = check?.problems.find((x) => LINK_BLOCKERS.has(x.code));
+  if (blocker) throw badRequest(`ad_link_${blocker.code}`);
   if (!o.imageUrl && !o.postId && !o.igMediaId) throw badRequest('image_required');
   // الميزانية اليومية بعملة الحساب (مثلاً 5 يورو) أو بالدينار وتُحوَّل
   const fx = acct.currency === 'DZD' ? 1 : acct.currency === 'EUR' ? getSetting('fx_eur_dza') || 270 : getSetting('fx_usd_dza') || 250;
@@ -438,7 +450,8 @@ export async function launchTest(projectId, productId, o) {
     pixelId,
     pageId,
     igUserId: o.igUserId || (pageId === cfg.meta_page_id ? cfg.meta_ig_user_id : null) || undefined,
-    link: `${link}${link.includes('?') ? '&' : '?'}utm_source=${short === 'IG' ? 'ig' : short === 'FB' ? 'fb' : 'meta'}&utm_medium=paid&utm_campaign=p${p.id}`,
+    link,
+    urlTags: AD_URL_TAGS,
     message: o.primaryText,
     headline: o.headline,
     description: o.description,

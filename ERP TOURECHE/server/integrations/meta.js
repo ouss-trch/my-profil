@@ -385,6 +385,8 @@ export async function createCreative(cfg, accountId, o) {
       },
     };
   }
+  // معاملات التتبّع في «معاملات URL» لا داخل الرابط: الرابط يبقى الصفحة الأساسية (canonical) التي تقيسها Meta
+  if (o.urlTags) body.url_tags = o.urlTags;
   return graph(cfg, `${actId(accountId)}/adcreatives`, { method: 'POST', body });
 }
 

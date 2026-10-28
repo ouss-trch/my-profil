@@ -5,6 +5,7 @@ import { v } from '../lib/util.js';
 import { projectScope } from '../services/projects.js';
 import * as ads from '../services/ads.js';
 import { runJob } from '../services/sync.js';
+import { checkAdLink } from '../services/links.js';
 
 export const adsRouter = Router();
 const pid = (req) => projectScope(req, { allowAll: false }).id;
@@ -53,6 +54,9 @@ adsRouter.post('/meta-setup', requireRole('admin'), requireSensitive, async (req
 
 // ——— إطلاق حملة لأي منتج + المسودات + الإعدادات الدائمة ———
 adsRouter.get('/launch/:productId', (req, res) => res.json(ads.launchContext(pid(req), Number(req.params.productId))));
+
+// فحص رابط الإعلان قبل الإطلاق (الوجهة، التحويلات، البيكسل، نموذج الطلب، التوفر)
+adsRouter.get('/link-check', requireRole('admin', 'manager'), async (req, res) => res.json(await checkAdLink(pid(req), req.query.url, { pixelId: req.query.pixel_id })));
 
 adsRouter.put('/launch-defaults', requireRole('admin', 'manager'), (req, res) => res.json(ads.saveLaunchDefaults(pid(req), req.body || {})));
 

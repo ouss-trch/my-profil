@@ -1106,7 +1106,9 @@ export async function unpublishLanding(id) {
     throw await scopesError(cfg, e);
   }
   db.prepare("UPDATE landing_pages SET status = 'unpublished', redirect_id = NULL, updated_at = ? WHERE id = ?").run(nowIso(), id);
-  return getLanding(id);
+  // قالبها لم يعد في المتجر: نسختها في اختبارات A/B تتوقف أيضاً (كما عند الحذف)، وإلا ذهب زوارها إلى صفحة المنتج العادية
+  const tests = detachPage(l.project_id, l.template_suffix || `lp-${l.slug}`);
+  return { ...getLanding(id), tests };
 }
 
 /**
@@ -1125,7 +1127,7 @@ export async function deleteLanding(id) {
       throw await scopesError(cfg, e, l.visuals.some((x) => x.shopify_url) ? [...LANDING_SCOPES, 'write_files'] : LANDING_SCOPES);
     }
   }
-  const tests = detachPage(l.project_id, `lp-${l.slug}`);
+  const tests = detachPage(l.project_id, l.template_suffix || `lp-${l.slug}`);
   const base = storeBase(l.project_id);
   if (base && l.target_url) {
     try {

@@ -5,6 +5,7 @@ import { setSetting } from '../server/lib/settings.js';
 import { createProject } from '../server/services/projects.js';
 import { createProduct } from '../server/services/products.js';
 import * as landing from '../server/services/landing.js';
+import * as splits from '../server/services/splits.js';
 
 // ——— Claude وهمي: يسجّل الطلب ويعيد نصاً منظماً (فيه زيادات يجب أن تُقصّ) ———
 const aiCalls = [];
@@ -198,12 +199,36 @@ test('landing: publish = layout without header/footer + section + product templa
   await landing.publishLanding(l.id);
   assert.equal(redirects.length, 1);
 
+  // اختبار A/B جارٍ: صفحة المنتج + هذه الصفحة + صفحة أخرى
+  const ab = splits.createTest(project.id, {
+    name: 'Thermos angles',
+    entry_path: 'https://souqnna.example/products/thermos-mickey-320',
+    variants: [
+      { url: 'https://souqnna.example/products/thermos-mickey-320', weight: 1 },
+      { url: 'https://souqnna.example/products/thermos-mickey-320?view=lp-thermos-mickey-cadeau', weight: 1 },
+      { url: 'https://souqnna.example/pages/thermos-promo', weight: 1 },
+    ],
+  });
+  splits.updateTest(ab.id, { status: 'running' });
+  const live = () => splits.shopifyConfig(project.id).tests.find((x) => x.s === ab.slug).v.map((x) => x.l);
+  assert.deepEqual(live(), ['A', 'B', 'C']);
+  // تغيّر القالب المنشور (القالب الجديد بلا ‎product.lp-…‎): النسخة B لا يُوجَّه إليها أحد
+  assert.deepEqual(splits.shopifyConfig(project.id, new Set()).tests.find((x) => x.s === ab.slug).v.map((x) => x.l), ['A', 'C']);
+
   // السحب: حذف التحويل والقالب، والنص يبقى
   const off = await landing.unpublishLanding(l.id);
   assert.equal(off.status, 'unpublished');
   assert.equal(redirects.length, 0);
   assert.equal(files['templates/product.lp-thermos-mickey-cadeau.json'], undefined);
   assert.equal(off.copy.hero.headline, copy.hero.headline);
+  // …ونسختها في الاختبار تتوقف (كان زوارها يرون صفحة المنتج العادية والاختبار يقارن الصفحة بنفسها)
+  assert.equal(off.tests.tests, 1);
+  assert.deepEqual(live(), ['A', 'C']);
+  assert.equal(db.prepare("SELECT active FROM split_variants WHERE test_id = ? AND label = 'B'").get(ab.id).active, 0);
+  // حتى لو بقيت النسخة مفعّلة في قاعدة قديمة: الصفحة غير منشورة فلا تُرسل إلى المتجر
+  db.prepare("UPDATE split_variants SET active = 1 WHERE test_id = ? AND label = 'B'").run(ab.id);
+  assert.deepEqual(live(), ['A', 'C']);
+  splits.deleteTest(ab.id);
 });
 
 test('landing: a missing Shopify permission is named (redirects need write_online_store_navigation)', async () => {

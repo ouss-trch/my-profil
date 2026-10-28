@@ -160,8 +160,17 @@ export function updateTest(id, input) {
   return after;
 }
 
+/** قالب الصفحة في رابط النسخة (‎?view=lp-…‎ لصفحات الهبوط)، بأحرف صغيرة */
+const viewOf = (url) => {
+  try {
+    return (new URL(url, 'https://store.invalid').searchParams.get('view') || '').toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
 /**
- * صفحة حُذفت (صفحة هبوط ‎?view=…‎): تُعطَّل نسختها في الاختبارات غير المنتهية حتى لا يُرسل زوار الإعلان إلى صفحة غير موجودة؛
+ * صفحة حُذفت أو سُحبت من المتجر (صفحة هبوط ‎?view=…‎): تُعطَّل نسختها في الاختبارات غير المنتهية حتى لا يُرسل زوار الإعلان إلى صفحة غير موجودة؛
  * اختبار جارٍ بقيت له أقل من نسختين يتوقف مؤقتاً. يُرجع عدد الاختبارات المتأثرة وأسماء الموقوفة.
  */
 export function detachPage(projectId, view) {
@@ -169,13 +178,7 @@ export function detachPage(projectId, view) {
   const rows = db
     .prepare("SELECT sv.id, sv.test_id, sv.url FROM split_variants sv JOIN split_tests t ON t.id = sv.test_id WHERE t.project_id = ? AND t.status != 'ended' AND sv.active = 1")
     .all(projectId)
-    .filter((x) => {
-      try {
-        return (new URL(x.url, 'https://store.invalid').searchParams.get('view') || '').toLowerCase() === v;
-      } catch {
-        return false;
-      }
-    });
+    .filter((x) => viewOf(x.url) === v);
   const touched = new Set(rows.map((x) => x.test_id));
   const paused = [];
   db.transaction(() => {
@@ -538,36 +541,68 @@ const relTarget = (url, storeDomain) => {
   return `${u.pathname}${u.search}`;
 };
 
-/** الإعدادات التي تُكتب في metafield: الاختبارات الجارية + الاختبارات المنتهية بفائز (توجيه دائم إليه) */
-export function shopifyConfig(projectId) {
+/**
+ * الإعدادات التي تُكتب في metafield: الاختبارات الجارية + الاختبارات المنتهية بفائز (توجيه دائم إليه).
+ * لا يُوجَّه أي زائر إلى نسخة صفحتها غير موجودة: صفحة هبوط غير منشورة في الـ ERP (سُحبت)، أو قالبها ‎product.lp-…‎ غائب
+ * عن القالب المنشور (views: قوالب ‎lp-…‎ الموجودة فعلاً، إن عُرفت؛ تغيّر القالب مثلاً). وإلا رأى زوارها صفحة المنتج العادية
+ * والاختبار يقارن الصفحة بنفسها. skipped: النسخ المستبعدة، تُعرض للتاجر.
+ */
+function buildShopifyConfig(projectId, views = null) {
   const cfg = projectConfig(projectId);
+  const withdrawn = new Set(
+    db
+      .prepare("SELECT LOWER(COALESCE(NULLIF(template_suffix, ''), 'lp-' || slug)) AS v FROM landing_pages WHERE project_id = ? AND status != 'published'")
+      .all(projectId)
+      .map((r) => r.v),
+  );
+  const gone = (url) => {
+    const v = viewOf(url);
+    return Boolean(v) && (withdrawn.has(v) || (Boolean(views) && v.startsWith('lp-') && !views.has(v)));
+  };
   const rows = db.prepare("SELECT * FROM split_tests WHERE project_id = ? AND mode = 'shopify' AND status IN ('running','ended')").all(projectId).map(hydrate);
   const tests = [];
+  const skipped = [];
   for (const t of rows) {
     if (!t.entry_path) continue;
     if (t.status === 'running') {
-      const v = t.variants.filter((x) => x.active && x.weight > 0).map((x) => ({ l: x.label, u: relTarget(x.url, cfg.store_domain), w: x.weight }));
+      const live = t.variants.filter((x) => x.active && x.weight > 0);
+      for (const x of live.filter((y) => gone(y.url))) skipped.push({ test: t.name, label: x.label, url: x.url });
+      const v = live.filter((x) => !gone(x.url)).map((x) => ({ l: x.label, u: relTarget(x.url, cfg.store_domain), w: x.weight }));
       if (v.length) tests.push({ s: t.slug, st: t.sticky ? 1 : 0, c: 1, v });
     } else if (t.winner_variant_id) {
       const w = t.variants.find((x) => x.id === t.winner_variant_id);
-      const target = w && relTarget(w.url, cfg.store_domain);
+      const target = w && !gone(w.url) && relTarget(w.url, cfg.store_domain);
       // الفائز المعتمد: رابط الإعلان يبقى يوجّه إليه (صفحة المنتج العادية لا تتغيّر)
       if (target) tests.push({ s: t.slug, st: 0, c: 0, v: [{ l: w.label, u: target, w: 1 }] });
+      else if (w) skipped.push({ test: t.name, label: w.label, url: w.url });
     }
   }
   const base = publicBase(cfg);
   // v3: عدّاد الزوار على كل الصفحات (k = المشروع) + التوزيع بمفتاح رابط الإعلان (erp_t). السنيبتات القديمة (v1/v2) لا تعمل بهذه الإعدادات
-  return { v: 3, b: base ? `${base}/api/hooks` : null, k: getProject(projectId)?.slug || null, tests };
+  return { conf: { v: 3, b: base ? `${base}/api/hooks` : null, k: getProject(projectId)?.slug || null, tests }, skipped };
+}
+export const shopifyConfig = (projectId, views = null) => buildShopifyConfig(projectId, views).conf;
+
+/** قوالب صفحات الهبوط الموجودة في القالب المنشور (‎product.lp-x‎ ← ‎lp-x‎)؛ null إن تعذّرت القراءة: لا تُستبعد نسخة دون يقين */
+async function liveViews(cfg) {
+  try {
+    const theme = await shopify.mainTheme(cfg);
+    if (!theme) return null;
+    const names = await shopify.themeFileNames(cfg, theme.id, 'templates/product.lp-*');
+    return new Set(names.map((f) => f.replace(/^templates\/product\./, '').replace(/\.(json|liquid)$/, '').toLowerCase()));
+  } catch {
+    return null;
+  }
 }
 
 const syncState = new Map();
 export async function syncShopify(projectId) {
   const cfg = projectConfig(projectId);
   if (!shopify.isConfigured(cfg)) throw new HttpError(400, 'shopify_not_configured');
-  const conf = shopifyConfig(projectId);
+  const { conf, skipped } = buildShopifyConfig(projectId, await liveViews(cfg));
   await shopify.setShopJsonMetafield(cfg, shopify.SPLIT_NAMESPACE, shopify.SPLIT_KEY, conf);
-  syncState.set(projectId, { at: nowIso(), tests: conf.tests.length, error: null });
-  return { tests: conf.tests.length };
+  syncState.set(projectId, { at: nowIso(), tests: conf.tests.length, skipped, error: null });
+  return { tests: conf.tests.length, skipped };
 }
 function syncShopifyQuiet(projectId) {
   if (!shopify.isConfigured(projectConfig(projectId))) return;

@@ -38,6 +38,7 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
   const [draftId, setDraftId] = useState(null);
   const [done, setDone] = useState(null);
   const [confirmActivate, setConfirmActivate] = useState(false);
+  const [linkCheck, setLinkCheck] = useState(null);
 
   useEffect(() => {
     if (!open || !productId) return;
@@ -142,6 +143,7 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
     if (f.source === 'fb_post' && !f.post_id) problems.push(t(['اختر منشوراً', 'Choisissez une publication']));
     if (f.source === 'ig_post' && !f.ig_media_id) problems.push(t(['اختر منشور إنستغرام', 'Choisissez une publication Instagram']));
     if (f.source === 'image' && !f.primary_text?.trim()) problems.push(t(['اكتب النص الأساسي', 'Rédigez le texte principal']));
+    if (f.source !== 'fb_post' && linkCheck?.link === f.link && linkCheck.result?.ok === false) problems.push(t(['صفحة رابط الإعلان فيها مانع (انظر فحص الرابط)', 'La page du lien a un problème bloquant (voir la vérification)']));
   }
 
   const saveDraft = async () => {
@@ -396,6 +398,7 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
                     </Field>
                   </div>
                   <PageSuggest id="pinned-urls-launch" />
+                  {f.source !== 'fb_post' && <LinkCheck link={f.link} pixelId={f.pixel_id} projectId={projectId} onUse={(link) => set({ link })} onResult={setLinkCheck} />}
                 </div>
               )}
             </Section>
@@ -460,6 +463,94 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
         </div>
       )}
     </Modal>
+  );
+}
+
+const LINK_PROBLEMS = {
+  not_found: ['الصفحة غير موجودة (404): Meta تحسب النقرة ولا يصل أحد', 'Page introuvable (404) : Meta compte le clic, personne n’arrive'],
+  http_error: ['الصفحة لا تفتح (خطأ {status})', 'La page ne s’ouvre pas (erreur {status})'],
+  redirect_loop: ['تحويلات لا تنتهي', 'Redirections sans fin'],
+  redirect_unsafe: ['تحويل إلى عنوان غير آمن', 'Redirection vers une adresse non sûre'],
+  sold_out: ['المنتج نفد مخزونه', 'Produit en rupture'],
+  redirect: ['الرابط يحوّل إلى صفحة أخرى: كل تحويل يؤخّر الزائر ويُضيّع «مشاهدات الصفحة»؛ ضع الرابط النهائي', 'Le lien redirige : chaque redirection retarde le visiteur et fait perdre des « vues de page » ; mettez le lien final'],
+  redirect_other_domain: ['الرابط يمرّ بنطاق آخر قبل المتجر: ضع رابط المتجر مباشرة (النطاق الموثّق والبيكسل على المتجر)', 'Le lien passe par un autre domaine : mettez directement celui de la boutique'],
+  not_store_domain: ['الصفحة ليست على نطاق متجرك ({store})', 'La page n’est pas sur le domaine de la boutique ({store})'],
+  canonical_mismatch: ['الرابط الأساسي للصفحة مختلف عن رابط الإعلان', 'L’URL canonique diffère du lien de l’annonce'],
+  pixel_missing: ['لا بيكسل Meta في الصفحة: لن تُحسب المشاهدات ولا الطلبيات', 'Aucun pixel Meta sur la page : ni vues ni commandes comptées'],
+  pixel_mismatch: ['بيكسل الصفحة ({found}) ليس بيكسل الحملة ({expected}): النتائج لن تُنسب إليها', 'Le pixel de la page ({found}) n’est pas celui de la campagne ({expected})'],
+  form_missing: ['لا نموذج طلب في الصفحة', 'Aucun formulaire de commande sur la page'],
+  slow: ['الصفحة بطيئة ({s} ث)', 'Page lente ({s} s)'],
+  params_in_link: ['معاملات التتبّع في الرابط تُنقل إلى «معاملات URL» في Meta تلقائياً', 'Les paramètres de suivi passent dans « Paramètres d’URL » de Meta'],
+  unreachable: ['تعذّر فتح الرابط من الـ ERP الآن (الإطلاق غير ممنوع)', 'Lien injoignable depuis l’ERP pour l’instant (lancement non bloqué)'],
+};
+const LEVEL_TONE = { high: 'text-bad', warn: 'text-warn', info: 'text-muted' };
+
+/**
+ * فحص رابط الإعلان تلقائياً عند كتابته: الوجهة النهائية، التحويلات، البيكسل، نموذج الطلب، التوفر، السرعة.
+ * مانع (404، نفد المخزون…) يوقف الإنشاء؛ التنبيهات تُعرض فقط.
+ */
+function LinkCheck({ link, pixelId, projectId, onUse, onResult }) {
+  const { t } = useI18n();
+  const [state, setState] = useState({ link: '', result: null, loading: false });
+  useEffect(() => {
+    const url = String(link || '').trim();
+    if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(url)) {
+      setState({ link: url, result: null, loading: false });
+      onResult?.(null);
+      return undefined;
+    }
+    let off = false;
+    const timer = setTimeout(() => {
+      setState({ link: url, result: null, loading: true });
+      api.get(`/ads/link-check?url=${encodeURIComponent(url)}${pixelId && pixelId !== 'none' ? `&pixel_id=${encodeURIComponent(pixelId)}` : ''}`, { project: projectId }).then(
+        (r) => {
+          if (off) return;
+          setState({ link: url, result: r, loading: false });
+          onResult?.({ link: url, result: r });
+        },
+        () => !off && setState({ link: url, result: null, loading: false }),
+      );
+    }, 700);
+    return () => {
+      off = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [link, pixelId, projectId]);
+  const r = state.result;
+  if (state.loading) return <p className="mt-2 text-xs text-muted">{t(['يفحص صفحة الرابط كما يفتحها زائر الإعلان…', 'Vérification de la page comme un visiteur de l’annonce…'])}</p>;
+  if (!r) return null;
+  const moved = r.final_url && r.final_url !== r.url;
+  return (
+    <div className="mt-2 space-y-1.5 rounded-lg border border-line p-2.5 text-xs">
+      {r.ok !== null && (
+        <p className={cx('flex flex-wrap items-center gap-x-2 gap-y-1', r.ok ? 'text-good' : 'text-bad')}>
+          {r.ok ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+          <b>{r.ok ? t(['الصفحة تفتح', 'La page s’ouvre']) : t(['مانع: لا إطلاق على هذا الرابط', 'Bloquant : pas de lancement sur ce lien'])}</b>
+          <span className="text-muted">
+            {[r.status && `HTTP ${r.status}`, r.ms != null && t(['{s} ث', '{s} s'], { s: (r.ms / 1000).toFixed(1) }), r.pixels?.length ? t(['بيكسل {id}', 'pixel {id}'], { id: r.pixels.join(', ') }) : null, r.has_form ? t(['نموذج الطلب ✓', 'formulaire ✓']) : null].filter(Boolean).join(' · ')}
+          </span>
+        </p>
+      )}
+      {r.problems.map((p) => (
+        <p key={p.code} className={cx('flex items-start gap-1.5', LEVEL_TONE[p.level])}>
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{t(LINK_PROBLEMS[p.code] || [p.code, p.code], { ...(p.params || {}), s: p.params?.ms ? (p.params.ms / 1000).toFixed(1) : '' })}</span>
+        </p>
+      ))}
+      {moved && (
+        <p className="flex flex-wrap items-center gap-2 text-muted">
+          <span className="ltr break-all">→ {r.final_url}</span>
+          <Button size="sm" variant="ghost" onClick={() => onUse(r.final_url)}>
+            {t(['استعمل الرابط النهائي', 'Utiliser le lien final'])}
+          </Button>
+        </p>
+      )}
+      <p className="text-[11px] leading-5 text-muted">
+        {t(['يُضاف للإعلان في «معاملات URL»، وMeta تملؤه عند كل نقرة (المنصة والحملة والمجموعة والإعلان) فتُنسب كل طلبية إلى إعلانها:', 'Ajouté dans « Paramètres d’URL », rempli par Meta à chaque clic (plateforme, campagne, ensemble, annonce) :'])}{' '}
+        <code className="ltr inline-block break-all rounded bg-raised px-1">utm_source={'{{site_source_name}}'}&utm_medium=paid&utm_campaign={'{{campaign.id}}'}&utm_term={'{{adset.id}}'}&utm_content={'{{ad.id}}'}</code>
+      </p>
+    </div>
   );
 }
 
