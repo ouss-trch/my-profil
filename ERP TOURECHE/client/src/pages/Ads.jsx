@@ -946,7 +946,7 @@ function Drafts() {
 const CHECKS = {
   account_active: ['الحساب نشط', 'Compte actif'],
   payment_method: ['وسيلة دفع مضافة', 'Moyen de paiement'],
-  token_never_expires: ['الرمز لا ينتهي (System User)', 'Jeton permanent (System User)'],
+  token_never_expires: ['الرمز لا ينتهي (وإلا فتاريخ انتهائه)', 'Jeton permanent (sinon sa date de fin)'],
   token_valid: ['الرمز صالح', 'Jeton valide'],
   pixel_set: ['البيكسل محدد', 'Pixel défini'],
   pixel_events_48h: ['البيكسل يستقبل أحداثاً (48 ساعة)', 'Pixel actif (48 h)'],

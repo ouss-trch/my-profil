@@ -24,6 +24,7 @@ for (const [k, v] of [
 const sent = [];
 let reject = null;
 let scopes = ['ads_read', 'business_management', 'pages_show_list', 'pages_read_engagement'];
+let tokenExtra = {};
 globalThis.fetch = async (url, init = {}) => {
   const json = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
   const u = new URL(String(url));
@@ -33,7 +34,7 @@ globalThis.fetch = async (url, init = {}) => {
     sent.push({ data: JSON.parse(form.get('data')), test: form.get('test_event_code') });
     return json({ events_received: 1, messages: [], fbtrace_id: 'trace' });
   }
-  if (u.pathname.endsWith('/debug_token')) return json({ data: { app_id: '42', application: 'Toureche ERP', is_valid: true, expires_at: 0, scopes } });
+  if (u.pathname.endsWith('/debug_token')) return json({ data: { app_id: '42', application: 'Toureche ERP', is_valid: true, expires_at: 0, scopes, ...tokenExtra } });
   if (u.pathname.endsWith('/act_514592591530411')) return json({ id: 'act_514592591530411', name: 'ADcompte 1', account_status: 1, currency: 'USD' });
   if (u.pathname.endsWith('/2111277745999858/stats')) return json({ data: [{ data: [{ value: 'Purchase', count: 3 }] }] });
   if (u.pathname.endsWith('/2111277745999858')) return json({ id: '2111277745999858', name: 'SOU9NA', last_fired_time: '2026-10-27T21:33:16+0000' });
@@ -155,7 +156,7 @@ test('meta check: the token, its permissions, the accounts, pixel and page, and 
   const cfg = (await import('../server/lib/settings.js')).projectConfig(p.id);
   const r = await connectionCheck(cfg, { capiTest: () => sendTestEvent(p.id, 'TEST9') });
   assert.deepEqual(r.app, { id: '42', name: 'Toureche ERP' });
-  assert.deepEqual(r.token, { valid: true, expires_at: 0, never_expires: true });
+  assert.deepEqual(r.token, { valid: true, expires_at: 0, never_expires: true, data_access_expires_at: null, type: null });
   assert.deepEqual(r.scopes.missing, ['ads_management'], 'campaigns cannot be launched without it');
   assert.ok(r.scopes.optional_missing.includes('pages_manage_posts'));
   assert.deepEqual(r.accounts, [{ id: '514592591530411', name: 'ADcompte 1', status: 1, ok: true }]);
@@ -166,5 +167,10 @@ test('meta check: the token, its permissions, the accounts, pixel and page, and 
   assert.equal(sent.at(-1).test, 'TEST9');
   scopes = [...scopes, 'ads_management'];
   assert.deepEqual((await connectionCheck(cfg)).scopes.missing, []);
+  // رمز مستخدم من Graph API Explorer بعد «Extend Access Token»: ينتهي بعد نحو شهرين، والواجهة تعرض التاريخ لا «لا ينتهي»
+  const sixtyDays = Math.floor(Date.now() / 1000) + 60 * 86400;
+  tokenExtra = { type: 'USER', expires_at: sixtyDays, data_access_expires_at: sixtyDays + 30 * 86400 };
+  assert.deepEqual((await connectionCheck(cfg)).token, { valid: true, expires_at: sixtyDays, never_expires: false, data_access_expires_at: sixtyDays + 30 * 86400, type: 'USER' });
+  tokenExtra = {};
   await assert.rejects(sendTestEvent(p.id, ''), (e) => e.code === 'capi_test_code_required');
 });

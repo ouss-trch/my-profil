@@ -4,7 +4,7 @@ import { Database, KeyRound, Plug, Plus, Save, Server, Settings as SettingsIcon,
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
-import { ago, dateTime } from '../lib/format.js';
+import { ago, dateOnly, dateTime } from '../lib/format.js';
 import { PageHeader } from '../components/Layout.jsx';
 import { useApp } from '../components/ProjectContext.jsx';
 import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Modal, Select, Tabs, Toggle, cx, useAction } from '../components/ui.jsx';
@@ -51,10 +51,10 @@ const PROJECT_GROUPS = [
     fields: [
       {
         k: 'meta_access_token',
-        label: ['رمز System User (لا ينتهي)', 'Jeton System User (permanent)'],
+        label: ['رمز Meta (System User لا ينتهي، أو رمز مستخدم 60 يوماً)', 'Jeton Meta (System User permanent, ou utilisateur 60 jours)'],
         hint: [
-          'Business Manager ← الإعدادات ← مستخدمو النظام ← إنشاء رمز، بصلاحيات ads_read وbusiness_management (وads_management لإطلاق الحملات، وpages_show_list وpages_read_engagement للصفحة). احفظه، ثم اضغط «اكتشاف من Meta» لملء الباقي.',
-          'Business Manager → Paramètres → Utilisateurs système → Générer un jeton (ads_read, business_management ; ads_management pour lancer ; pages_show_list, pages_read_engagement pour la page). Enregistrez, puis « Détecter depuis Meta ».',
+          'الأفضل: Business Manager ← الإعدادات ← مستخدمو النظام ← Générer un token بمدة «Jamais»، بصلاحيات ads_read وbusiness_management (وads_management لإطلاق الحملات، وpages_show_list وpages_read_engagement للصفحة). إن علقت عند «Vérifier le compte»: رمز مستخدم من Graph API Explorer ← Access Token Debugger ← Extend Access Token (60 يوماً)، ويُجدَّد قبل انتهائه: «اختبار» يعرض تاريخ الانتهاء. احفظه، ثم اضغط «اكتشاف من Meta» لملء الباقي.',
+          'Idéal : Business Manager → Paramètres → Utilisateurs système → Générer un token, durée « Jamais » (ads_read, business_management ; ads_management pour lancer ; pages_show_list, pages_read_engagement pour la page). Bloqué à « Vérifier le compte » : jeton utilisateur via Graph API Explorer → Access Token Debugger → Extend Access Token (60 jours), à renouveler avant la fin : « Tester » affiche la date. Enregistrez, puis « Détecter depuis Meta ».',
         ],
       },
       { k: 'meta_ad_account_ids', label: ['الحسابات الإعلانية للمشروع (افصل بفاصلة)', 'Comptes pub du projet (virgules)'], type: 'list', ltr: true, hint: ['تُملأ بـ «اكتشاف من Meta»، أو من صفحة الإعلانات ← Business Manager', 'Rempli par « Détecter depuis Meta », ou Pubs → Business Manager'] },
@@ -269,12 +269,24 @@ function MetaCheck({ result: r }) {
     </li>
   );
   const scopeList = (list) => list.map((x) => `${x} (${t(SCOPE_USE[x] || [x, x])})`).join(lang === 'ar' ? '، ' : ', ');
+  // رمز ينتهي: التاريخ الفعلي والأيام المتبقية (الأبكر بين انتهاء الرمز وانتهاء الوصول للبيانات)، لا عبارة «لا ينتهي» الخاطئة
+  const tk = r?.token || {};
+  const until = [tk.expires_at, tk.data_access_expires_at].filter((x) => x > 0).sort((a, b) => a - b)[0] || null;
+  const days = until ? Math.ceil((until * 1000 - Date.now()) / 864e5) : null;
+  const renew =
+    tk.type === 'USER'
+      ? t(['جدّده بنفس الخطوات قبل ذلك: Graph API Explorer ← Access Token Debugger ← Extend Access Token. الأفضل رمز System User لا ينتهي.', 'Renouvelez-le avant : Graph API Explorer → Access Token Debugger → Extend Access Token. Le mieux : un jeton System User permanent.'])
+      : t(['جدّده من «مستخدمو النظام» ← Générer un token.', 'Renouvelez-le : Utilisateurs système → Générer un token.']);
+  const daysAr = days === 1 ? 'يوم' : days === 2 ? 'يومين' : days >= 3 && days <= 10 ? `${days} أيام` : `${days} يوماً`;
+  const expiryDetail = until ? `${t(days > 0 ? ['ينتهي {d} (بعد {n}).', 'Expire le {d} (dans {f} j).'] : ['انتهى {d}.', 'Expiré le {d}.'], { d: dateOnly(new Date(until * 1000).toISOString(), lang), n: daysAr, f: days })} ${renew}` : null;
   if (r?.token?.valid === false && !r.scopes) return <p className="mt-3 rounded-lg bg-bad/5 p-2 text-xs text-bad">{t(['الرمز مرفوض من Meta: أنشئ رمزاً جديداً لمستخدم النظام وضعه هنا.', 'Jeton refusé par Meta : générez un nouveau jeton System User.'])}</p>;
   return (
     <ul className="mt-3 space-y-1.5 rounded-lg border border-line p-3 text-xs">
       {r.app && row(true, t(['التطبيق', 'Application']), `${r.app.name || ''} (${r.app.id})`, 'app')}
       {row(r.token?.valid ?? null, t(['الرمز صالح', 'Jeton valide']), null, 'valid')}
-      {row(r.token?.never_expires ?? null, t(['الرمز لا ينتهي', 'Jeton permanent']), r.token?.never_expires === false ? t(['ينتهي: أنشئه من «مستخدمو النظام» بمدة «أبداً»', 'Expire : générez-le depuis « Utilisateurs système », durée « Jamais »']) : null, 'expiry')}
+      {tk.never_expires === false && until
+        ? row(days > 14, t(['صلاحية الرمز', 'Validité du jeton']), expiryDetail, 'expiry')
+        : row(tk.never_expires ?? null, t(['الرمز لا ينتهي', 'Jeton permanent']), tk.never_expires === false ? t(['ينتهي: أنشئه من «مستخدمو النظام» بمدة «Jamais»', 'Expire : générez-le depuis « Utilisateurs système », durée « Jamais »']) : null, 'expiry')}
       {r.scopes && row(!r.scopes.missing.length, t(['الصلاحيات الأساسية', 'Autorisations de base']), r.scopes.missing.length ? t(['ناقصة: {x}', 'Manquantes : {x}'], { x: scopeList(r.scopes.missing) }) : null, 'scopes')}
       {r.scopes?.optional_missing?.length > 0 && row(null, t(['صلاحيات إضافية غير مفعّلة (عند الحاجة)', 'Autorisations facultatives absentes']), scopeList(r.scopes.optional_missing), 'optional')}
       {(r.accounts || []).map((a) => row(a.ok, t(['الحساب الإعلاني', 'Compte pub']), a.error ? t(['لا وصول: أسنده لمستخدم النظام في Business Manager', 'Pas d’accès : assignez-le à l’utilisateur système']) : `${a.name || a.id}${a.ok ? '' : ` · ${t(['غير نشط', 'inactif'])}`}`, `acc-${a.id}`))}

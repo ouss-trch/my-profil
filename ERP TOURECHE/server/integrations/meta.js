@@ -39,7 +39,8 @@ export async function graph(cfg, path, { method = 'GET', params = {}, body, toke
       // خطآن يقعان عند تغيير التطبيق أو مستخدم النظام، ورسالة Meta لهما بالإنجليزية لا تقول ما العمل: رمز يُترجم في الواجهة
       //  - 190: الرمز ميت (انتهى، أُلغي، أو حُذف التطبيق أو مستخدم النظام الذي أُنشئ به)
       //  - 1885183: التطبيق في وضع التطوير، فترفض Meta تصميم الإعلان حتى يُنشر (Live)
-      const known = err.error_subcode === 1885183 ? 'meta_app_dev_mode' : err.code === 190 ? 'meta_token_invalid' : null;
+      //  - appsecret_proof: التطبيق يشترط «Require App Secret» والـ ERP لا يرسل البرهان
+      const known = err.error_subcode === 1885183 ? 'meta_app_dev_mode' : err.code === 190 ? 'meta_token_invalid' : /appsecret_proof/i.test(err.message || '') ? 'meta_app_secret_required' : null;
       throw new IntegrationError('meta', kind, known || err.error_user_msg || err.message || e.message, { code: err.code, subcode: err.error_subcode });
     }
     throw e;
@@ -296,7 +297,14 @@ export async function connectionCheck(cfg, { capiTest } = {}) {
     }
   }
   out.app = info?.app_id ? { id: info.app_id, name: info.application || null } : null;
-  out.token = { valid: info ? Boolean(info.is_valid) : true, expires_at: info?.expires_at ?? null, never_expires: info ? info.expires_at === 0 : null };
+  // رمز المستخدم (type USER) ينتهي بعد نحو 60 يوماً، ورمز System User بمدة «Never» لا ينتهي: الواجهة تعرض التاريخ الفعلي
+  out.token = {
+    valid: info ? Boolean(info.is_valid) : true,
+    expires_at: info?.expires_at ?? null,
+    never_expires: info ? info.expires_at === 0 : null,
+    data_access_expires_at: info?.data_access_expires_at ?? null,
+    type: info?.type || null,
+  };
   out.scopes = { granted, missing: TOKEN_SCOPES.required.filter((s) => !granted.includes(s)), optional_missing: TOKEN_SCOPES.optional.filter((s) => !granted.includes(s)) };
   for (const id of cfg.meta_ad_account_ids || []) {
     try {
@@ -395,7 +403,7 @@ export async function accountHealth(cfg, accountId) {
   const checks = [
     { key: 'account_active', ok: info.account_status === 1, value: info.account_status },
     { key: 'payment_method', ok: Boolean(info.funding_source_details), value: info.funding_source_details?.display_string || null },
-    { key: 'token_never_expires', ok: tokenInfo ? tokenInfo.expires_at === 0 : null, value: tokenInfo?.expires_at ?? null },
+    { key: 'token_never_expires', ok: tokenInfo ? tokenInfo.expires_at === 0 : null, value: tokenInfo?.expires_at > 0 ? new Date(tokenInfo.expires_at * 1000).toISOString().slice(0, 10) : null },
     { key: 'token_valid', ok: tokenInfo ? Boolean(tokenInfo.is_valid) : null },
     { key: 'pixel_set', ok: Boolean(cfg.meta_pixel_id) },
     { key: 'pixel_events_48h', ok: pixelFresh, value: pixel?.last_fired_time || null },
