@@ -10,6 +10,7 @@ import { getProduct } from './products.js';
 import { inList } from './projects.js';
 import { lossRate, returnCost as returnCostOf, returnsByOrder } from './returns.js';
 import { LINK_BLOCKERS, checkAdLink, cleanAdLink } from './links.js';
+import { metaAlerts } from './metaHealth.js';
 
 /**
  * «الإعلانات والاختبارات»: من المنتج إلى الحملة إلى القرار — بأرقام الطلبيات الحقيقية (المؤكدة والمسلّمة) لا بأرقام البيكسل.
@@ -246,6 +247,7 @@ export function decisions(projectId, days = 7) {
   const out = [];
   const push = (d) => out.push({ id: `${d.kind}:${d.product_id || d.campaign_id || d.account_id || ''}`, ...d });
   if (meta.isConfigured(cfg) && !fxSet()) push({ kind: 'fx_not_set', severity: 'high', action: 'open_settings' });
+  for (const a of metaAlerts(projectId, cfg)) push(a);
   for (const t of productTests(projectId, days)) {
     const running = t.campaigns.filter((c) => c.effective_status === 'ACTIVE');
     if (t.verdict === 'losing' && running.length)
@@ -430,7 +432,7 @@ export async function launchTest(projectId, productId, o) {
     if (!meta.postLinksTo(post, link)) {
       if (post.kind === 'video') throw badRequest('ad_post_video_no_link');
       if (!post.image) throw badRequest('ad_post_no_image');
-      o = { ...o, postId: undefined, imageUrl: post.image, primaryText: o.primaryText || post.text, headline: o.headline || p.title.slice(0, 80) };
+      o = { ...o, postId: undefined, imageUrl: post.image, primaryText: o.primaryText || post.text, headline: o.headline || p.title.slice(0, 60) };
       rebuilt = true;
     }
   }
@@ -773,6 +775,8 @@ export async function editCampaign(projectId, campaignId, { section, data }) {
       description: data.description,
       imageHash: data.image_hash,
       cta: data.cta,
+      // التصميم الجديد يحمل «معاملات URL» نفسها (وإلا فقدت الطلبيات نسبتها إلى الإعلان بعد أي تعديل)
+      urlTags: data.url_tags || AD_URL_TAGS,
     });
   } else if (section === 'activate') await meta.activateCascade(cfg, campaignId);
   else if (section === 'pause') await meta.setStatus(cfg, data?.id || campaignId, 'PAUSED');
@@ -782,10 +786,17 @@ export async function editCampaign(projectId, campaignId, { section, data }) {
   return campaignTree(projectId, campaignId);
 }
 
-export async function socialPosts(projectId) {
+/**
+ * منشورات الصفحة وإنستغرام للاختيار. المنشور الذي يقود إلى صفحة هذا المنتج بالذات (store_link) يُستعمل كما هو؛
+ * الذي يقود إلى صفحة أخرى من المتجر (site_link) أو لا رابط فيه يُبنى منه إعلان رابط (انظر launchTest).
+ */
+export async function socialPosts(projectId, link) {
   const cfg = projectConfig(projectId);
   const [facebook, instagram] = await Promise.all([meta.pagePosts(cfg).catch(() => []), meta.igMedia(cfg).catch(() => [])]);
-  // المنشور الذي يحمل رابط المتجر يُستعمل كما هو؛ غيره يُبنى منه إعلان رابط (انظر launchTest)
-  const store = cfg.store_domain ? `https://${cfg.store_domain}` : '';
-  return { facebook: facebook.map(({ links, ...x }) => ({ ...x, store_link: meta.postLinksTo({ links }, store) })), instagram };
+  const target = link ? cleanAdLink(link) : '';
+  const site = cfg.store_domain ? `https://${cfg.store_domain}` : target;
+  return {
+    facebook: facebook.map(({ links, ...x }) => ({ ...x, store_link: Boolean(target) && meta.postLinksTo({ links }, target), site_link: Boolean(site) && meta.postLinksToSite({ links }, site) })),
+    instagram,
+  };
 }

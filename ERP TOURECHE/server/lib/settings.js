@@ -72,6 +72,8 @@ export const SETTINGS = {
   meta_capi_delivered: { scope: 'project', type: 'bool', def: false },
   meta_capi_event: { scope: 'project', type: 'string', def: 'OrderDelivered' },
   meta_test_event_code: { scope: 'project', type: 'string', def: '' },
+  // حالة الرمز من آخر فحص (تكتبها المهمة اليومية و«اختبار» Meta، لا المستخدم): تغذّي تنبيه الانتهاء
+  meta_token_state: { scope: 'project', type: 'json', def: null },
   default_carrier: { scope: 'project', type: 'enum', values: ['', 'yalidine', 'zr', 'noest'], def: '' },
   yalidine_api_id: { scope: 'project', type: 'string', def: '' },
   yalidine_api_token: { scope: 'project', type: 'string', secret: true },
@@ -97,6 +99,9 @@ const scopeOf = (key, projectId) => {
 };
 
 const getStmt = db.prepare('SELECT value, is_secret FROM settings WHERE scope = ? AND key = ?');
+
+/** متى حُفظ هذا الإعداد آخر مرة (ISO) أو null إن لم يُحفظ */
+export const settingUpdatedAt = (key, projectId) => db.prepare('SELECT updated_at FROM settings WHERE scope = ? AND key = ?').get(scopeOf(key, projectId), key)?.updated_at || null;
 
 /** قيمة داخلية (تُفك السرية) — لا تُرسل للواجهة */
 export function getSetting(key, projectId) {

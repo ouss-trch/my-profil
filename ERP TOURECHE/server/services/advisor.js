@@ -703,6 +703,9 @@ const PARAM_LABELS = {
   budget: tx('ميزانية الاختبار', 'Budget du test'),
   budget_now: tx('الميزانية اليومية الحالية', 'Budget journalier actuel'),
   budget_next: tx('الزيادة الآمنة التالية (+20%)', 'Prochaine hausse sûre (+20 %)'),
+  days: tx('الأيام المتبقية', 'Jours restants'),
+  ends: tx('تاريخ الانتهاء', 'Date de fin'),
+  until: tx('يتوقف تلقائياً', 'S’arrête automatiquement'),
 };
 const MONEY_PARAMS = new Set(['spend_da', 'cpd', 'be', 'budget']);
 
@@ -725,6 +728,11 @@ function adsRules(projectIds, push) {
       no_campaign: tx('منتج في الاختبار دون حملة', 'Produit en test sans campagne'),
       weak_page: tx('صفحة المنتج المُعلَن ضعيفة', 'Page du produit en pub trop faible'),
       budget_spent_no_verdict: tx('الميزانية صُرفت دون حكم واضح', 'Budget dépensé sans verdict'),
+      token_invalid: tx('رمز Meta لم يعد صالحاً: توقف الربط بالإعلانات', 'Le jeton Meta n’est plus valide : le lien avec les pubs est coupé'),
+      token_expired: tx('انتهى رمز Meta: توقف الربط بالإعلانات', 'Le jeton Meta a expiré : le lien avec les pubs est coupé'),
+      token_expiring: tx('رمز Meta ينتهي قريباً', 'Le jeton Meta expire bientôt'),
+      test_code_active: tx('وضع تجربة الأحداث مفعّل: أحداث الـ ERP لا تصل إلى الإعلانات', 'Mode test des événements actif : les événements de l’ERP n’atteignent pas les pubs'),
+      test_code_left: tx('رمز «اختبار الأحداث» منسيّ في الإعدادات', 'Code « Tester les événements » oublié dans les paramètres'),
     };
     const advice = {
       fx_not_set: tx('حدد سعر الصرف الفعلي (السوق الموازي) في الإعدادات حتى تكون الأرباح صحيحة.', 'Saisissez le taux réel (marché parallèle) dans les paramètres.'),
@@ -740,6 +748,11 @@ function adsRules(projectIds, push) {
       no_campaign: tx('أطلق حملة للمنتج من زر «إطلاق حملة».', 'Lancez une campagne via « Lancer une campagne ».'),
       weak_page: tx('حسّن صفحة المنتج (صور، وصف، SEO) قبل صرف المزيد.', 'Améliorez la page (photos, description, SEO) avant de dépenser plus.'),
       budget_spent_no_verdict: tx('قرر الآن: أوقف أو مدّد بميزانية محدودة.', 'Décidez : arrêter ou prolonger avec un budget limité.'),
+      token_invalid: tx('الإعدادات ← التكاملات ← Meta: ضع رمزاً جديداً ثم «اختبار». دونه لا تُجلب النتائج ولا يمكن إطلاق حملة.', 'Paramètres → Intégrations → Meta : collez un nouveau jeton puis « Tester ». Sans lui, ni résultats ni lancement.'),
+      token_expired: tx('الإعدادات ← التكاملات ← Meta: ضع رمزاً جديداً ثم «اختبار». رمز System User بمدة «Jamais» لا ينتهي.', 'Paramètres → Intégrations → Meta : collez un nouveau jeton puis « Tester ». Un jeton System User « Jamais » n’expire pas.'),
+      token_expiring: tx('جدّده قبل التاريخ (Graph API Explorer ← Access Token Debugger ← Extend Access Token)، أو أنشئ رمز System User بمدة «Jamais» إن وصلتك رسالة التحقق. ثم ضعه في الإعدادات واضغط «اختبار».', 'Renouvelez-le avant (Graph API Explorer → Access Token Debugger → Extend Access Token) ou créez un jeton System User « Jamais ». Collez-le dans les paramètres puis « Tester ».'),
+      test_code_active: tx('بعد أن ترى حدثك في «اختبار الأحداث» امسح الرمز من الإعدادات. يتوقف تلقائياً بعد 3 ساعات من حفظه.', 'Après avoir vu votre événement dans « Tester les événements », videz le code. Il s’arrête tout seul 3 h après l’enregistrement.'),
+      test_code_left: tx('امسحه من الإعدادات ← التكاملات ← Meta. الأحداث تذهب الآن إلى الإنتاج لأن مهلته انتهت.', 'Videz-le dans Paramètres → Intégrations → Meta. Les événements repartent en production car son délai est écoulé.'),
     };
     for (const d of list)
       push({
@@ -755,7 +768,7 @@ function adsRules(projectIds, push) {
             label: PARAM_LABELS[k] || tx(k, k),
             value: k.startsWith('budget_') ? `\u2066${v} ${d.params.currency || ''}\u2069` : typeof v === 'number' ? (MONEY_PARAMS.has(k) ? dz(v) : fmt(v)) : String(v),
           })),
-        action: { to: d.action === 'open_settings' ? '/settings?tab=general' : d.product_id ? `/ads?product=${d.product_id}` : '/ads?tab=decisions', label: tx('فتح', 'Ouvrir') },
+        action: { to: d.action === 'open_settings' ? '/settings?tab=general' : d.action === 'open_meta_settings' ? '/settings?tab=integrations' : d.product_id ? `/ads?product=${d.product_id}` : '/ads?tab=decisions', label: tx('فتح', 'Ouvrir') },
         project_id: pid,
       });
   }

@@ -18,6 +18,11 @@ const DECISION_TEXT = {
   weak_page: (d) => `صفحة «${d.title}» ضعيفة (${d.params?.score}/100) — حسّنها`,
   budget_spent_no_verdict: (d) => `ميزانية اختبار «${d.title}» انتهت بلا حكم`,
   fx_not_set: () => 'اضبط سعر الدولار/اليورو بالدينار في الإعدادات',
+  token_invalid: () => 'رمز Meta لم يعد صالحاً — ضع رمزاً جديداً في الإعدادات',
+  token_expired: () => 'انتهى رمز Meta — ضع رمزاً جديداً في الإعدادات',
+  token_expiring: (d) => `رمز Meta ينتهي بعد ${d.params?.days} يوماً (${d.params?.ends}) — جدّده`,
+  test_code_active: () => 'وضع تجربة الأحداث مفعّل — امسح رمز الاختبار بعد التجربة',
+  test_code_left: () => 'رمز «اختبار الأحداث» منسيّ في الإعدادات — امسحه',
 };
 
 function businessFor(projectId, day) {

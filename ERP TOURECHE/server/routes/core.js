@@ -11,6 +11,7 @@ import { STATUSES, MANUAL } from '../lib/statuses.js';
 import * as shopify from '../integrations/shopify.js';
 import * as meta from '../integrations/meta.js';
 import * as capi from '../services/capi.js';
+import { saveTokenState } from '../services/metaHealth.js';
 import * as n8n from '../integrations/n8n.js';
 import * as ai from '../integrations/ai.js';
 import { CARRIERS } from '../integrations/carriers/index.js';
@@ -81,7 +82,9 @@ coreRouter.get('/settings/global', requireRole('admin'), (_req, res) => res.json
 coreRouter.get('/settings/project/:id', requireRole('admin', 'manager'), (req, res) => {
   if (!getProject(Number(req.params.id))) throw new HttpError(404, 'project_not_found');
   // _auto: ما يُستعمل حين يُترك الحقل فارغاً (عنوان الـ ERP على الـ VPS)
-  res.json({ ...publicSettings('project', Number(req.params.id)), _auto: { split_base_url: config.publicUrl || null } });
+  // _test_code: رمز «اختبار الأحداث» ينتهي تلقائياً بعد ساعات، فتُعرض مهلته في الإعدادات
+  const { set, until, expired } = capi.activeTestCode(Number(req.params.id));
+  res.json({ ...publicSettings('project', Number(req.params.id)), _auto: { split_base_url: config.publicUrl || null }, _test_code: { set, until, expired } });
 });
 
 function saveSettings(req, scopeName, projectId) {
@@ -96,6 +99,8 @@ function saveSettings(req, scopeName, projectId) {
       throw badRequest(e.message);
     }
     changed.push(key);
+    // رمز جديد: حكم الرمز القديم (منتهٍ أو قارب) لم يعد صحيحاً، ويُفحص الجديد عند «اختبار» أو في الفحص اليومي
+    if (key === 'meta_access_token' && scopeName === 'project') setSetting('meta_token_state', null, projectId);
   }
   audit(req, 'settings_changed', { entity: scopeName, entityId: projectId || null, projectId, details: { keys: changed } });
   return changed;
@@ -121,8 +126,10 @@ coreRouter.post('/settings/test/:service', requireRole('admin', 'manager'), asyn
     if (s === 'shopify') result = await shopify.shopInfo(cfg);
     else if (s === 'meta') {
       // رمز «اختبار الأحداث» محفوظ: يُرسل حدث تجريبي يظهر في Events Manager فقط ويؤكد أن الرمز يرسل إلى البيكسل
-      const code = String(cfg.meta_test_event_code || '').trim();
-      result = await meta.connectionCheck(cfg, { capiTest: code && cfg.meta_pixel_id ? () => capi.sendTestEvent(projectId, code) : null });
+      const test = capi.activeTestCode(projectId, cfg);
+      result = await meta.connectionCheck(cfg, { capiTest: test.code && cfg.meta_pixel_id ? () => capi.sendTestEvent(projectId, test.code) : null });
+      result.test_code = { set: test.set, until: test.until, expired: test.expired };
+      saveTokenState(projectId, result.token);
     } else if (CARRIERS[s]) result = { ok: await CARRIERS[s].test(cfg) };
     else if (['events', 'products', 'report'].includes(s)) result = await n8n.send(s, 'test', { from: 'ERP TOURECHE' }, projectId || null);
     else if (s === 'sheets') {

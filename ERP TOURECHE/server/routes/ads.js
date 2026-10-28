@@ -15,7 +15,7 @@ adsRouter.get('/decisions', (req, res) => res.json(ads.decisions(pid(req), days(
 adsRouter.get('/tests', (req, res) => res.json(ads.productTests(pid(req), days(req))));
 adsRouter.get('/campaigns', async (req, res) => res.json(await ads.campaignsOverview(pid(req), days(req))));
 adsRouter.get('/health', async (req, res) => res.json(await ads.accountsHealth(pid(req))));
-adsRouter.get('/posts', async (req, res) => res.json(await ads.socialPosts(pid(req))));
+adsRouter.get('/posts', async (req, res) => res.json(await ads.socialPosts(pid(req), String(req.query.link || '') || undefined)));
 adsRouter.get('/platform-history', (req, res) => res.json(ads.platformHistory(pid(req))));
 
 // ——— مستكشف Business Manager ———

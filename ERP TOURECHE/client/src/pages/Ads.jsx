@@ -692,6 +692,11 @@ const DECISION = {
   no_campaign: ['منتج في الاختبار بلا حملة', 'Produit en test sans campagne'],
   weak_page: ['صفحة المنتج ضعيفة', 'Page produit faible'],
   budget_spent_no_verdict: ['الميزانية صُرفت دون حكم', 'Budget dépensé sans verdict'],
+  token_invalid: ['رمز Meta لم يعد صالحاً', 'Jeton Meta invalide'],
+  token_expired: ['انتهى رمز Meta', 'Jeton Meta expiré'],
+  token_expiring: ['رمز Meta ينتهي قريباً', 'Jeton Meta bientôt expiré'],
+  test_code_active: ['وضع تجربة الأحداث مفعّل', 'Mode test des événements actif'],
+  test_code_left: ['رمز الاختبار منسيّ', 'Code de test oublié'],
 };
 const SEV_TONE = { critical: 'bad', high: 'warn', medium: 'info', low: 'neutral' };
 
@@ -715,6 +720,8 @@ function Decisions() {
               {d.title}
               {d.params?.cpd !== undefined && d.params?.cpd !== null && ` · ${t(['تكلفة المسلّمة', 'coût/livrée'])} ${da(d.params.cpd)}`}
               {d.params?.be ? ` · ${t(['حد التعادل', 'seuil'])} ${da(d.params.be)}` : ''}
+              {d.params?.days !== undefined ? ` · ${t(['بعد {n} يوماً', 'dans {n} j'], { n: d.params.days })} (${d.params.ends})` : d.params?.ends ? ` · ${d.params.ends}` : ''}
+              {d.params?.until ? ` · ${t(['يتوقف تلقائياً الساعة {h}', 'arrêt automatique à {h}'], { h: new Date(d.params.until).toLocaleTimeString('fr-DZ', { hour: '2-digit', minute: '2-digit', hour12: false }) })}` : ''}
               {d.params?.feedback ? ` · ${d.params.feedback}` : ''}
               {d.params?.link ? ` · ${d.params.link}` : ''}
               {d.params?.budget_next ? ` · ${t(['الزيادة الآمنة التالية', 'prochaine hausse sûre'])}: ${money(d.params.budget_now, d.params.currency)} → ${money(d.params.budget_next, d.params.currency)}` : ''}
@@ -743,6 +750,11 @@ function Decisions() {
           {d.action === 'improve_page' && (
             <Link className="btn" to={`/products/${d.product_id}`}>
               {t(['تحسين الصفحة', 'Améliorer la page'])}
+            </Link>
+          )}
+          {d.action === 'open_meta_settings' && (
+            <Link className="btn" to="/settings?tab=integrations">
+              {t('nav.settings')}
             </Link>
           )}
           {d.action === 'open_settings' && (

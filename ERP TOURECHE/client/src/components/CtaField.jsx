@@ -11,8 +11,9 @@ const OTHER = '__other';
  */
 export default function CtaField({ value, onChange, label }) {
   const { t, lang } = useI18n();
-  const known = CTA_OPTIONS.some((o) => o.value === value);
-  const [other, setOther] = useState(!known);
+  // «نوع آخر» يُفتح بالاختيار، ويبقى مفتوحاً تلقائياً ما دامت القيمة (القادمة من Meta أو من مسودة) ليست في القائمة المختصرة
+  const [asked, setAsked] = useState(false);
+  const other = asked || !CTA_OPTIONS.some((o) => o.value === value);
   const valid = CTA_CODES.includes(value);
   return (
     <Field
@@ -22,30 +23,42 @@ export default function CtaField({ value, onChange, label }) {
         'Le texte du bouton est fixé par Meta selon le type et la langue du spectateur : pas de texte libre. Votre phrase libre va dans le « Titre », affichée à côté du bouton telle quelle.',
       ])}
     >
-      <Select
-        value={other ? OTHER : value}
-        onChange={(e) => {
-          if (e.target.value === OTHER) {
-            setOther(true);
-            return;
-          }
-          setOther(false);
-          onChange(e.target.value);
-        }}
-        options={[
-          ...CTA_OPTIONS.map((o) => ({ value: o.value, label: `${lang === 'ar' ? o.ar : o.fr} · ${o.value}` })),
-          { value: OTHER, label: t(['نوع آخر من قائمة Meta…', 'Autre type de la liste Meta…']) },
-        ]}
-      />
-      {other && (
+      {(id) => (
         <>
-          <Input className="ltr mt-2" list="meta-cta-codes" value={value} placeholder="VIEW_PRODUCT" onChange={(e) => onChange(e.target.value.toUpperCase().replace(/[^A-Z_]/g, ''))} />
-          <datalist id="meta-cta-codes">
-            {CTA_CODES.map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
-          {value && !valid && <p className="mt-1 text-xs text-bad">{t(['هذا الرمز ليس في قائمة Meta', 'Ce code n’est pas dans la liste Meta'])}</p>}
+          <Select
+            id={id}
+            value={other ? OTHER : value}
+            onChange={(e) => {
+              if (e.target.value === OTHER) {
+                setAsked(true);
+                return;
+              }
+              setAsked(false);
+              onChange(e.target.value);
+            }}
+            options={[
+              ...CTA_OPTIONS.map((o) => ({ value: o.value, label: `${lang === 'ar' ? o.ar : o.fr} · ${o.value}` })),
+              { value: OTHER, label: t(['نوع آخر من قائمة Meta…', 'Autre type de la liste Meta…']) },
+            ]}
+          />
+          {other && (
+            <>
+              <Input
+                className="ltr mt-2"
+                list="meta-cta-codes"
+                value={value}
+                placeholder="VIEW_PRODUCT"
+                aria-label={t(['رمز نوع الزر من قائمة Meta', 'Code du type de bouton (liste Meta)'])}
+                onChange={(e) => onChange(e.target.value.toUpperCase().replace(/[^A-Z_]/g, ''))}
+              />
+              <datalist id="meta-cta-codes">
+                {CTA_CODES.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+              {value && !valid && <p className="mt-1 text-xs text-bad">{t(['هذا الرمز ليس في قائمة Meta', 'Ce code n’est pas dans la liste Meta'])}</p>}
+            </>
+          )}
         </>
       )}
     </Field>

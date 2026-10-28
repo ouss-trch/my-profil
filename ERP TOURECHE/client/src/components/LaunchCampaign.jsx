@@ -94,11 +94,20 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [f?.account_id, open]);
 
+  // المنشورات تُصنَّف بحسب الرابط الحالي (هل يقود المنشور إلى صفحة هذا المنتج بالذات؟)، فتُجلب من جديد إذا تغيّر الرابط
   useEffect(() => {
-    if (!open || !f || f.source === 'image' || posts) return;
-    api.get('/ads/posts', opt).then(setPosts, () => setPosts({ facebook: [], instagram: [] }));
+    if (!open || !f || f.source === 'image') return undefined;
+    let off = false;
+    const timer = setTimeout(
+      () => api.get(`/ads/posts?link=${encodeURIComponent(f.link || '')}`, opt).then((r) => !off && setPosts(r), () => !off && setPosts((x) => x || { facebook: [], instagram: [] })),
+      posts ? 600 : 0,
+    );
+    return () => {
+      off = true;
+      clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [f?.source, open]);
+  }, [f?.source, f?.link, open]);
 
   const businesses = bm?.businesses || [];
   const accounts = useMemo(() => {
@@ -142,13 +151,13 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
     if (!f.account_id) problems.push(t(['اختر الحساب الإعلاني', 'Choisissez le compte publicitaire']));
     if (!f.page_id) problems.push(t(['اختر صفحة فيسبوك', 'Choisissez la page Facebook']));
     if (!(Number(f.daily_budget) >= 1)) problems.push(t(['حدد الميزانية اليومية', 'Indiquez le budget journalier']));
-    if (!f.link && f.source !== 'fb_post') problems.push(t(['رابط المنتج مفقود (انشر المنتج أو ضع رابطاً)', 'Lien produit manquant (publiez ou saisissez un lien)']));
+    if (!f.link && (f.source !== 'fb_post' || rebuilt)) problems.push(t(['رابط المنتج مفقود (انشر المنتج أو ضع رابطاً)', 'Lien produit manquant (publiez ou saisissez un lien)']));
     if (f.source === 'image' && !f.image_url) problems.push(t(['اختر صورة', 'Choisissez une image']));
     if (f.cta && !CTA_CODES.includes(f.cta)) problems.push(t(['نوع زر الدعوة غير معروف عند Meta', 'Type de bouton inconnu chez Meta']));
     if (f.source === 'fb_post' && !f.post_id) problems.push(t(['اختر منشوراً', 'Choisissez une publication']));
     if (f.source === 'ig_post' && !f.ig_media_id) problems.push(t(['اختر منشور إنستغرام', 'Choisissez une publication Instagram']));
     if (f.source === 'image' && !f.primary_text?.trim()) problems.push(t(['اكتب النص الأساسي', 'Rédigez le texte principal']));
-    if (f.source !== 'fb_post' && linkCheck?.link === f.link && linkCheck.result?.ok === false) problems.push(t(['صفحة رابط الإعلان فيها مانع (انظر فحص الرابط)', 'La page du lien a un problème bloquant (voir la vérification)']));
+    if ((f.source !== 'fb_post' || rebuilt) && linkCheck?.link === f.link && linkCheck.result?.ok === false) problems.push(t(['صفحة رابط الإعلان فيها مانع (انظر فحص الرابط)', 'La page du lien a un problème bloquant (voir la vérification)']));
   }
 
   const saveDraft = async () => {
@@ -368,9 +377,11 @@ export default function LaunchCampaign({ productId, projectId, open, onClose, dr
               )}
               {selPost && (
                 <p className={cx('mt-2 rounded-lg border p-2 text-xs text-ink', rebuilt ? 'border-warn/40 bg-warn/5' : 'border-good/30 bg-good/5')}>
-                  {rebuilt
-                    ? t(['هذا المنشور بلا رابط المنتج ولا زر شراء، ومن دونهما ترفض Meta حملة الطلبات. سيبني الـ ERP إعلاناً من صورة المنشور ونصه مع زر «تسوّق الآن» ورابط المنتج. تفاعلات المنشور القديمة لا تنتقل.', 'Cette publication n’a ni lien produit ni bouton d’achat, sans lesquels Meta refuse une campagne de commandes. L’ERP crée une annonce avec son image et son texte, un bouton « Acheter » et le lien produit. Ses réactions ne sont pas reprises.'])
-                    : t(['هذا المنشور يحمل رابط المتجر: يُستعمل كما هو بتفاعلاته.', 'Cette publication porte le lien de la boutique : utilisée telle quelle, avec ses réactions.'])}
+                  {!rebuilt
+                    ? t(['هذا المنشور يقود إلى صفحة هذا المنتج: يُستعمل كما هو بتفاعلاته.', 'Cette publication mène à la page de ce produit : utilisée telle quelle, avec ses réactions.'])
+                    : selPost.site_link
+                      ? t(['هذا المنشور يقود إلى صفحة أخرى من متجرك، لا إلى هذا المنتج: لو استُعمل كما هو لنُسبت الطلبيات لمنتج غير الذي تحسب الحملة تكلفته. سيبني الـ ERP إعلاناً من صورته ونصه مع رابط هذا المنتج. تفاعلات المنشور القديمة لا تنتقل.', 'Cette publication mène à une autre page de la boutique, pas à ce produit : telle quelle, les commandes seraient attribuées à un autre produit que celui dont la campagne mesure le coût. L’ERP crée une annonce avec son image et son texte et le lien de ce produit. Ses réactions ne sont pas reprises.'])
+                      : t(['هذا المنشور بلا رابط المنتج ولا زر شراء، ومن دونهما ترفض Meta حملة الطلبات. سيبني الـ ERP إعلاناً من صورة المنشور ونصه مع الزر ورابط المنتج. تفاعلات المنشور القديمة لا تنتقل.', 'Cette publication n’a ni lien produit ni bouton d’achat, sans lesquels Meta refuse une campagne de commandes. L’ERP crée une annonce avec son image et son texte, le bouton et le lien produit. Ses réactions ne sont pas reprises.'])}
                 </p>
               )}
               {(f.source !== 'fb_post' || rebuilt) && (

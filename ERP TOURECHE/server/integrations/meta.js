@@ -231,6 +231,7 @@ export async function createPausedCampaign(cfg, o) {
       : {}),
   };
   let adset = null;
+  let creative = null;
   try {
     adset = await graph(cfg, `${account}/adsets`, {
       method: 'POST',
@@ -244,15 +245,19 @@ export async function createPausedCampaign(cfg, o) {
         status: 'PAUSED',
       },
     });
-    const creative = await createCreative(cfg, o.accountId, o);
+    creative = await createCreative(cfg, o.accountId, o);
     const ad = await graph(cfg, `${account}/ads`, {
       method: 'POST',
       body: { name: `${o.name} · Ad`, adset_id: adset.id, creative: { creative_id: creative.id }, status: 'PAUSED' },
     });
     return { campaign_id: campaign.id, adset_id: adset.id, creative_id: creative.id, ad_id: ad.id };
   } catch (e) {
-    // فشل في منتصف الطريق (مثلاً رفض Meta للتصميم): لا تبقى حملة ومجموعة ناقصتان في الحساب. لم يُنفق عليهما شيء، وكانتا متوقفتين
-    for (const id of [adset?.id, campaign.id].filter(Boolean)) await graph(cfg, id, { method: 'POST', body: { status: 'DELETED' } }).catch(() => {});
+    // فشل في منتصف الطريق (مثلاً رفض Meta للتصميم): لا تبقى حملة ومجموعة ناقصتان في الحساب. لم يُنفق عليهما شيء، وكانتا متوقفتين.
+    // ما تعذّر حذفه لا يُسكت عنه: يُذكر في الخطأ ليحذفه صاحب الحساب يدوياً من Ads Manager
+    const left = [];
+    for (const id of [adset?.id, campaign.id].filter(Boolean)) await graph(cfg, id, { method: 'POST', body: { status: 'DELETED' } }).catch(() => left.push(id));
+    if (creative?.id) await graph(cfg, creative.id, { method: 'DELETE' }).catch(() => {});
+    if (left.length) e.message += ` — ⚠ بقي في الحساب، احذفه من Ads Manager / reste dans le compte, à supprimer : ${left.join(', ')}`;
     throw e;
   }
 }
@@ -279,8 +284,28 @@ export async function pixelInfo(cfg) {
 /** صلاحيات الرمز التي يحتاجها الـ ERP: الأساسية لكل شيء، والإضافية لميزة بعينها */
 export const TOKEN_SCOPES = {
   required: ['ads_read', 'ads_management', 'business_management', 'pages_show_list', 'pages_read_engagement'],
-  optional: ['pages_manage_posts', 'instagram_basic', 'instagram_content_publish', 'catalog_management'],
+  optional: ['pages_manage_ads', 'pages_manage_posts', 'instagram_basic', 'instagram_content_publish', 'catalog_management'],
 };
+
+/**
+ * عمر الرمز من debug_token: expires_at (0 = لا ينتهي) و data_access_expires_at (انتهاء وصول التطبيق لبيانات المستخدم، ويكون في رمز المستخدم).
+ * ما غاب من الرد (null) مجهول لا «ينتهي»: لا نُنذر بما لا نعرفه. ends_at أبكر تاريخ موجب منهما.
+ */
+export function tokenLife(info, now = Date.now()) {
+  if (!info) return { type: null, expires_at: null, data_access_expires_at: null, never_expires: null, ends_at: null, days_left: null };
+  const num0 = (v) => (v === undefined || v === null || !Number.isFinite(Number(v)) ? null : Number(v));
+  const expires_at = num0(info.expires_at);
+  const data_access_expires_at = num0(info.data_access_expires_at);
+  const ends_at = [expires_at, data_access_expires_at].filter((x) => x > 0).sort((a, b) => a - b)[0] || null;
+  return {
+    type: info.type || null,
+    expires_at,
+    data_access_expires_at,
+    never_expires: expires_at === null ? null : expires_at === 0,
+    ends_at,
+    days_left: ends_at ? Math.ceil((ends_at * 1000 - now) / 864e5) : null,
+  };
+}
 
 /**
  * فحص الربط بعد إنشاء التطبيق والرمز: الرمز (صالح، لا ينتهي، صلاحياته)، الحسابات الإعلانية، البيكسل، الصفحة،
@@ -305,13 +330,7 @@ export async function connectionCheck(cfg, { capiTest } = {}) {
   }
   out.app = info?.app_id ? { id: info.app_id, name: info.application || null } : null;
   // رمز المستخدم (type USER) ينتهي بعد نحو 60 يوماً، ورمز System User بمدة «Never» لا ينتهي: الواجهة تعرض التاريخ الفعلي
-  out.token = {
-    valid: info ? Boolean(info.is_valid) : true,
-    expires_at: info?.expires_at ?? null,
-    never_expires: info ? info.expires_at === 0 : null,
-    data_access_expires_at: info?.data_access_expires_at ?? null,
-    type: info?.type || null,
-  };
+  out.token = { valid: info ? Boolean(info.is_valid) : true, ...tokenLife(info) };
   out.scopes = { granted, missing: TOKEN_SCOPES.required.filter((s) => !granted.includes(s)), optional_missing: TOKEN_SCOPES.optional.filter((s) => !granted.includes(s)) };
   for (const id of cfg.meta_ad_account_ids || []) {
     try {
@@ -404,13 +423,14 @@ export async function accountHealth(cfg, accountId) {
   } catch {
     /* اختياري */
   }
+  const life = tokenLife(tokenInfo);
   const spent = num(info.amount_spent) / 100;
   const cap = num(info.spend_cap) / 100;
   const pixelFresh = pixel?.last_fired_time ? Date.now() - Date.parse(pixel.last_fired_time) < 48 * 3600e3 : null;
   const checks = [
     { key: 'account_active', ok: info.account_status === 1, value: info.account_status },
     { key: 'payment_method', ok: Boolean(info.funding_source_details), value: info.funding_source_details?.display_string || null },
-    { key: 'token_never_expires', ok: tokenInfo ? tokenInfo.expires_at === 0 : null, value: tokenInfo?.expires_at > 0 ? new Date(tokenInfo.expires_at * 1000).toISOString().slice(0, 10) : null },
+    { key: 'token_never_expires', ok: life.never_expires === null ? null : life.never_expires && !life.ends_at, value: life.ends_at ? new Date(life.ends_at * 1000).toISOString().slice(0, 10) : null },
     { key: 'token_valid', ok: tokenInfo ? Boolean(tokenInfo.is_valid) : null },
     { key: 'pixel_set', ok: Boolean(cfg.meta_pixel_id) },
     { key: 'pixel_events_48h', ok: pixelFresh, value: pixel?.last_fired_time || null },
@@ -475,7 +495,7 @@ export async function campaignTree(cfg, campaignId) {
   const campaign = await graph(cfg, campaignId, { params: { fields: 'id,name,status,effective_status,daily_budget,lifetime_budget,objective,account_id' } });
   const adsetsList = await paged(cfg, `${campaignId}/adsets`, { fields: 'id,name,status,effective_status,end_time,targeting,daily_budget,learning_stage_info', limit: 50 });
   const ads = await paged(cfg, `${campaignId}/ads`, {
-    fields: 'id,name,adset_id,status,effective_status,ad_review_feedback,creative{id,name,object_story_spec,object_story_id,source_instagram_media_id,thumbnail_url,image_url}',
+    fields: 'id,name,adset_id,status,effective_status,ad_review_feedback,creative{id,name,object_story_spec,object_story_id,source_instagram_media_id,thumbnail_url,image_url,url_tags}',
     limit: 50,
   });
   return {
@@ -519,6 +539,7 @@ export async function campaignTree(cfg, campaignId) {
         image_hash: ld.image_hash || null,
         page_id: a.creative?.object_story_spec?.page_id || (a.creative?.object_story_id ? String(a.creative.object_story_id).split('_')[0] : null),
         ig_user_id: a.creative?.object_story_spec?.instagram_user_id || null,
+        url_tags: a.creative?.url_tags || null,
       };
     }),
   };
@@ -567,9 +588,23 @@ const hostOf = (u) => {
     return '';
   }
 };
+/**
+ * «الصفحة» التي يقود إليها رابط، للمقارنة: النطاق (دون www) + مسار المنتج /products/<handle> إن وُجد (وإلا المسار كاملاً دون «/» أخيرة).
+ * المعاملات والجزء بعد # تُهمل، فرابط المنتج داخل مجموعة (/collections/x/products/y) هو نفسه رابط المنتج.
+ */
+export const pageKey = (u) => {
+  try {
+    const x = new URL(/^https?:\/\//i.test(String(u)) ? String(u) : `https://${u}`);
+    const path = x.pathname.replace(/\/+$/, '') || '/';
+    const product = /\/products\/([^/]+)/.exec(path);
+    return `${x.hostname.replace(/^www\./, '').toLowerCase()}${product ? `/products/${decodeURIComponent(product[1]).toLowerCase()}` : decodeURIComponent(path).toLowerCase()}`;
+  } catch {
+    return '';
+  }
+};
 const postShape = (p) => {
   const att = p.attachments?.data || [];
-  const kind = att[0]?.media_type;
+  const type = String(att[0]?.media_type || '');
   return {
     id: p.id,
     text: p.message || '',
@@ -578,12 +613,21 @@ const postShape = (p) => {
     url: p.permalink_url,
     likes: p.likes?.summary?.total_count || 0,
     comments: p.comments?.summary?.total_count || 0,
-    kind: kind === 'video' ? 'video' : kind === 'link' ? 'link' : kind === 'photo' ? 'photo' : 'status',
+    // video و video_inline و video_autoplay…: كلها فيديو (صورته المصغرة ليست إعلان صورة)
+    kind: type.startsWith('video') ? 'video' : type === 'link' ? 'link' : type === 'photo' ? 'photo' : 'status',
     links: att.flatMap((x) => [x.unshimmed_url, x.target?.url, x.url]).filter(Boolean),
   };
 };
-/** هل يحمل المنشور رابط هذا الموقع؟ (منشور رابط إلى المتجر يصلح لحملة طلبات كما هو، والمنشور العادي لا يصلح) */
+/**
+ * هل يقود المنشور إلى هذه الصفحة بالذات؟ منشور رابط إلى صفحة المنتج نفسها يصلح لحملة طلبات كما هو؛
+ * المنشور العادي أو الذي يقود إلى منتج آخر لا يصلح (الطلبيات كانت ستُنسب لمنتج غير الذي تحسب الحملة تكلفته).
+ */
 export const postLinksTo = (post, link) => {
+  const key = pageKey(link);
+  return Boolean(key) && post.links.some((u) => pageKey(u) === key);
+};
+/** هل يحمل المنشور أي رابط إلى النطاق نفسه (لتمييزه في القائمة قبل اختيار المنتج)؟ */
+export const postLinksToSite = (post, link) => {
   const host = hostOf(link);
   return Boolean(host) && post.links.some((u) => hostOf(u) === host);
 };

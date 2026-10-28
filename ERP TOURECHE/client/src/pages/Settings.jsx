@@ -70,10 +70,15 @@ const PROJECT_GROUPS = [
         k: 'meta_test_event_code',
         label: ['رمز «اختبار الأحداث» (للتجربة فقط)', 'Code « Tester les événements » (essai seulement)'],
         ltr: true,
-        hint: (vals, t) =>
-          vals.meta_test_event_code
-            ? t(['⚠ وضع التجربة مفعّل: أحداث الـ ERP تذهب إلى «اختبار الأحداث» فقط ولا تُستعمل في الإعلانات. امسح الرمز بعد التجربة.', '⚠ Mode test actif : les événements de l’ERP vont seulement dans « Tester les événements ». Videz le code après l’essai.'])
-            : t(['من Events Manager ← البيكسل ← «اختبار الأحداث». ضعه واحفظ ثم اضغط «اختبار»: يُرسل حدث تجريبي يتأكد أن الرمز يصل إلى البيكسل. امسحه بعدها.', 'Events Manager → pixel → « Tester les événements ». Enregistrez puis « Tester » : un événement d’essai vérifie l’envoi au pixel. Videz-le ensuite.']),
+        hint: (vals, t) => {
+          const tc = vals._test_code || {};
+          const hhmm = tc.until ? new Date(tc.until).toLocaleTimeString('fr-DZ', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+          if (vals.meta_test_event_code && tc.expired)
+            return t(['انتهت مهلة وضع التجربة: أحداث الـ ERP تذهب الآن إلى الإنتاج كالمعتاد. امسح الرمز، أو احفظه من جديد لتجربة أخرى.', 'Le mode test a expiré : les événements de l’ERP repartent en production. Videz le code, ou enregistrez-le à nouveau pour un autre essai.']);
+          if (vals.meta_test_event_code)
+            return t(['⚠ وضع التجربة مفعّل: أحداث الـ ERP تذهب إلى «اختبار الأحداث» فقط ولا تُستعمل في الإعلانات. يتوقف تلقائياً الساعة {h} وتعود الأحداث إلى الإنتاج. امسح الرمز بعد التجربة.', '⚠ Mode test actif : les événements de l’ERP vont seulement dans « Tester les événements ». Il s’arrête tout seul à {h} et les événements repartent en production. Videz le code après l’essai.'], { h: hhmm });
+          return t(['من Events Manager ← البيكسل ← «اختبار الأحداث». ضعه واحفظ ثم اضغط «اختبار»: يُرسل حدث تجريبي يتأكد أن الرمز يصل إلى البيكسل. يتوقف الرمز تلقائياً بعد 3 ساعات حتى لا تضيع أحداث الإنتاج إن نسيته.', 'Events Manager → pixel → « Tester les événements ». Enregistrez puis « Tester » : un événement d’essai vérifie l’envoi au pixel. Le code s’arrête tout seul après 3 h pour ne pas perdre les événements de production si vous l’oubliez.']);
+        },
       },
       { k: 'meta_graph_version', label: ['إصدار Graph API', 'Version Graph API'], ltr: true },
     ],
@@ -250,6 +255,7 @@ const SCOPE_USE = {
   business_management: ['«اكتشاف من Meta» (الحسابات والبيكسل والصفحات)', '« Détecter depuis Meta »'],
   pages_show_list: ['اختيار الصفحة', 'choisir la page'],
   pages_read_engagement: ['منشورات الصفحة للإعلان', 'publications de la page'],
+  pages_manage_ads: ['إنشاء إعلانات تستعمل صفحتك', 'créer des annonces qui utilisent votre page'],
   pages_manage_posts: ['النشر على الصفحة', 'publier sur la page'],
   instagram_basic: ['حساب إنستغرام', 'compte Instagram'],
   instagram_content_publish: ['النشر على إنستغرام', 'publier sur Instagram'],
@@ -269,24 +275,34 @@ function MetaCheck({ result: r }) {
     </li>
   );
   const scopeList = (list) => list.map((x) => `${x} (${t(SCOPE_USE[x] || [x, x])})`).join(lang === 'ar' ? '، ' : ', ');
-  // رمز ينتهي: التاريخ الفعلي والأيام المتبقية (الأبكر بين انتهاء الرمز وانتهاء الوصول للبيانات)، لا عبارة «لا ينتهي» الخاطئة
+  // رمز ينتهي: التاريخ الفعلي والأيام المتبقية (الأبكر بين انتهاء الرمز وانتهاء وصول التطبيق للبيانات)، لا عبارة «لا ينتهي» الخاطئة
   const tk = r?.token || {};
-  const until = [tk.expires_at, tk.data_access_expires_at].filter((x) => x > 0).sort((a, b) => a - b)[0] || null;
-  const days = until ? Math.ceil((until * 1000 - Date.now()) / 864e5) : null;
+  const days = tk.days_left;
   const renew =
     tk.type === 'USER'
       ? t(['جدّده بنفس الخطوات قبل ذلك: Graph API Explorer ← Access Token Debugger ← Extend Access Token. الأفضل رمز System User لا ينتهي.', 'Renouvelez-le avant : Graph API Explorer → Access Token Debugger → Extend Access Token. Le mieux : un jeton System User permanent.'])
       : t(['جدّده من «مستخدمو النظام» ← Générer un token.', 'Renouvelez-le : Utilisateurs système → Générer un token.']);
   const daysAr = days === 1 ? 'يوم' : days === 2 ? 'يومين' : days >= 3 && days <= 10 ? `${days} أيام` : `${days} يوماً`;
-  const expiryDetail = until ? `${t(days > 0 ? ['ينتهي {d} (بعد {n}).', 'Expire le {d} (dans {f} j).'] : ['انتهى {d}.', 'Expiré le {d}.'], { d: dateOnly(new Date(until * 1000).toISOString(), lang), n: daysAr, f: days })} ${renew}` : null;
+  const endDay = tk.ends_at ? dateOnly(new Date(tk.ends_at * 1000).toISOString(), lang) : '';
+  // الرمز نفسه دائم لكن وصول التطبيق لبيانات المستخدم ينتهي (رمز مستخدم): الجملة تقول ذلك صراحة
+  const dataOnly = tk.expires_at === 0 && tk.data_access_expires_at > 0;
+  const expiryDetail = tk.ends_at
+    ? `${
+        dataOnly
+          ? t(days > 0 ? ['الرمز نفسه لا ينتهي، لكن وصول التطبيق إلى بياناتك ينتهي {d} (بعد {n}).', 'Le jeton lui-même n’expire pas, mais l’accès de l’app à vos données prend fin le {d} (dans {f} j).'] : ['انتهى وصول التطبيق إلى بياناتك {d}.', 'L’accès de l’app à vos données a pris fin le {d}.'], { d: endDay, n: daysAr, f: days })
+          : t(days > 0 ? ['ينتهي {d} (بعد {n}).', 'Expire le {d} (dans {f} j).'] : ['انتهى {d}.', 'Expiré le {d}.'], { d: endDay, n: daysAr, f: days })
+      } ${renew}`
+    : null;
   if (r?.token?.valid === false && !r.scopes) return <p className="mt-3 rounded-lg bg-bad/5 p-2 text-xs text-bad">{t(['الرمز مرفوض من Meta: أنشئ رمزاً جديداً لمستخدم النظام وضعه هنا.', 'Jeton refusé par Meta : générez un nouveau jeton System User.'])}</p>;
   return (
     <ul className="mt-3 space-y-1.5 rounded-lg border border-line p-3 text-xs">
       {r.app && row(true, t(['التطبيق', 'Application']), `${r.app.name || ''} (${r.app.id})`, 'app')}
       {row(r.token?.valid ?? null, t(['الرمز صالح', 'Jeton valide']), null, 'valid')}
-      {tk.never_expires === false && until
+      {tk.ends_at
         ? row(days > 14, t(['صلاحية الرمز', 'Validité du jeton']), expiryDetail, 'expiry')
-        : row(tk.never_expires ?? null, t(['الرمز لا ينتهي', 'Jeton permanent']), tk.never_expires === false ? t(['ينتهي: أنشئه من «مستخدمو النظام» بمدة «Jamais»', 'Expire : générez-le depuis « Utilisateurs système », durée « Jamais »']) : null, 'expiry')}
+        : tk.never_expires === null
+          ? row(null, t(['صلاحية الرمز', 'Validité du jeton']), t(['Meta لم تذكر تاريخ انتهاء لهذا الرمز', 'Meta n’indique pas de date de fin pour ce jeton']), 'expiry')
+          : row(tk.never_expires, t(['الرمز لا ينتهي', 'Jeton permanent']), null, 'expiry')}
       {r.scopes && row(!r.scopes.missing.length, t(['الصلاحيات الأساسية', 'Autorisations de base']), r.scopes.missing.length ? t(['ناقصة: {x}', 'Manquantes : {x}'], { x: scopeList(r.scopes.missing) }) : null, 'scopes')}
       {r.scopes?.optional_missing?.length > 0 && row(null, t(['صلاحيات إضافية غير مفعّلة (عند الحاجة)', 'Autorisations facultatives absentes']), scopeList(r.scopes.optional_missing), 'optional')}
       {(r.accounts || []).map((a) => row(a.ok, t(['الحساب الإعلاني', 'Compte pub']), a.error ? t(['لا وصول: أسنده لمستخدم النظام في Business Manager', 'Pas d’accès : assignez-le à l’utilisateur système']) : `${a.name || a.id}${a.ok ? '' : ` · ${t(['غير نشط', 'inactif'])}`}`, `acc-${a.id}`))}

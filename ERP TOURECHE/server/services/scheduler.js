@@ -18,6 +18,7 @@ import { syncPages } from './pages.js';
 import { retryShopify as retryReturns } from './returns.js';
 import { ensureTracking } from './splits.js';
 import { pruneVisits } from './tracking.js';
+import { refreshTokenState } from './metaHealth.js';
 
 /**
  * المهام الدورية (تعمل ما دام الجهاز مشغلاً).
@@ -27,7 +28,7 @@ import { pruneVisits } from './tracking.js';
  *  كل 30 دقيقة : تتبع الطرود عند شركات التوصيل + إنفاق الإعلانات اليوم
  *  كل ساعة     : المنتجات، الحملات، تنبيهات المخزون، لقطة التقرير الصباحي لـ n8n
  *  عند التشغيل ثم كل 6 ساعات (دائماً): سنيبت عدّاد الزوار في القالب محدَّث وإعداداته مكتوبة
- *  يومياً 03:00 : نسخة احتياطية، أسعار شركات التوصيل، إنفاق 30 يوماً، حذف زيارات أقدم من 400 يوم (+ تقرير المستشار الذكي كل سبت)
+ *  يومياً 03:00 : نسخة احتياطية، فحص رمز Meta (دائماً)، أسعار شركات التوصيل، إنفاق 30 يوماً، حذف زيارات أقدم من 400 يوم (+ تقرير المستشار الذكي كل سبت)
  */
 const quiet = (p) => p.catch(() => {});
 const auto = () => Boolean(getSetting('auto_sync'));
@@ -84,6 +85,8 @@ export async function daily() {
   await quiet(Promise.resolve().then(() => pruneVisits()));
   for (const p of listProjects()) {
     const cfg = projectConfig(p.id);
+    // فحص الرمز يحمي الربط (تنبيه قبل انتهائه) فيعمل دون «المزامنة التلقائية»
+    if (meta.isConfigured(cfg)) await quiet(runJob('meta_token', p.id, 'رمز Meta', () => refreshTokenState(p.id)));
     if (auto() && Object.values(CARRIERS).some((c) => c.isConfigured(cfg))) await quiet(runJob('tariffs', p.id, 'أسعار التوصيل', () => refreshTariffs(p.id)));
     if (auto() && meta.isConfigured(cfg)) await quiet(runJob('ads_backfill', p.id, 'Meta Ads (30 يوماً)', () => syncSpend(p.id, 30)));
   }

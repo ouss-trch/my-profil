@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db, parseJson } from '../db/index.js';
 import * as meta from '../integrations/meta.js';
-import { projectConfig } from '../lib/settings.js';
+import { projectConfig, settingUpdatedAt } from '../lib/settings.js';
 import { badRequest, nowIso } from '../lib/util.js';
 import { wilayaByCode } from '../lib/wilayas.js';
 import { enqueue } from './effects.js';
@@ -78,6 +78,22 @@ export function buildOrderEvent(o, kind, cfg, at = nowIso()) {
   };
 }
 
+/** مدة رمز «اختبار الأحداث»: ينسى صاحبه مسحه، وبقاؤه يحوّل كل أحداث الإنتاج إلى تبويب الاختبار بصمت فلا تصل إلى تحسين الإعلانات */
+export const TEST_CODE_TTL_MS = 3 * 3600e3;
+
+/**
+ * رمز الاختبار الفعّال الآن. بعد ساعات من حفظه يتوقف تلقائياً (expired) وتعود الأحداث إلى الإنتاج،
+ * والواجهة تعرض موعد الانتهاء.
+ */
+export function activeTestCode(projectId, cfg = projectConfig(projectId), now = Date.now()) {
+  const code = String(cfg.meta_test_event_code || '').trim();
+  if (!code) return { code: '', set: false, until: null, expired: false };
+  const savedAt = Date.parse(settingUpdatedAt('meta_test_event_code', projectId) || '');
+  const until = Number.isFinite(savedAt) ? savedAt + TEST_CODE_TTL_MS : null;
+  if (until && now > until) return { code: '', set: true, until: new Date(until).toISOString(), expired: true };
+  return { code, set: true, until: until ? new Date(until).toISOString() : null, expired: false };
+}
+
 /** أُرسل هذا الحدث فعلاً لهذه الطلبية (لا يُعاد عند التراجع عن الحالة ثم إعادتها) — الإرسال التجريبي لا يُحسب */
 const alreadySent = (orderId, name) => Boolean(db.prepare("SELECT 1 FROM order_events WHERE order_id = ? AND type = 'meta' AND raw = ? AND note = 'ok'").get(orderId, name));
 const logEvent = (orderId, name, note) => db.prepare("INSERT INTO order_events (order_id, type, raw, note, source, at) VALUES (?, 'meta', ?, ?, 'meta', ?)").run(orderId, name, note, nowIso());
@@ -95,7 +111,7 @@ export function queueOrderEvent(o, kind) {
   const name = def.name(cfg);
   if (alreadySent(o.id, name)) return false;
   const event = buildOrderEvent(o, kind, cfg);
-  const testCode = String(cfg.meta_test_event_code || '').trim();
+  const testCode = activeTestCode(o.project_id, cfg).code;
   enqueue(`capi:${o.project_id}`, `capi ${name} ${o.ref}`, async () => {
     try {
       const r = await meta.sendEvents(cfg, [event], { testCode });
@@ -111,7 +127,7 @@ export function queueOrderEvent(o, kind) {
 /** تجربة الربط من الإعدادات: حدث «أُكّدت» وهمي يظهر في «اختبار الأحداث» فقط (يتطلب رمز الاختبار) */
 export async function sendTestEvent(projectId, testCode) {
   const cfg = projectConfig(projectId);
-  const code = String(testCode || cfg.meta_test_event_code || '').trim();
+  const code = String(testCode || activeTestCode(projectId, cfg).code || '').trim();
   if (!code) throw badRequest('capi_test_code_required');
   const fake = { ref: `TEST-${Date.now().toString(36).toUpperCase()}`, phone: '0550000000', customer_name: 'Test ERP', wilaya_code: 16, commune_fr: 'Alger Centre', total: 1, items: '[]', created_at: nowIso() };
   return meta.sendEvents(cfg, [buildOrderEvent(fake, 'confirmed', cfg)], { testCode: code });

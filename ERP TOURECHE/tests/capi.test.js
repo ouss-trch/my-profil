@@ -6,8 +6,8 @@ import { setSetting } from '../server/lib/settings.js';
 import { createProject } from '../server/services/projects.js';
 import { changeStatus, createOrder, getOrder, upsertFromShopify } from '../server/services/orders.js';
 import { drain } from '../server/services/effects.js';
-import { connectionCheck } from '../server/integrations/meta.js';
-import { sendTestEvent } from '../server/services/capi.js';
+import { connectionCheck, tokenLife } from '../server/integrations/meta.js';
+import { activeTestCode, sendTestEvent, TEST_CODE_TTL_MS } from '../server/services/capi.js';
 
 const p = createProject({ name: 'CAPI shop', domain: 'capi.example' });
 for (const [k, v] of [
@@ -156,7 +156,7 @@ test('meta check: the token, its permissions, the accounts, pixel and page, and 
   const cfg = (await import('../server/lib/settings.js')).projectConfig(p.id);
   const r = await connectionCheck(cfg, { capiTest: () => sendTestEvent(p.id, 'TEST9') });
   assert.deepEqual(r.app, { id: '42', name: 'Toureche ERP' });
-  assert.deepEqual(r.token, { valid: true, expires_at: 0, never_expires: true, data_access_expires_at: null, type: null });
+  assert.deepEqual(r.token, { valid: true, type: null, expires_at: 0, data_access_expires_at: null, never_expires: true, ends_at: null, days_left: null });
   assert.deepEqual(r.scopes.missing, ['ads_management'], 'campaigns cannot be launched without it');
   assert.ok(r.scopes.optional_missing.includes('pages_manage_posts'));
   assert.deepEqual(r.accounts, [{ id: '514592591530411', name: 'ADcompte 1', status: 1, ok: true }]);
@@ -170,7 +170,52 @@ test('meta check: the token, its permissions, the accounts, pixel and page, and 
   // رمز مستخدم من Graph API Explorer بعد «Extend Access Token»: ينتهي بعد نحو شهرين، والواجهة تعرض التاريخ لا «لا ينتهي»
   const sixtyDays = Math.floor(Date.now() / 1000) + 60 * 86400;
   tokenExtra = { type: 'USER', expires_at: sixtyDays, data_access_expires_at: sixtyDays + 30 * 86400 };
-  assert.deepEqual((await connectionCheck(cfg)).token, { valid: true, expires_at: sixtyDays, never_expires: false, data_access_expires_at: sixtyDays + 30 * 86400, type: 'USER' });
+  const user = (await connectionCheck(cfg)).token;
+  assert.deepEqual([user.type, user.never_expires, user.ends_at, user.days_left], ['USER', false, sixtyDays, 60], 'the earlier of the two dates, in whole days');
   tokenExtra = {};
   await assert.rejects(sendTestEvent(p.id, ''), (e) => e.code === 'capi_test_code_required');
+});
+
+test('token life: the earliest date wins, a token that never expires but whose data access ends is not “permanent”, and an unreported date is unknown', () => {
+  const now = Date.UTC(2026, 9, 28) ;
+  const sec = (days) => Math.floor(now / 1000) + days * 86400;
+  // رمز System User بمدة Never: لا تاريخ
+  assert.deepEqual(tokenLife({ type: 'SYSTEM_USER', expires_at: 0, data_access_expires_at: 0 }, now), { type: 'SYSTEM_USER', expires_at: 0, data_access_expires_at: 0, never_expires: true, ends_at: null, days_left: null });
+  // رمز مستخدم: ينتهي بعد 60 يوماً ووصول البيانات بعد 90: الأبكر
+  const user = tokenLife({ type: 'USER', expires_at: sec(60), data_access_expires_at: sec(90) }, now);
+  assert.deepEqual([user.never_expires, user.ends_at, user.days_left], [false, sec(60), 60]);
+  // الرمز دائم لكن وصول التطبيق للبيانات ينتهي بعد 45 يوماً: لا يُعرض «دائماً»
+  const data = tokenLife({ type: 'USER', expires_at: 0, data_access_expires_at: sec(45) }, now);
+  assert.deepEqual([data.never_expires, data.ends_at, data.days_left], [true, sec(45), 45]);
+  // انتهى بالأمس
+  assert.equal(tokenLife({ expires_at: sec(-1) }, now).days_left, -1);
+  // الرد لا يذكر expires_at (رموز بعض الأنواع): مجهول، لا «ينتهي»
+  assert.deepEqual(tokenLife({ type: 'PAGE', is_valid: true }, now), { type: 'PAGE', expires_at: null, data_access_expires_at: null, never_expires: null, ends_at: null, days_left: null });
+  assert.equal(tokenLife(null).never_expires, null);
+});
+
+test('test code: it works for a few hours, then production events resume on their own (a forgotten code must not swallow them)', async () => {
+  sent.length = 0;
+  setSetting('meta_test_event_code', 'TEST777', p.id);
+  const fresh = activeTestCode(p.id);
+  assert.deepEqual([fresh.code, fresh.set, fresh.expired], ['TEST777', true, false]);
+  assert.ok(Date.parse(fresh.until) - Date.now() > TEST_CODE_TTL_MS - 5000, 'the deadline is shown to the owner');
+  const a = order();
+  changeStatus(a, 'confirmed');
+  await drain();
+  assert.equal(sent.at(-1).test, 'TEST777');
+  // مرّت 4 ساعات على حفظه: يتوقف، وتذهب الأحداث إلى الإنتاج
+  db.prepare("UPDATE settings SET updated_at = ? WHERE key = 'meta_test_event_code'").run(new Date(Date.now() - 4 * 3600e3).toISOString());
+  const late = activeTestCode(p.id);
+  assert.deepEqual([late.code, late.set, late.expired], ['', true, true]);
+  const b = order();
+  changeStatus(b, 'confirmed');
+  await drain();
+  assert.equal(sent.at(-1).test, null);
+  assert.deepEqual(getOrder(b).events.filter((e) => e.type === 'meta').map((e) => e.note), ['ok']);
+  // وحفظه من جديد يفتح مهلة جديدة
+  setSetting('meta_test_event_code', 'TEST777', p.id);
+  assert.equal(activeTestCode(p.id).expired, false);
+  setSetting('meta_test_event_code', '', p.id);
+  assert.deepEqual(activeTestCode(p.id), { code: '', set: false, until: null, expired: false });
 });
