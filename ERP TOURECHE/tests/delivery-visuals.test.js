@@ -108,7 +108,7 @@ const files = {
 const redirects = [];
 const shopFiles = [];
 const geminiCalls = [];
-let planSize = 99; // خطة الصور: كل اللقطات (تُقصّ إلى 6)؛ إعادة التخطيط في اختبارها: لقطتان
+let planSize = 99; // خطة الصور: كل اللقطات (تُقصّ إلى 7)؛ إعادة التخطيط في اختبارها: لقطتان
 const geminiFailures = [];
 // أجسام أخطاء Gemini كما يرسلها Google (429 RESOURCE_EXHAUSTED مع QuotaFailure وRetryInfo)
 const quota = (metric, quotaId, limit, retry) => ({
@@ -380,7 +380,7 @@ test('delivery: prices come from the theme’s own shipping table, policies from
   assert.equal(set.delivery_time, 'من 24 إلى 72 ساعة حسب الولاية');
 });
 
-test('landing: the writer gets the real delivery facts and plans descriptive visuals (trimmed to 6, unknown kinds fixed)', async () => {
+test('landing: the writer gets the real delivery facts and plans the page visuals (trimmed to 7, unknown kinds fixed, text inside by default)', async () => {
   const l = await landing.generateLanding(project.id, {
     product_id: product.id,
     angle: 'هدية',
@@ -395,16 +395,18 @@ test('landing: the writer gets the real delivery facts and plans descriptive vis
   assert.equal(facts.delivery.delivery_time, 'من 24 إلى 72 ساعة حسب الولاية');
   assert.match(facts.delivery.returns_policy, /4 أيام عمل/);
   assert.ok(sent.output_config.format.schema.required.includes('visuals'));
-  assert.equal(l.visuals.length, 6);
+  assert.equal(l.visuals.length, 7);
   assert.deepEqual(
     l.visuals.map((v) => v.id),
-    ['v1', 'v2', 'v3', 'v4', 'v5', 'v6'],
+    ['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7'],
   );
   assert.equal(l.visuals[4].kind, 'feature');
   assert.ok(l.visuals.every((v) => v.approved && !v.image));
+  // الصور هي وصف الصفحة: الكتابة داخلها افتراضياً، والتاجر يطفئها لصورة أخطأت حروفها
+  assert.ok(l.visuals.every((v) => v.with_text === true));
 });
 
-test('visuals: drawn from the real product photos, portrait, no text; reviewed; uploaded once to Shopify Files on publish', async () => {
+test('visuals: drawn from the real product photos, portrait, the hook written in the page colors; reviewed; uploaded once to Shopify Files on publish', async () => {
   const [l] = landing.listLandings([project.id]);
   const one = await landing.generateVisual(l.id, 'v1');
   const call = geminiCalls.at(-1);
@@ -414,7 +416,11 @@ test('visuals: drawn from the real product photos, portrait, no text; reviewed; 
   assert.match(parts.at(-1).text, /main photo of the real product/);
   assert.match(parts.at(-1).text, /Product fidelity must be 100%/);
   assert.ok(parts.at(-1).text, 'photos first, then the instructions');
-  assert.match(parts.at(-1).text, /Do not write any text/);
+  // الخطاف: عنوانه وفوائده مكتوبة داخله بلون تصميم الهدية، بأسلوب صورة الخطاف
+  assert.match(parts.at(-1).text, /Write ONLY these Arabic texts.*headline banner «رفيق طفلك كل صباح»; labels «ميكي وميني», «حزام كتف»/);
+  assert.match(parts.at(-1).text, /#be185d/);
+  assert.match(parts.at(-1).text, /Image type: The hook of the page/);
+  assert.doesNotMatch(parts.at(-1).text, /Do not write any text/);
   assert.match(parts.at(-1).text, /identical shape, proportions, colors/);
   assert.match(parts.at(-1).text, /school desk/);
   assert.deepEqual(call.body.generationConfig.imageConfig, {
@@ -454,6 +460,7 @@ test('visuals: drawn from the real product photos, portrait, no text; reviewed; 
   const top = Object.values(tpl.sections.lp_top.blocks);
   assert.equal(top[0].type, 'hero');
   assert.equal(top[0].settings.image_url, out.visuals[0].shopify_url, 'the hero shows the descriptive visual, not the plain photo');
+  assert.equal(top[0].settings.image_text, true, 'its headline is in the image: the live text is hidden visually');
   assert.ok(!top.some((b) => b.type === 'images'), 'drawn visuals replace the original photos above the form');
   const bottom = Object.values(tpl.sections.lp_bottom.blocks);
   const ship = bottom.find((b) => b.type === 'delivery');
@@ -526,7 +533,7 @@ test('visuals: the product page description guides the drawing; the Arabic headl
   assert.match(plain, /Product description from its page.*ستانلس ستيل 320 مل، حزام كتف/);
   assert.match(plain, /Do not write any text/);
   const withText = landing.visualPrompt(p, { scene: 'On a desk.', headline: 'رفيقه في المدرسة', with_text: true });
-  assert.match(withText, /Write exactly this Arabic headline once in the image.*«رفيقه في المدرسة»/);
+  assert.match(withText, /Write ONLY these Arabic texts.*headline banner «رفيقه في المدرسة»/);
   assert.doesNotMatch(withText, /Do not write any text/);
   // صورة كُتب عنوانها داخلها: لا يُكرَّر تحتها
   const tpl = { sections: { main: { type: 'product-main', settings: {}, blocks: {} } } };

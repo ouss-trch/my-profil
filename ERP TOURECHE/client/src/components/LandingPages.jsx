@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, CloudOff, ExternalLink, Eye, ImageOff, ImagePlus, Images, Pencil, Rocket, Settings, Sparkles, Split, Trash2, Wand2 } from 'lucide-react';
+import { AlertTriangle, CloudOff, ExternalLink, Eye, ImageOff, ImagePlus, Images, Pencil, RefreshCw, Rocket, ScanSearch, Settings, Sparkles, Split, Trash2, Wand2 } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
 import { n0, pct } from '../lib/format.js';
 import { useApp } from './ProjectContext.jsx';
 import DeliveryCard from './DeliveryCard.jsx';
-import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Textarea, Toggle, cx, useAction } from './ui.jsx';
+import { Badge, Button, Card, CopyButton, Empty, ErrorBox, Field, Input, Loading, Modal, Segmented, Select, Spinner, Textarea, Toggle, cx, useAction } from './ui.jsx';
 
 const STATUS = { draft: ['مسودة', 'Brouillon', 'neutral'], published: ['منشورة', 'Publiée', 'good'], unpublished: ['مسحوبة', 'Retirée', 'warn'] };
 const latin = (s) =>
@@ -95,11 +95,15 @@ function CopyPreview({ copy }) {
 }
 
 const KINDS = {
-  hero: ['الصورة الرئيسية', 'Visuel principal'],
+  hero: ['الخطاف', 'Accroche'],
+  problem: ['المشكلة', 'Problème'],
+  benefits: ['المزايا حول المنتج', 'Atouts légendés'],
+  feature: ['ميزة تُرى', 'Atout en action'],
+  in_use: ['أثناء الاستعمال', 'En utilisation'],
+  outcome: ['النتيجة', 'Résultat'],
+  gift: ['هدية', 'Cadeau'],
   design: ['التصميم', 'Design'],
   detail: ['تفصيل قريب', 'Détail'],
-  feature: ['ميزة', 'Atout'],
-  in_use: ['أثناء الاستعمال', 'En utilisation'],
   size: ['الحجم', 'Taille'],
   variants: ['الألوان والموديلات', 'Coloris'],
 };
@@ -148,11 +152,9 @@ function VisualCard({ v, busy, disabled, onDraw, onPatch }) {
         <div dir="rtl" lang="ar" className="flex-1 space-y-1 p-2.5">
           <p className="text-sm font-semibold leading-6 text-ink">{v.headline}</p>
           {v.points.length > 0 && <p className="text-xs leading-5 text-sub">{v.points.join(' · ')}</p>}
-          {v.kind !== 'hero' && (
-            <div dir="auto" className="pt-1 text-xs">
-              <Toggle checked={Boolean(v.with_text)} onChange={(on) => onPatch({ with_text: on })} label={t(['العنوان داخل الصورة (تجربة)', 'Titre dans l’image (essai)'])} />
-            </div>
-          )}
+          <div dir="auto" className="pt-1 text-xs">
+            <Toggle checked={Boolean(v.with_text)} onChange={(on) => onPatch({ with_text: on })} label={t(['الكتابة داخل الصورة', 'Texte dans l’image'])} />
+          </div>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-1.5 border-t border-line p-2">
@@ -225,8 +227,8 @@ function VisualsPanel({ l, setL, onChanged }) {
       </div>
       <p className="text-xs leading-6 text-sub">
         {t([
-          'تُرسم من الصورة الرئيسية للمنتج ووصف صفحته فقط، بأجواء تناسب الزاوية. افتراضياً بلا كتابة داخلها: العنوان والنقاط نص حيّ في الصفحة. لتجربة الكتابة فعّل «العنوان داخل الصورة» على لقطة واحدة وارسمها: إن خرجت الحروف العربية سليمة اعتمدها، وإن أخطأت فأطفئ الخيار وأعد الرسم. راجع كل صورة: إن غيّرت شكل المنتج أو لونه فأخفها أو أعد رسمها، لأن الزبون يرفض الطرد إن لم يطابق ما رآه.',
-          'Dessinés à partir de la photo principale et de la description du produit, dans l’ambiance de l’angle. Par défaut sans texte dans l’image. Pour essayer le texte : activez « titre dans l’image » sur un visuel et dessinez-le ; si l’arabe est faux, désactivez et redessinez. Un produit modifié = colis refusé.',
+          'الصور هي جسم الصفحة: الأولى الخطاف، ثم صورة لكل فكرة من الزاوية، بالعنوان والتسميات مكتوبة داخلها بلون تصميم الصفحة. تُرسم من الصورة الرئيسية للمنتج ووصف صفحته. راجع كل صورة قبل النشر: إن أخطأت الحروف العربية فأطفئ «الكتابة داخل الصورة» وأعد الرسم (يظهر العنوان نصاً تحتها)، وإن غيّرت شكل المنتج أو لونه فأخفها، لأن الزبون يرفض الطرد إن لم يطابق ما رآه. 3 صور مكتوبة أو أكثر = صفحة بالصور: تتتابع دون فقرات بينها.',
+          'Les visuels sont le corps de la page : l’accroche, puis un visuel par idée de l’angle, titre et légendes écrits dedans aux couleurs de la page. Vérifiez chaque visuel : arabe faux → désactivez « texte dans l’image » et redessinez ; produit modifié → masquez-le. 3 visuels écrits ou plus = page en images, sans paragraphes entre eux.',
         ])}
       </p>
       {noProvider && (
@@ -259,7 +261,141 @@ function VisualsPanel({ l, setL, onChanged }) {
   );
 }
 
-/** المولّد: منتج + زاوية + إطار + لهجة → مسودة (Claude) */
+/**
+ * تحليل صفحة المنتج عند اختياره: Claude يقرأ الوصف والمواصفات والمتغيرات والصور، فيقترح زوايا خاصة بالمنتج
+ * (الجمهور، الوعد، الأدلة، الاعتراضات، وتسلسل صور الصفحة). محفوظ: لا يُعاد إلا إن تغيّرت صفحة المنتج أو طُلب.
+ */
+function ProductAngles({ productId, picked, onPick, frameworks = [] }) {
+  const { t } = useI18n();
+  const [st, setSt] = useState({ data: null, error: null, busy: false });
+  const current = useRef(productId);
+  current.current = productId;
+  const analyze = useCallback(
+    async (fresh) => {
+      setSt((x) => ({ ...x, busy: true, error: null }));
+      try {
+        const data = await api.post('/pages/landing/analyze', { product_id: productId, fresh });
+        if (current.current === productId) setSt({ data, error: null, busy: false });
+      } catch (e) {
+        if (current.current === productId) setSt((x) => ({ ...x, error: e, busy: false }));
+      }
+    },
+    [productId],
+  );
+  useEffect(() => {
+    if (!productId) return undefined;
+    let live = true;
+    setSt({ data: null, error: null, busy: true });
+    // المحفوظ أولاً (مجاني)؛ التحليل فقط إن لم يوجد أو تغيّرت صفحة المنتج
+    api.get(`/pages/landing/insight?product_id=${productId}`).then(
+      ({ insight }) => {
+        if (!live) return;
+        if (insight && !insight.stale) setSt({ data: insight, error: null, busy: false });
+        else analyze(false);
+      },
+      (e) => live && setSt({ data: null, error: e, busy: false }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [productId, analyze]);
+  if (!productId) return null;
+  const { data, error, busy } = st;
+  const fwLabel = (id) => (frameworks.find((x) => x.id === id)?.label?.[0] || id).split(':')[0];
+  return (
+    <section className="space-y-3 rounded-xl border border-line p-3" aria-busy={busy}>
+      <div className="flex flex-wrap items-center gap-2">
+        <ScanSearch className="h-4 w-4 text-brand" aria-hidden />
+        <b className="text-sm text-ink">{t(['زوايا خاصة بهذا المنتج', 'Angles propres à ce produit'])}</b>
+        <span className="flex-1" />
+        {data && !busy && (
+          <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => analyze(true)}>
+            {t(['حلّل من جديد', 'Relancer l’analyse'])}
+          </Button>
+        )}
+      </div>
+      {busy && (
+        <p className="flex items-center gap-2 text-xs leading-6 text-sub" role="status">
+          <Spinner />
+          {t(['Claude يقرأ صفحة المنتج: الوصف، المواصفات، الألوان والصور… (نصف دقيقة تقريباً)', 'Claude lit la fiche : description, caractéristiques, variantes, photos… (≈ 30 s)'])}
+        </p>
+      )}
+      {error && !busy && (
+        <>
+          <ErrorBox error={error} onRetry={() => analyze(true)} />
+          <p className="text-xs text-muted">{t(['يمكنك كتابة زاويتك يدوياً أو اختيار زاوية عامة أدناه.', 'Vous pouvez écrire votre angle ou choisir un angle générique ci-dessous.'])}</p>
+        </>
+      )}
+      {data && !busy && (
+        <>
+          {data.summary && (
+            <p dir="rtl" lang="ar" className="text-sm leading-7 text-sub">
+              {data.summary}
+            </p>
+          )}
+          {data.facts?.length > 0 && (
+            <details className="rounded-lg bg-raised/50 px-3 py-2 text-xs leading-6">
+              <summary className="cursor-pointer font-medium text-ink">{t([`ما وجده في صفحة المنتج (${data.facts.length})`, `Trouvé sur la fiche (${data.facts.length})`])}</summary>
+              <ul dir="rtl" lang="ar" className="mt-1 space-y-0.5 text-sub">
+                {data.facts.map((f) => (
+                  <li key={f.fact}>
+                    <b className="text-ink">{f.fact}</b>
+                    {f.benefit && <> ← {f.benefit}</>}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {data.missing?.length > 0 && (
+            <div className="rounded-lg bg-warn/10 p-2.5 text-xs leading-6 text-sub">
+              <b className="text-ink">{t(['ينقص في صفحة المنتج (أضفه في Shopify، فالصفحة لا تختلقه):', 'Manque sur la fiche (à ajouter dans Shopify, la page ne l’invente pas) :'])}</b>
+              <ul dir="rtl" lang="ar" className="list-disc ps-5">
+                {data.missing.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t(['الزوايا المقترحة', 'Angles proposés'])}>
+            {data.angles.map((a) => {
+              const on = picked === a.name;
+              return (
+                <button
+                  key={a.name}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => onPick(a)}
+                  className={cx('grid content-start gap-1.5 rounded-lg border p-3 text-start text-sm transition-colors', on ? 'border-brand bg-brand/5' : 'border-line hover:border-brand/50')}
+                >
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <b className="text-ink">{a.name}</b>
+                    <Badge>{fwLabel(a.framework)}</Badge>
+                  </span>
+                  {a.audience && <span className="text-xs text-muted">{a.audience}</span>}
+                  {a.promise && <span className="leading-6 text-ink">«{a.promise}»</span>}
+                  {a.beats?.length > 0 && (
+                    <ol className="list-decimal space-y-0.5 ps-5 text-xs leading-5 text-sub">
+                      {a.beats.map((b, i) => (
+                        <li key={i}>
+                          <span className="text-muted">{t(KINDS[b.kind] || KINDS.feature)}:</span> {b.headline}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-muted">{t(['التحليل محفوظ، ويُعاد تلقائياً إن تغيّر وصف المنتج أو صوره.', 'Analyse conservée, relancée si la fiche change.'])}</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** المولّد: منتج ← تحليل صفحته وزواياه ← زاوية + إطار + لهجة → مسودة (Claude) */
+
 function GenerateModal({ onClose, onDone, base, meta }) {
   const { t } = useI18n();
   const { run, busy } = useAction();
@@ -268,9 +404,16 @@ function GenerateModal({ onClose, onDone, base, meta }) {
   const [f, setF] = useState({ product_id: '', angle: '', framework: 'aida', layout: '', tone: 'ar', audience: '', slug: '', instructions: '' });
   const product = list.find((p) => String(p.id) === String(f.product_id));
   // نفس قاعدة الخادم: مقبض لاتيني + زاوية جاهزة؛ غير ذلك يقترحه Claude ويمكن تعديله قبل النشر
+  const [pickedSlug, setPickedSlug] = useState(null);
   const preset = (meta?.angles || []).find(([ar]) => ar === f.angle);
   const handlePart = /^[a-z0-9-]+$/.test(product?.handle || '') ? product.handle.split('-').slice(0, 2).join('-') : '';
-  const autoSlug = handlePart && preset ? `${handlePart}-${preset[1]}` : '';
+  const angleSlug = preset?.[1] || (pickedSlug?.name === f.angle ? pickedSlug.slug : '');
+  const autoSlug = handlePart && angleSlug ? `${handlePart}-${angleSlug}` : '';
+  // زاوية من التحليل: الإطار والتصميم والجمهور منها (يمكن تغييرها في «الإطار والتصميم»)
+  const pick = (a) => {
+    setPickedSlug({ name: a.name, slug: a.slug });
+    setF((x) => ({ ...x, angle: a.name, framework: a.framework || x.framework, layout: a.layout || '', audience: a.audience || x.audience }));
+  };
   const slug = latin(f.slug);
   const fw = (meta?.frameworks || []).find((x) => x.id === f.framework);
   const generate = () =>
@@ -290,18 +433,20 @@ function GenerateModal({ onClose, onDone, base, meta }) {
         </Button>
       }
     >
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {meta?.delivery && !meta.delivery.imported_at && (
           <p className="rounded-lg bg-warn/10 p-3 text-xs leading-6 text-sub">
             {t(['أسعار التوصيل والسياسات لم تُستورد بعد (بطاقة «التوصيل والسياسات»): الصفحة ستُكتب دونها، وتظهر في «ما يحتاج منك».', 'Livraison et politiques pas encore importées : la page sera rédigée sans.'])}
           </p>
         )}
         <Field label={t(['المنتج', 'Produit'])} hint={t(['صفحة المنتج تبقى للإعلان الرئيسي؛ صفحة الهبوط لزاوية واحدة لجمهور محدد.', 'La fiche produit reste pour la pub principale ; la landing sert un angle précis.'])}>
-          <Select value={f.product_id} onChange={(e) => setF({ ...f, product_id: e.target.value })} placeholder="—" options={list.map((p) => ({ value: p.id, label: p.title }))} />
+          <Select value={f.product_id} onChange={(e) => setF({ ...f, product_id: e.target.value, angle: '', layout: '' })} placeholder="—" options={list.map((p) => ({ value: p.id, label: p.title }))} />
         </Field>
-        <Field label={t(['الزاوية التسويقية', 'Angle marketing'])} hint={t(['نفس الزاوية التي سيُبنى عليها الإعلان: العنوان يطابقها.', 'Le même angle que la pub : le titre y correspond.'])}>
+        <ProductAngles productId={f.product_id ? Number(f.product_id) : null} picked={f.angle} onPick={pick} frameworks={meta?.frameworks} />
+        <Field label={t(['الزاوية التسويقية', 'Angle marketing'])} hint={t(['اختر زاوية من التحليل أعلاه، أو اكتب زاويتك. نفس الزاوية التي سيُبنى عليها الإعلان: العنوان يطابقها.', 'Choisissez un angle de l’analyse ou écrivez le vôtre. Le même angle que la pub.'])}>
           <Input value={f.angle} onChange={(e) => setF({ ...f, angle: e.target.value })} placeholder={t(['مثال: هدية لطفلك قبل الدخول المدرسي', 'Ex. : cadeau pour la rentrée'])} />
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted">{t(['زوايا عامة:', 'Angles génériques :'])}</span>
             {(meta?.angles || []).map(([ar]) => (
               <button key={ar} type="button" className={cx('chip', f.angle === ar ? 'bg-brand text-white' : 'bg-raised')} onClick={() => setF({ ...f, angle: ar })}>
                 {ar}
@@ -309,26 +454,31 @@ function GenerateModal({ onClose, onDone, base, meta }) {
             ))}
           </div>
         </Field>
-        <Field label={t(['إطار الكتابة', 'Structure de rédaction'])}>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(meta?.frameworks || []).map((x) => (
-              <label key={x.id} className={cx('flex cursor-pointer gap-2 rounded-lg border p-3 text-sm', f.framework === x.id ? 'border-brand bg-brand/5' : 'border-line')}>
-                <input type="radio" name="lp-framework" className="mt-1" checked={f.framework === x.id} onChange={() => setF({ ...f, framework: x.id })} />
-                <span>
-                  <b className="block text-ink">{t(x.label)}</b>
-                  <span className="text-xs text-muted">{t(x.when)}</span>
-                </span>
-              </label>
-            ))}
+        <details className="rounded-lg border border-line px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium text-ink">{t(['الإطار والتصميم (تختارهما الزاوية، ويمكنك تغييرهما)', 'Structure et design (choisis par l’angle, modifiables)'])}</summary>
+          <div className="mt-3 grid grid-cols-1 gap-4">
+            <Field label={t(['إطار الكتابة', 'Structure de rédaction'])}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(meta?.frameworks || []).map((x) => (
+                  <label key={x.id} className={cx('flex cursor-pointer gap-2 rounded-lg border p-3 text-sm', f.framework === x.id ? 'border-brand bg-brand/5' : 'border-line')}>
+                    <input type="radio" name="lp-framework" className="mt-1" checked={f.framework === x.id} onChange={() => setF({ ...f, framework: x.id })} />
+                    <span>
+                      <b className="block text-ink">{t(x.label)}</b>
+                      <span className="text-xs text-muted">{t(x.when)}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {fw && <p className="mt-1 text-xs text-muted">{t(['القاعدة الثابتة في كل الأطر: لا أرقام ولا آراء ولا ندرة مختلقة؛ العروض والسياسات كما في صفحة المنتج.', 'Règle fixe : aucun chiffre, avis ou rareté inventés ; offres et politiques identiques à la fiche.'])}</p>}
+            </Field>
+            <Field
+              label={t(['تصميم الصفحة', 'Design de la page'])}
+              hint={t(['لكل زاوية ترتيب أقسام وألوان وصور مختلفة. «تلقائي» يختاره من كلمات الزاوية (هدية، المشكلة والحل، الاستعمال اليومي…).', 'Chaque angle a ses sections, couleurs et visuels. « Auto » le choisit d’après l’angle.'])}
+            >
+              <Select value={f.layout} onChange={(e) => setF({ ...f, layout: e.target.value })} placeholder={t(['تلقائي حسب الزاوية', 'Auto selon l’angle'])} options={(meta?.layouts || []).map((x) => ({ value: x.id, label: t(x.label) }))} />
+            </Field>
           </div>
-          {fw && <p className="mt-1 text-xs text-muted">{t(['القاعدة الثابتة في كل الأطر: لا أرقام ولا آراء ولا ندرة مختلقة؛ العروض والسياسات كما في صفحة المنتج.', 'Règle fixe : aucun chiffre, avis ou rareté inventés ; offres et politiques identiques à la fiche.'])}</p>}
-        </Field>
-        <Field
-          label={t(['تصميم الصفحة', 'Design de la page'])}
-          hint={t(['لكل زاوية ترتيب أقسام وألوان وصور مختلفة. «تلقائي» يختاره من كلمات الزاوية (هدية، المشكلة والحل، الاستعمال اليومي…).', 'Chaque angle a ses sections, couleurs et visuels. « Auto » le choisit d’après l’angle.'])}
-        >
-          <Select value={f.layout} onChange={(e) => setF({ ...f, layout: e.target.value })} placeholder={t(['تلقائي حسب الزاوية', 'Auto selon l’angle'])} options={(meta?.layouts || []).map((x) => ({ value: x.id, label: t(x.label) }))} />
-        </Field>
+        </details>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t(['اللغة', 'Langue'])}>
             <Segmented

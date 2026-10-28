@@ -646,6 +646,17 @@ ${STORE_PAGES_SQL}
   (db) => {
     if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'meta_event_id')) db.exec('ALTER TABLE orders ADD COLUMN meta_event_id TEXT');
   },
+  // تحليل المنتج لصفحات الهبوط (ما في صفحته + زوايا خاصة به): يُحفظ ويُعاد فقط إن تغيّرت صفحة المنتج (source_hash)
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS product_insights (
+      product_id INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      source_hash TEXT NOT NULL,
+      data TEXT NOT NULL,
+      model TEXT,
+      created_at TEXT NOT NULL
+    )`);
+  },
 ];
 
 export function openDb(file = config.dbFile) {

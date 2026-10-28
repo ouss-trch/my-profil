@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { db, parseJson } from '../db/index.js';
 import * as ai from '../integrations/ai.js';
@@ -20,9 +21,10 @@ import { detachPage } from './splits.js';
  *  - قالب منتج مستقل templates/product.lp-<slug>.json بتخطيط layout/erp-landing.liquid (theme.liquid دون الرأس والتذييل)
  *    وقسم sections/erp-lp.liquid للنصوص، يمكن تعديلها لاحقاً من محرر القالب في Shopify؛
  *  - رابط الإعلان ‎/pages/<slug>‎ تحويلة Shopify إلى ‎/products/<handle>?view=lp-<slug>‎ (Shopify لا يقبل «/» داخل اسم الصفحة).
- *  - صور وصفية (اختيارية): Claude يخطط لقطات تبرز التصميم والمزايا والاستعمال، ومولّد الصور يرسمها من صور المنتج الحقيقية
- *    دون أي كتابة داخل الصورة (الحروف العربية في الصور المولّدة ما زالت تخرج بأخطاء)؛ العنوان والنقاط نص حيّ فوق الصورة.
- *    التاجر يراجع كل صورة قبل النشر، وتُرفع إلى «Fichiers» في Shopify (write_files) فلا تدخل معرض المنتج.
+ *  - تحليل المنتج أولاً (analyzeProduct): حقائق صفحته ونواقصها + زوايا خاصة به، لكل زاوية وعدها وجمهورها وتسلسل صورها.
+ *  - الصور هي الصفحة: Claude يخطط 5–7 صور حسب تسلسل الزاوية (الخطاف، المشكلة، ميزة تُرى، المزايا، الاستعمال، النتيجة…)،
+ *    ومولّد الصور يرسمها من صورة المنتج الحقيقية بعنوانها وتسمياتها داخلها بلون تصميم الصفحة. التاجر يراجع كل صورة
+ *    (ويطفئ الكتابة في صورة أخطأت حروفها)، وتُرفع إلى «Fichiers» في Shopify (write_files) فلا تدخل معرض المنتج.
  */
 
 export const FRAMEWORKS = {
@@ -158,22 +160,29 @@ export function landingSystem(brand) {
 9. زر الطلب فعل واضح (مثال: «اطلب الآن وادفع عند الاستلام»).
 10. product_short و angle_slug: كلمة أو كلمتان بالحروف اللاتينية الصغيرة فقط (a-z و0-9 و-)، لرابط مثل ‎/pages/thermos-cadeau‎.
 11. seo: عنوان حتى 60 حرفاً ووصف حتى 155 حرفاً.
-12. visuals: 4 إلى 6 لقطات وصفية تُرسم من صور المنتج الحقيقية المرفقة، مختلفة عنها، تبرز المنتج: الأولى kind=hero (المنتج بطل في مشهد يناسب الزاوية)، ثم من: design (الشكل والتصميم من زاوية جديدة)، detail (لقطة قريبة لتفصيل أو خامة)، feature (ميزة واحدة تُرى بالعين)، in_use (أثناء الاستعمال: أيدٍ فقط، بلا وجوه)، size (الحجم بجانب شيء مألوف)، variants (الألوان أو الموديلات الموجودة فعلاً في variants فقط).
-   - كل لقطة تُظهر شيئاً حقيقياً تراه في الصور أو تذكره المعطيات. ممنوع إظهار ملحق أو قطعة أو لون غير موجود، أو نتيجة غير مثبتة.
-   - headline: 3–7 كلمات بالعربية تقول الفائدة لا الوصف. points: من 0 إلى 3 تسميات قصيرة (2–4 كلمات) تشير لما يُرى في اللقطة.
-   - scene: بالإنجليزية لمولّد الصور، جملتان أو ثلاث: المشهد والخلفية، الإضاءة، زاوية الكاميرا، وما حول المنتج. لا تطلب كتابة أي نص في الصورة ولا تصف المنتج بشكل مختلف عن صوره.
-   - اتبع أجواء الصور الخاصة بتصميم الصفحة (layout.shots)، حتى تختلف صور كل زاوية عن صور الزوايا الأخرى.
+12. visuals: من 5 إلى 7 صور تكوّن جسم الصفحة نفسه (الصور هي الوصف، لا زينة بين الفقرات)، تُرسم من صورة المنتج الحقيقية المرفقة، وكل صورة تحمل فكرة واحدة من الزاوية مكتوبة داخلها (headline وpoints):
+   - إن وُجد angle_brief.beats فاتبعه بالترتيب: صورة لكل beat، بنفس نوعه وفكرته (headline منه تقريباً).
+   - الأولى kind=hero وهي الخطاف: المنتج كبير وواضح مع لمسة الزاوية (هدية ← تغليف ومناسبة؛ مشكلة ← المنتج حلّ واضح؛ يومي ← لحظة الاستعمال؛ جودة ← فخامة التفاصيل). headline = وعد الزاوية، points = فائدتان أو ثلاث قصيرة.
+   - الباقي من: problem (المشكلة كما يعيشها الزبون، لزاوية المشكلة فقط)، benefits (المنتج في الوسط وحوله تسميات لأجزائه الحقيقية)، feature (ميزة واحدة تُرى وهي تعمل، مثل ترمس مقلوب لا يسرّب إن ذُكر ذلك في المعطيات)، in_use (أثناء الاستعمال في مكان حقيقي)، outcome (النتيجة العاطفية: فرحة، راحة، اطمئنان)، gift (المنتج هدية)، detail (خامة أو تفصيل عن قرب)، design، size (فقط إن كان المقاس أو السعة في المعطيات)، variants (الألوان أو الموديلات الموجودة فعلاً في variants فقط).
+   - التنويع إلزامي: لكل صورة مكان مختلف، وframing مختلف قدر الإمكان (macro، close، medium، wide، top_down)، وزاوية كاميرا مختلفة. ممنوع صورتان بنفس الخلفية أو التركيب.
+   - كل ما يُرى حقيقي: من الصور أو المعطيات (product وproduct_facts). ممنوع ملحق أو قطعة أو لون غير موجود، أو ميزة غير مذكورة، أو نتيجة غير مثبتة.
+   - headline: من 3 إلى 7 كلمات بالعربية تقول الفائدة. points: من 0 إلى 3 تسميات من كلمتين إلى 4 تشير لما يُرى في الصورة.
+   - scene: بالإنجليزية لمولّد الصور، جملتان أو ثلاث: المكان والخلفية، الإضاءة، زاوية الكاميرا، ما حول المنتج، وأين تبقى مساحة فارغة للكتابة (أعلى الصورة أو جانبها). لا تكتب النص نفسه في scene ولا تصف المنتج بشكل مختلف عن صوره.
+   - إن لم يوجد angle_brief: اتبع أجواء الصور الخاصة بتصميم الصفحة (layout.shots)، حتى تختلف صور كل زاوية عن صور الزوايا الأخرى.
 13. التصميم (layout) يُعطى مع المعطيات، ولكل تصميم أقسامه الخاصة (occasions، compare، moments، specs): اكتب فقط الأقسام الموجودة في المخطط المطلوب، كما يصفها layout.brief.
    - trust: من 3 إلى 4 نقاط ثقة قصيرة جداً (2–5 كلمات) من delivery وstore_policies فقط، مثل: الدفع عند الاستلام، المعاينة قبل الدفع (إن كانت في السياسة)، التوصيل إلى N ولاية، الاستبدال (إن كان في السياسة).
    - العناوين بنفس الأسلوب والزاوية، والأسطر قصيرة تُقرأ على الهاتف في ثانية.
+
+14. angle_brief (إن وُجد) هو تحليل هذا المنتج لهذه الزاوية: promise هو العنوان الرئيسي تقريباً، pains في الفقرات الأولى، proofs في الفوائد، objections تجيب عنها الأسئلة الشائعة والضمانات. product_facts هي الحقائق التي وُجدت في صفحة المنتج: لا تتجاوزها.
 
 الإطار المطلوب للفقرات (story) يُعطى مع المعطيات؛ اتبعه بالترتيب، وstage لكل فقرة هو اسم مرحلتها.`;
 }
 
 const s = { type: 'string' };
 const sArr = { type: 'array', items: s };
-export const VISUAL_KINDS = ['hero', 'design', 'detail', 'feature', 'in_use', 'size', 'variants'];
-const VISUAL_ITEM = { type: 'object', additionalProperties: false, required: ['kind', 'headline', 'points', 'scene'], properties: { kind: { type: 'string', enum: VISUAL_KINDS }, headline: s, points: sArr, scene: s } };
+export const VISUAL_KINDS = ['hero', 'problem', 'benefits', 'feature', 'in_use', 'outcome', 'gift', 'detail', 'design', 'size', 'variants'];
+export const FRAMINGS = ['macro', 'close', 'medium', 'wide', 'top_down'];
+const VISUAL_ITEM = { type: 'object', additionalProperties: false, required: ['kind', 'framing', 'headline', 'points', 'scene'], properties: { kind: { type: 'string', enum: VISUAL_KINDS }, framing: { type: 'string', enum: FRAMINGS }, headline: s, points: sArr, scene: s } };
 /**
  * مخطط واحد بكل الأقسام (النصوص + أقسام الزوايا الأربعة + خطة الصور) تجاوز حدّ Claude لحجم المخطط
  * (400: The compiled grammar is too large). لذلك طلبان متوازيان، كلٌّ أصغر من المخطط الذي كان يعمل:
@@ -223,6 +232,148 @@ export const planSchema = (extras = []) => ({
 });
 
 const extrasNames = { occasions: 'occasions (المناسبات)', compare: 'compare (بدونه / معه)', moments: 'moments (لحظات اليوم)', specs: 'specs (المواصفات)' };
+
+// ——— تحليل المنتج: ما في صفحته فعلاً + زوايا تسويقية خاصة به (بدل الزوايا العامة) ———
+export const INSIGHT_SYSTEM = `أنت مسوّق أداء محترف (Direct response) لإعلانات Facebook/Instagram في الجزائر، لمتجر يبيع بالدفع عند الاستلام.
+تحلّل صفحة منتج واحد (العنوان، الوصف، المواصفات، المتغيرات، الصور المرفقة، السعر، العروض) ثم تقترح زوايا تسويقية خاصة بهذا المنتج بالذات.
+
+1. facts: كل حقيقة يمكن إثباتها من الصفحة (المادة، السعة، المقاس، طريقة الإغلاق، الحزام، الألوان، ما في العلبة…)، مع فائدتها للزبون في يومه (benefit) ومصدرها (source). ما لا تراه في الصور ولا تقرؤه في المعطيات لا يُكتب. لا أرقام أو مدد غير مذكورة (مثل «يحفظ الحرارة 12 ساعة» إن لم يُذكر الرقم).
+2. missing: ما يسأل عنه الزبون عادة لهذا النوع من المنتجات وغير موجود في الصفحة (مثل السعة، المقاس، المادة، العمر المناسب)، جملة قصيرة لكل نقص، ليضيفه التاجر.
+3. angles: من 4 إلى 6 زوايا، كل زاوية دافع شراء مختلف عند جمهور مختلف (مشكلة يحلها، استعمال يومي محدد، مناسبة هدية، الجودة مقابل السعر، الأطفال والعائلة، التوفير بعرض حقيقي…)، مسمّاة بشكل ملموس خاص بالمنتج، لا بكلمة عامة.
+   مثال لترمس أطفال: «مشروب دافئ حتى الاستراحة» لا «الاستعمال اليومي».
+   - name: من 2 إلى 6 كلمات بالعربية. slug: كلمة أو كلمتان لاتينية صغيرة (a-z و0-9 و-) للرابط، مثل ecole أو cadeau-aid.
+   - audience: من بالضبط (مثل: أمهات تلاميذ الابتدائي). why: لماذا تناسب هذا المنتج، جملة واحدة.
+   - promise: وعد الزاوية كعنوان إعلان، من 6 إلى 10 كلمات، صادق ومن الحقائق فقط.
+   - pains: من 2 إلى 3 مشكلات أو رغبات يعيشها هذا الجمهور يومياً. proofs: من 2 إلى 4 حقائق من facts تثبت الوعد. objections: من 2 إلى 3 اعتراضات قبل الطلب وما يجيب عنها من الصفحة أو الدفع عند الاستلام.
+   - framework: إطار الكتابة الأنسب (aida جمهور بارد، pas مشكلة معروفة، bab تغيير روتين، fab منتج تقني، fourp جمهور متردد، fomo فقط إن وُجد عرض كمية حقيقي أو مخزون قليل فعلاً). layout: تصميم الصفحة الأنسب (gift، problem، daily، value، family، classic).
+   - beats: من 5 إلى 7 صور متتابعة تكوّن الصفحة (الصور هي الوصف، مثل صفحات البيع الناجحة: خطاف ثم صور تشرح)، بالترتيب:
+     الأولى kind=hero: الخطاف (المنتج مع لمسة الزاوية ووعدها). ثم صورة لكل فكرة: problem للمشكلة (زاوية المشكلة)، feature لميزة تُرى وهي تعمل، benefits للمنتج وحوله تسميات أجزائه، in_use للاستعمال في مكان حقيقي، outcome للنتيجة العاطفية، gift للهدية، detail للخامة، size إن عُرف المقاس، variants للألوان الموجودة فعلاً.
+     headline: النص الذي يُكتب داخل الصورة (3 إلى 7 كلمات، فائدة لا وصف). shows: ماذا تُظهر الصورة بالضبط، جملة بالعربية.
+     كل beat فكرة واحدة مختلفة ومشهد مختلف؛ والزوايا المختلفة صورها مختلفة.
+4. سياسة Meta: لا ادعاءات صحية أو علاجية، لا مخاطبة صفات شخصية للزائر، لا ندرة أو عدّاد غير حقيقي، لا آراء زبائن مختلقة.
+5. summary: ما هو المنتج ولمن، جملتان قصيرتان.`;
+
+const INSIGHT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary', 'facts', 'missing', 'angles'],
+  properties: {
+    summary: s,
+    facts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['fact', 'benefit', 'source'], properties: { fact: s, benefit: s, source: { type: 'string', enum: ['title', 'description', 'specs', 'variants', 'photo', 'offer'] } } } },
+    missing: sArr,
+    angles: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'slug', 'audience', 'why', 'promise', 'pains', 'proofs', 'objections', 'framework', 'layout', 'beats'],
+        properties: {
+          name: s,
+          slug: s,
+          audience: s,
+          why: s,
+          promise: s,
+          pains: sArr,
+          proofs: sArr,
+          objections: sArr,
+          framework: { type: 'string', enum: Object.keys(FRAMEWORKS) },
+          layout: { type: 'string', enum: Object.keys(LAYOUTS) },
+          beats: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['kind', 'headline', 'shows'], properties: { kind: { type: 'string', enum: VISUAL_KINDS }, headline: s, shows: s } } },
+        },
+      },
+    },
+  },
+};
+
+const clipList = (a, n, max) => (Array.isArray(a) ? a : []).map((x) => clip(x, max)).filter(Boolean).slice(0, n);
+
+/** زاوية واحدة من التحليل كما تُستعمل في الكتابة وخطة الصور (تُحفظ مع نص الصفحة) */
+function cleanBrief(a) {
+  if (!a?.name) return undefined;
+  const framework = FRAMEWORKS[a.framework] ? a.framework : 'aida';
+  const beats = (Array.isArray(a.beats) ? a.beats : [])
+    .map((b) => ({ kind: VISUAL_KINDS.includes(b.kind) ? b.kind : 'feature', headline: clip(b.headline, 90), shows: clip(b.shows, 240) }))
+    .filter((b) => b.headline || b.shows)
+    .slice(0, 7);
+  // الخطاف أولاً دائماً: صفحة تبدأ بصورة تشرح تفصيلاً تفقد الزائر في ثانيتين
+  if (beats.length && beats[0].kind !== 'hero') beats[0] = { ...beats[0], kind: 'hero' };
+  return {
+    name: clip(a.name, 80),
+    slug: latin(a.slug, 24),
+    audience: clip(a.audience, 200),
+    why: clip(a.why, 240),
+    promise: clip(a.promise, 140),
+    pains: clipList(a.pains, 3, 160),
+    proofs: clipList(a.proofs, 4, 160),
+    objections: clipList(a.objections, 3, 200),
+    framework,
+    layout: LAYOUTS[a.layout] ? a.layout : layoutFor(a.name, framework),
+    beats,
+  };
+}
+
+export function cleanInsight(raw) {
+  const names = new Set();
+  return {
+    summary: clip(raw?.summary, 400),
+    facts: (Array.isArray(raw?.facts) ? raw.facts : [])
+      .map((f) => ({ fact: clip(f.fact, 160), benefit: clip(f.benefit, 200), source: clip(f.source, 20) || 'description' }))
+      .filter((f) => f.fact)
+      .slice(0, 14),
+    missing: clipList(raw?.missing, 6, 200),
+    // اسمان متطابقان = زاوية واحدة: الاسم هو ما يُختار به في الواجهة
+    angles: (Array.isArray(raw?.angles) ? raw.angles : [])
+      .map(cleanBrief)
+      .filter((a) => a && !names.has(a.name) && names.add(a.name))
+      .slice(0, 6),
+  };
+}
+
+/** بصمة صفحة المنتج: التحليل يُعاد فقط إن تغيّر ما يقرؤه (الوصف، المواصفات، المتغيرات، السعر، الصور) */
+const insightHash = (p) =>
+  createHash('sha1')
+    .update(JSON.stringify({ f: productFacts(p), i: (p.images || []).map((x) => x.url).slice(0, 4), a: p.audience || '' }))
+    .digest('hex');
+
+export function getInsight(productId) {
+  const r = db.prepare('SELECT * FROM product_insights WHERE product_id = ?').get(productId);
+  if (!r) return null;
+  const p = getProduct(productId);
+  return { ...parseJson(r.data, {}), product_id: r.product_id, at: r.created_at, model: r.model, stale: r.source_hash !== insightHash(p) };
+}
+
+/** الزاوية المختارة من تحليل المنتج (بالاسم)، أو لا شيء إن كانت زاوية عامة أو مكتوبة يدوياً */
+export function insightAngle(productId, name) {
+  const angle = clip(name, 80);
+  return getInsight(productId)?.angles?.find((a) => a.name === angle) || null;
+}
+
+/** تحليل صفحة المنتج (Claude يقرأ الوصف والمواصفات والصور) → حقائق + نواقص + زوايا خاصة به. محفوظ حتى تتغير الصفحة */
+export async function analyzeProduct(projectId, productId, { fresh = false } = {}) {
+  const p = getProduct(Number(productId));
+  if (p.project_id !== projectId) throw new HttpError(404, 'product_not_found');
+  const cached = getInsight(p.id);
+  if (cached && !cached.stale && !fresh) return cached;
+  const cfg = projectConfig(projectId);
+  let offers = [];
+  if (shopify.isConfigured(cfg)) offers = await mainTemplate(cfg).then(({ tpl }) => templateFacts(tpl).offers).catch(() => []);
+  const images = await imageBlocks(p.images, 4).catch(() => []);
+  const data = { product: productFacts(p), store_offers: offers, audience_hint: clip(p.audience, 200) || null };
+  const raw = await ai.structured({
+    system: INSIGHT_SYSTEM,
+    prompt: `المعطيات (JSON):\n${JSON.stringify(data, null, 2)}\n\n${images.length ? 'الصور المرفقة هي صور المنتج الحقيقية من صفحته.' : 'لا صور للمنتج: اعتمد على النص وحده.'}\n\nحلّل المنتج واقترح زواياه حسب القواعد.`,
+    schema: INSIGHT_SCHEMA,
+    effort: 'medium',
+    images,
+    meter: { projectId, kind: 'landing_insight' },
+  });
+  const insight = cleanInsight(raw);
+  if (!insight.angles.length) throw new HttpError(502, 'landing_insight_empty');
+  db.prepare(
+    'INSERT INTO product_insights (product_id, project_id, source_hash, data, model, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(product_id) DO UPDATE SET source_hash = excluded.source_hash, data = excluded.data, model = excluded.model, created_at = excluded.created_at',
+  ).run(p.id, projectId, insightHash(p), JSON.stringify(insight), ai.model(), nowIso());
+  return getInsight(p.id);
+}
 
 // ——— المعطيات الحقيقية من القالب: العروض وسياسات المتجر كما تظهر في صفحة المنتج ———
 export const parseTemplate = shopify.parseThemeJson;
@@ -289,18 +440,23 @@ function cleanCopy(c) {
     final_cta: { headline: clip(c.final_cta?.headline, 140), cta: clip(c.final_cta?.cta, 60) || 'اطلب الآن', note: clip(c.final_cta?.note, 160) },
     seo: { title: clip(c.seo?.title, 70), description: clip(c.seo?.description, 160) },
     owner_todo: list(c.owner_todo, 8, 200),
+    // تحليل المنتج للزاوية المختارة: يبقى مع الصفحة لإعادة تخطيط صورها بنفس التسلسل
+    brief: c.brief ? cleanBrief(c.brief) : undefined,
   };
 }
 
+/** خطة الصور: حتى 7 صور، الأولى الخطاف؛ الكتابة داخل الصورة افتراضياً (الصور هي وصف الصفحة)، والتاجر يطفئها لصورة أخطأت حروفها */
 function cleanVisuals(list) {
   return (Array.isArray(list) ? list : [])
-    .slice(0, 6)
+    .slice(0, 7)
     .map((x, i) => ({
       id: `v${i + 1}`,
       kind: VISUAL_KINDS.includes(x.kind) ? x.kind : i ? 'feature' : 'hero',
+      framing: FRAMINGS.includes(x.framing) ? x.framing : null,
       headline: clip(x.headline, 90),
       points: (Array.isArray(x.points) ? x.points : []).map((t) => clip(t, 40)).filter(Boolean).slice(0, 3),
       scene: clip(x.scene, 700),
+      with_text: true,
       image: null,
       approved: true,
       shopify_url: null,
@@ -355,6 +511,9 @@ function productFacts(p) {
   };
 }
 
+/** ما يُرسل للكاتب من الزاوية: بلا الاسم اللاتيني ولا الإطار والتصميم (يُرسلان في حقولهما) */
+const briefFacts = (b) => ({ audience: b.audience, why: b.why, promise: b.promise, pains: b.pains, proofs: b.proofs, objections: b.objections, beats: b.beats });
+
 /** توليد النصوص (مسودة، لا شيء يُكتب في Shopify بعد) */
 export async function generateLanding(projectId, input, userId = null) {
   const p = getProduct(Number(input.product_id));
@@ -362,8 +521,10 @@ export async function generateLanding(projectId, input, userId = null) {
   if (!p.handle) throw badRequest('landing_product_not_on_shopify');
   const angle = clip(input.angle, 80);
   if (!angle) throw badRequest('landing_angle_required');
-  const framework = FRAMEWORKS[input.framework] ? input.framework : 'aida';
-  const layout = layoutFor(angle, framework, input.layout);
+  // زاوية من تحليل المنتج: وعدها وآلام جمهورها وأدلتها وتسلسل صورها يوجّه الكتابة والصور
+  const brief = insightAngle(p.id, angle);
+  const framework = FRAMEWORKS[input.framework] ? input.framework : brief?.framework || 'aida';
+  const layout = layoutFor(angle, framework, input.layout || brief?.layout);
   const tone = TONES[input.tone] ? input.tone : 'ar';
   const cfg = projectConfig(projectId);
   const brand = cfg.brand_name || getProject(projectId).name;
@@ -375,9 +536,10 @@ export async function generateLanding(projectId, input, userId = null) {
     store_policies: [...facts.policies, 'الدفع عند الاستلام', 'فريقنا يتصل لتأكيد الطلب قبل الشحن'],
     delivery: deliveryFacts(projectId),
     angle,
-    audience: clip(input.audience || p.audience, 200) || null,
+    audience: clip(input.audience || brief?.audience || p.audience, 200) || null,
     framework: { id: framework, story_plan: FRAMEWORKS[framework].story },
     layout: { id: layout, brief: LAYOUTS[layout].brief, shots: LAYOUTS[layout].shots },
+    ...(brief ? { angle_brief: briefFacts(brief), product_facts: getInsight(p.id)?.facts || [] } : {}),
   };
   const images = await imageBlocks(p.images, 4).catch(() => []);
   const system = landingSystem(brand).replace('{tone}', TONES[tone]);
@@ -406,10 +568,10 @@ export async function generateLanding(projectId, input, userId = null) {
       // النص هو الأهم: إن فشل هذا الطلب تُحفظ الصفحة دونه، و«خطط الصور» يكمله
       .catch(() => ({ visuals: [] })),
   ]);
-  const copy = cleanCopy({ ...raw, ...Object.fromEntries(extras.map((k) => [k, plan[k]])), layout });
+  const copy = cleanCopy({ ...raw, ...Object.fromEntries(extras.map((k) => [k, plan[k]])), layout, brief });
   // الرابط: ما كتبه التاجر، وإلا «المنتج-الزاوية» كما تقترحه الواجهة (مقبض لاتيني + زاوية جاهزة)، وإلا اقتراح Claude
   const handlePart = /^[a-z0-9-]+$/.test(p.handle) ? p.handle.split('-').slice(0, 2).join('-') : '';
-  const anglePart = ANGLE_PRESETS.find(([ar]) => ar === angle)?.[1] || '';
+  const anglePart = ANGLE_PRESETS.find(([ar]) => ar === angle)?.[1] || brief?.slug || '';
   const base = latin(input.slug, 40) || latin(`${handlePart || latin(raw.product_short, 20) || 'produit'}-${anglePart || latin(raw.angle_slug, 18) || latin(angle, 18) || framework}`, 40);
   const slug = uniqueSlug(projectId, base);
   const now = nowIso();
@@ -446,7 +608,7 @@ export async function planVisuals(id) {
   const missing = layoutExtras(layoutId).filter((k) => empty(l.copy[k]));
   const raw = await ai.structured({
     system: landingSystem(brand).replace('{tone}', TONES[l.tone] || TONES.ar),
-    prompt: `المعطيات (JSON):\n${JSON.stringify({ product: productFacts(p), angle: l.angle, delivery: deliveryFacts(l.project_id), layout: { id: layoutId, brief: layout.brief, shots: layout.shots }, headline: l.copy.hero?.headline, benefits: l.copy.benefits?.items }, null, 2)}\n\nالصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text. ${missing.length ? `اكتب أقسام التصميم الناقصة: ${missing.map((k) => extrasNames[k]).join('، ')} (القاعدة 13)، ثم ` : 'اكتب '}خطة الصور الوصفية (القاعدة 12) لهذه الصفحة.`,
+    prompt: `المعطيات (JSON):\n${JSON.stringify({ product: productFacts(p), angle: l.angle, delivery: deliveryFacts(l.project_id), layout: { id: layoutId, brief: layout.brief, shots: layout.shots }, headline: l.copy.hero?.headline, benefits: l.copy.benefits?.items, ...(l.copy.brief ? { angle_brief: briefFacts(l.copy.brief), product_facts: getInsight(p.id)?.facts || [] } : {}) }, null, 2)}\n\nالصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text. ${missing.length ? `اكتب أقسام التصميم الناقصة: ${missing.map((k) => extrasNames[k]).join('، ')} (القاعدة 13)، ثم ` : 'اكتب '}خطة الصور الوصفية (القاعدة 12) لهذه الصفحة.`,
     schema: planSchema(missing),
     effort: 'medium',
     images,
@@ -465,22 +627,57 @@ const plainText = (html, n) =>
     .trim()
     .slice(0, n);
 
+// لون الكتابة داخل الصور = لون تصميم الصفحة (نفس --lp-a في erp-lp.liquid): الصور والصفحة سلسلة واحدة
+const ACCENTS = { gift: ['#be185d', 'deep rose'], problem: ['#0f766e', 'deep teal'], daily: ['#0369a1', 'ocean blue'], value: ['#a16207', 'warm gold'], family: ['#7c3aed', 'violet'], classic: ['#141821', 'near-black'] };
+
+// نوع الصورة يحدد أسلوبها: كانت كل الصور «استوديو بخلفية نظيفة» فخرجت متشابهة
+const KIND_STYLE = {
+  hero: 'The hook of the page, like a top-performing Facebook ad key visual: the product large, sharp and centered in the foreground, the angle’s setting behind it, strong contrast, generous empty space at the top for the headline.',
+  problem: 'Realistic everyday photo of the problem situation described in the scene, as the buyer lives it. The product is not the subject here; if it appears, only small on one side as the answer.',
+  benefits: 'Clean product infographic: the product centered on a soft background lightly tinted with the accent color, with clear space around it for short labels, each label next to the real part it names with a thin pointer line.',
+  feature: 'Demonstration photo: one real feature shown working, so it is understood without reading. The product is the clear subject.',
+  in_use: 'Candid lifestyle photo of the product being used in a real place (home, school, office, car, outdoors), natural light.',
+  outcome: 'Emotional lifestyle moment showing the result for the buyer (joy, calm, relief, pride), the product clearly visible in the scene.',
+  gift: 'Gift moment: the product offered as a present, wrapping paper and a ribbon around it (never covering or changing the product), warm festive light.',
+  detail: 'Macro photo of a real material, finish or part of the product, crisp texture, shallow depth of field.',
+  design: 'Product design shot from a new angle on a styled surface that fits the angle.',
+  size: 'Scale photo: the product next to a familiar everyday object so its real size is obvious, real proportions kept.',
+  variants: 'All the real colors or models of the product side by side, same light and camera angle, as shown in the reference photos.',
+};
+const FRAMING_TEXT = {
+  macro: 'macro close-up',
+  close: 'close shot, the product fills most of the frame',
+  medium: 'medium shot, the product and its immediate surroundings',
+  wide: 'wide shot showing the whole setting, the product still clearly identifiable',
+  top_down: 'top-down flat lay shot from directly above',
+};
+
 /**
- * تعليمات مولّد الصور: المنتج الذي في الصورة الرئيسية نفسه بالضبط (تطابق 100%)، وتفاصيله من وصف صفحة المنتج، في مشهد جديد.
- * دون كتابة افتراضياً (النص حيّ في الصفحة)؛ «بالكتابة» تجربة: العنوان العربي داخل الصورة، يراجعه التاجر قبل اعتماده.
+ * تعليمات مولّد الصور: المنتج الذي في الصورة الرئيسية نفسه بالضبط (تطابق 100%)، وتفاصيله من وصف صفحة المنتج، في مشهد جديد
+ * بأسلوب نوع الصورة (الخطاف، المشكلة، المزايا، الاستعمال…). الكتابة داخل الصورة افتراضياً (الصور هي وصف الصفحة):
+ * العنوان شريط بلون تصميم الصفحة والتسميات بجانب ما تشير إليه، والتاجر يراجع الحروف قبل اعتماد الصورة.
  */
-export function visualPrompt(p, v) {
+export function visualPrompt(p, v, { layout = 'classic', angle = '' } = {}) {
   const description = plainText(p.description_html, 900);
+  const [hex, color] = ACCENTS[layout] || ACCENTS.classic;
+  const text = Boolean(v.with_text && v.headline);
+  const labels = text ? (v.points || []).filter(Boolean) : [];
   return [
-    `The attached photo is the main photo of the real product "${p.title}". Create one new image of THIS exact product for its landing page.`,
+    `${v.kind === 'variants' ? 'The attached photos are the real photos of the product' : 'The attached photo is the main photo of the real product'} "${p.title}". Create one new image of THIS exact product for its landing page${angle ? ` (marketing angle: ${angle})` : ''}.`,
     'Product fidelity must be 100%: identical shape, proportions, colors, prints and characters, logos, materials and parts as in the photo. Do not redesign, recolor, add or remove anything on the product, and do not add accessories that are not in the photo or the description.',
     description ? `Product description from its page (use it for real details only, never to change how it looks): ${description}` : '',
+    `Image type: ${KIND_STYLE[v.kind] || KIND_STYLE.feature}`,
     `Scene: ${v.scene}`,
-    'Style: premium e-commerce photography, realistic, soft natural light, sharp focus on the product as the clear subject, uncluttered background, portrait composition.',
-    v.with_text && v.headline
-      ? `Write exactly this Arabic headline once in the image, in a clean bold Arabic font, correctly joined letters, right-to-left, large and legible, in empty space and never over the product: «${v.headline}». No other text, numbers, prices, logos or watermarks.`
+    v.framing && FRAMING_TEXT[v.framing] ? `Camera: ${FRAMING_TEXT[v.framing]}.` : '',
+    'Style: photorealistic high-end commercial photography, natural believable light, sharp focus on the product, portrait 4:5 composition for a phone screen.',
+    text
+      ? [
+          `Text in the image (same design on every image of this page): a bold rounded banner filled with ${hex} (${color}) with white bold modern Arabic sans-serif type, soft shadow; labels are small rounded tags in white with ${hex} text.`,
+          `Write ONLY these Arabic texts, each exactly once, spelled exactly as given, letters correctly joined, right-to-left, large and legible on a phone, in empty space and never covering the product: headline banner «${v.headline}»${labels.length ? `; labels ${labels.map((x) => `«${x}»`).join(', ')}` : ''}.`,
+          'No other text, numbers, prices, logos or watermarks.',
+        ].join('\n')
       : 'Do not write any text, letters, numbers, prices, logos or watermarks anywhere in the image.',
-    'No human faces; hands are fine.',
+    'People may appear only as hands, seen from behind, or with the face out of frame: no visible faces. The product stays the clear subject.',
   ]
     .filter(Boolean)
     .join('\n');
@@ -492,10 +689,10 @@ export async function generateVisual(id, vid) {
   const v = l.visuals.find((x) => x.id === vid);
   if (!v) throw new HttpError(404, 'visual_not_found');
   const p = getProduct(l.product_id);
-  // الصورة الرئيسية وحدها (الأولى في معرض المنتج)
-  const sources = (p.images || []).map((i) => i.url).filter((u) => /^https:\/\//.test(u || '') || uploadPath(u)).slice(0, 1);
+  // الصورة الرئيسية وحدها، إلا صورة الألوان: تحتاج صور الألوان الحقيقية كلها حتى لا يخترع المولّد لوناً
+  const sources = (p.images || []).map((i) => i.url).filter((u) => /^https:\/\//.test(u || '') || uploadPath(u)).slice(0, v.kind === 'variants' ? 4 : 1);
   if (!sources.length) throw badRequest('visual_needs_product_photos');
-  const prompt = visualPrompt(p, v);
+  const prompt = visualPrompt(p, v, { layout: layoutFor(l.angle, l.framework, l.copy.layout), angle: l.angle });
   const [img] = await generateImages(l.project_id, { prompt, sourceUrls: sources, count: 1, aspect: '4:5', product: { id: p.id, title: p.title }, kind: 'landing_image' });
   db.prepare('INSERT INTO creatives (project_id, product_id, kind, file, url, prompt, provider) VALUES (?, ?, ?, ?, ?, ?, ?)').run(l.project_id, p.id, 'image', img.file, img.url, prompt, imageProvider());
   // قراءة جديدة: لقطات أخرى قد تكون رُسمت في الأثناء
@@ -515,8 +712,9 @@ export function updateVisual(id, vid, input) {
     if (input.headline !== undefined) next.headline = clip(input.headline, 90);
     if (input.points !== undefined) next.points = (Array.isArray(input.points) ? input.points : String(input.points).split(/\n+/)).map((t) => clip(t, 40)).filter(Boolean).slice(0, 3);
     if (input.scene !== undefined && clip(input.scene, 700)) next.scene = clip(input.scene, 700);
-    // الصورة الرئيسية لا تُكتب فيها (العنوان الرئيسي نص حيّ فوقها)
-    if (input.with_text !== undefined) next.with_text = Boolean(input.with_text) && x.kind !== 'hero';
+    // الخطاف أيضاً: عنوانه داخل الصورة، والعنوان الحيّ يُخفى بصرياً في الصفحة (يبقى لمحركات البحث وقارئ الشاشة)
+    if (input.with_text !== undefined) next.with_text = Boolean(input.with_text);
+    if (input.framing !== undefined) next.framing = FRAMINGS.includes(input.framing) ? input.framing : null;
     return next;
   });
   saveVisuals(id, list);
@@ -554,6 +752,9 @@ const paragraphs = (t) =>
     .map((x) => `<p>${escapeHtml(x)}</p>`)
     .join('');
 
+// صفحة بالصور: الخطاف ← الثقة ← 3 صور ← خطوات الطلب ← [النموذج] ← بقية الصور ← ما يجيب عن الاعتراضات
+const BOARD = { top: ['hero', 'trust', 'visuals:3', 'steps'], bottom: ['visuals', 'specs', 'guarantee', 'delivery', 'faq', 'cta'] };
+
 /**
  * قالب صفحة الهبوط حسب تصميم الزاوية (LAYOUTS): قسم أعلى (الإقناع) ← قسم المنتج نفسه (المعرض، السعر، العروض، النموذج)
  * ← قسم أسفل (الاعتراضات). الصور الوصفية تحلّ محل صور المنتج الأصلية وتتوزع حسب التصميم.
@@ -572,6 +773,10 @@ export function buildTemplate(copy, productTpl, { visuals = [], delivery = null,
   const shots = visuals.filter((x) => x.shopify_url);
   const heroShot = shots.find((x) => x.kind === 'hero') || shots[0] || null;
   const queue = shots.filter((x) => x !== heroShot);
+  // صفحة بالصور (3 صور مكتوبة على الأقل): الخطاف ثم الصور متتابعة هي الوصف، لا فقرة ثم صورة ثم فقرة؛
+  // النص الحيّ يبقى لما يطمئن (الثقة، خطوات الطلب، الخصائص، الضمانات، التوصيل، الأسئلة)
+  const board = shots.filter((x) => x.drawn_with_text).length >= 3;
+  const plan = board ? BOARD : L;
   // صورة رُسم عنوانها داخلها لا يُكرَّر عنوانها تحتها
   const caption = (x) => (x.drawn_with_text ? '' : x.headline);
   const visual = (x) => block('visual', { image_url: x.shopify_url, width: x.width || 928, height: x.height || 1152, headline: caption(x), points: (x.points || []).join('\n'), alt: x.headline });
@@ -583,7 +788,7 @@ export function buildTemplate(copy, productTpl, { visuals = [], delivery = null,
   const para = (x, i) => block('text', { heading: x.heading, body: paragraphs(x.body) || `<p>${escapeHtml(x.body)}</p>`, tone: layout === 'problem' && i === 0 ? 'alert' : i % 2 ? 'soft' : 'plain' });
   const trust = copy.trust?.length ? copy.trust : ['الدفع عند الاستلام', ...(delivery?.served ? ['التوصيل إلى جميع الولايات'] : []), 'اتصال تأكيد قبل الشحن'];
   const parts = {
-    hero: () => [block('hero', { eyebrow: copy.hero.eyebrow, headline: copy.hero.headline, subheadline: copy.hero.subheadline, bullets: copy.hero.bullets.join('\n'), cta: copy.hero.cta, note: copy.hero.note, show_image: true, image_url: heroShot?.shopify_url || '', image_width: heroShot?.width || 928, image_height: heroShot?.height || 1152 })],
+    hero: () => [block('hero', { eyebrow: copy.hero.eyebrow, headline: copy.hero.headline, subheadline: copy.hero.subheadline, bullets: copy.hero.bullets.join('\n'), cta: copy.hero.cta, note: copy.hero.note, show_image: true, image_url: heroShot?.shopify_url || '', image_width: heroShot?.width || 928, image_height: heroShot?.height || 1152, image_text: Boolean(heroShot?.drawn_with_text) })],
     trust: () => [block('trust', { items: trust.join('\n') })],
     story: () => story.flatMap((x, i) => [para(x, i), ...take(1).map(visual)]),
     'story:first': () => (story[0] ? [para(story[0], 0)] : []),
@@ -608,6 +813,7 @@ export function buildTemplate(copy, productTpl, { visuals = [], delivery = null,
       const two = take(2);
       return two.length ? two.map(visual) : photos();
     },
+    'visuals:3': () => take(3).map(visual),
     visuals: () => queue.splice(0).map(visual),
     benefits: () => (copy.benefits.items.length ? [block('benefits', { heading: copy.benefits.heading, items: copy.benefits.items.map((x) => `${x.title} | ${x.text}`).join('\n') })] : []),
     steps: () => (copy.steps.items.length ? [block('steps', { heading: copy.steps.heading, items: copy.steps.items.join('\n') })] : []),
@@ -617,11 +823,11 @@ export function buildTemplate(copy, productTpl, { visuals = [], delivery = null,
     cta: () => [block('cta', { headline: copy.final_cta.headline, cta: copy.final_cta.cta, note: copy.final_cta.note })],
   };
   // الترتيب في المصفوفة = ترتيب الصفحة، والمعرّفات (hero_1، trust_2…) تُعطى بنفس الترتيب
-  const top = L.top.flatMap((k) => parts[k]());
+  const top = plan.top.flatMap((k) => parts[k]());
   // صور المنتج الأصلية تبقى فوق النموذج إن لم يجد التصميم مكاناً لها
   if (!shots.length && !photosShown) top.push(...photos());
-  const bottom = L.bottom.flatMap((k) => parts[k]());
-  const section = (list) => ({ type: 'erp-lp', blocks: Object.fromEntries(list), block_order: list.map(([id]) => id), settings: { style: L === LAYOUTS.classic ? 'classic' : layout } });
+  const bottom = plan.bottom.flatMap((k) => parts[k]());
+  const section = (list) => ({ type: 'erp-lp', blocks: Object.fromEntries(list), block_order: list.map(([id]) => id), settings: { style: L === LAYOUTS.classic ? 'classic' : layout, board } });
   return { layout: 'erp-landing', sections: { lp_top: section(top), main, lp_bottom: section(bottom) }, order: ['lp_top', 'main', 'lp_bottom'] };
 }
 
@@ -654,11 +860,12 @@ export function sectionLiquid() {
   ERP TOURECHE · نصوص صفحة الهبوط (كتبها الـ ERP، ويمكن تعديلها هنا). في قوالب المنتج فقط: الصورة والسعر من منتج الصفحة نفسه.
 {%- endcomment -%}
 {%- assign lp_v = product.selected_or_first_available_variant -%}
-<div class="erp-lp erp-lp--{{ section.settings.style | default: 'classic' }}" data-erp-lp>
+<div class="erp-lp erp-lp--{{ section.settings.style | default: 'classic' }}{% if section.settings.board %} erp-lp--board{% endif %}" data-erp-lp>
   {%- for block in section.blocks -%}
     {%- case block.type -%}
       {%- when 'hero' -%}
-        <header class="erp-lp__hero" {{ block.shopify_attributes }}>
+        {%- comment -%} image_text: العنوان والفوائد مكتوبة داخل صورة الخطاف، فالنص الحيّ يُخفى بصرياً (يبقى للبحث وقارئ الشاشة) {%- endcomment -%}
+        <header class="erp-lp__hero{% if block.settings.image_text and block.settings.image_url != blank %} erp-lp__hero--img{% endif %}" {{ block.shopify_attributes }}>
           {%- if block.settings.eyebrow != blank -%}<p class="erp-lp__eyebrow">{{ block.settings.eyebrow | escape }}</p>{%- endif -%}
           <h1 class="erp-lp__h1">{{ block.settings.headline | escape }}</h1>
           {%- if block.settings.subheadline != blank -%}<p class="erp-lp__lead">{{ block.settings.subheadline | escape }}</p>{%- endif -%}
@@ -833,6 +1040,10 @@ export function sectionLiquid() {
   .erp-lp--value .erp-lp__price{font-size:1.7em}
   .erp-lp__eyebrow{margin:0;justify-self:center;padding:4px 12px;border-radius:999px;background:var(--lp-t);font-size:.85em;font-weight:700;color:var(--lp-a)}
   .erp-lp__h1{margin:0;font-family:var(--font-h,inherit);font-size:clamp(1.5rem,6vw,2.2rem);line-height:1.3}
+  .erp-lp__hero--img .erp-lp__media{order:-1}
+  .erp-lp__hero--img .erp-lp__eyebrow,.erp-lp__hero--img .erp-lp__lead,.erp-lp__hero--img .erp-lp__ticks{display:none}
+  .erp-lp__hero--img .erp-lp__h1{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .erp-lp--board{gap:12px}.erp-lp--board .erp-lp__visual{border-radius:var(--radius,12px)}
   .erp-lp__lead{margin:0;font-size:1.05em;opacity:.85;line-height:1.7}
   .erp-lp__media img,.erp-lp__images img{display:block;width:100%;height:auto;border-radius:var(--radius,12px)}
   .erp-lp__images{display:grid;gap:12px}
@@ -912,7 +1123,8 @@ export function sectionLiquid() {
     { "type": "select", "id": "style", "label": "التصميم", "default": "classic", "options": [
       { "value": "classic", "label": "كلاسيكي" }, { "value": "gift", "label": "هدية" }, { "value": "problem", "label": "المشكلة والحل" },
       { "value": "daily", "label": "الاستعمال اليومي" }, { "value": "value", "label": "الجودة مقابل السعر" }, { "value": "family", "label": "الأطفال والعائلة" }
-    ] }
+    ] },
+    { "type": "checkbox", "id": "board", "label": "صفحة بالصور (الصور متتابعة هي الوصف)", "default": false }
   ],
   "blocks": [
     { "type": "trust", "name": "شريط الثقة", "settings": [
@@ -957,7 +1169,8 @@ export function sectionLiquid() {
       { "type": "checkbox", "id": "show_image", "label": "صورة المنتج", "default": true },
       { "type": "text", "id": "image_url", "label": "صورة وصفية (رابط ملف من Fichiers)", "info": "فارغ = الصورة الأولى للمنتج" },
       { "type": "number", "id": "image_width", "label": "عرض الصورة", "default": 928 },
-      { "type": "number", "id": "image_height", "label": "ارتفاع الصورة", "default": 1152 }
+      { "type": "number", "id": "image_height", "label": "ارتفاع الصورة", "default": 1152 },
+      { "type": "checkbox", "id": "image_text", "label": "العنوان مكتوب داخل الصورة (يُخفى النص فوقها)", "default": false }
     ] },
     { "type": "visual", "name": "صورة وصفية", "settings": [
       { "type": "text", "id": "image_url", "label": "رابط الصورة (Fichiers)" },

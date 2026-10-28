@@ -293,6 +293,22 @@ pagesRouter.get('/landing', (req, res) => {
   });
 });
 
+// تحليل المنتج المحفوظ (دون طلب جديد لـ Claude) — null إن لم يُحلَّل بعد
+pagesRouter.get('/landing/insight', (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const id = Number(req.query.product_id);
+  const insight = id ? landing.getInsight(id) : null;
+  res.json({ insight: insight && db.prepare('SELECT project_id FROM products WHERE id = ?').get(id)?.project_id === scope.id ? insight : null });
+});
+
+// تحليل صفحة المنتج → حقائق + نواقص + زوايا خاصة به (يُعاد فقط إن تغيّرت الصفحة، أو بطلب «حلّل من جديد»)
+pagesRouter.post('/landing/analyze', requireRole('admin', 'manager'), async (req, res) => {
+  const scope = projectScope(req, { allowAll: false });
+  const out = await landing.analyzeProduct(scope.id, Number(req.body?.product_id), { fresh: Boolean(req.body?.fresh) });
+  audit(req, 'landing_product_analyzed', { projectId: scope.id, details: { product_id: out.product_id, angles: out.angles.length } });
+  res.json(out);
+});
+
 pagesRouter.post('/landing/generate', requireRole('admin', 'manager'), async (req, res) => {
   const scope = projectScope(req, { allowAll: false });
   const out = await landing.generateLanding(scope.id, req.body || {}, req.user.id);

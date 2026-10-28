@@ -129,6 +129,7 @@ export default function Finance() {
 const API_KINDS = {
   landing: ['نصوص صفحات الهبوط', 'Textes des landings'],
   landing_plan: ['أقسام الصفحات وخطة صورها', 'Sections et plan visuel des landings'],
+  landing_insight: ['تحليل المنتجات وزواياها', 'Analyse produits et angles'],
   landing_image: ['صور صفحات الهبوط', 'Images des landings'],
   seo: ['SEO المنتجات', 'SEO produits'],
   ad_copy: ['نصوص الإعلانات', 'Textes publicitaires'],
