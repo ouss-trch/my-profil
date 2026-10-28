@@ -66,6 +66,28 @@ SOU9NA مربوط أصلاً بـ ADCompte 3، وsou9nna_ مربوط بـ ADComp
    - للنشر والكتالوج: `pages_manage_ads`، `pages_manage_posts`، `instagram_basic`، `instagram_content_publish`، `catalog_management`.
 5. **Générer un token** ← انسخه، فهو يظهر مرة واحدة.
 
+**إن طلبت Meta «Vérifier le compte» قبل الرمز ولم تصل الرسالة** (SMS من 6 أرقام إلى رقمك الشخصي):
+هذه مشكلة عند Meta نفسها، لا علاقة لها بالتطبيق ولا بالإسناد، فلا تعِد إنشاء التطبيق.
+وجدنا في 28/10 حالتين مطابقتين في مجتمع مطوّري Meta (الأرجنتين والبيرو، مفتوحتان منذ منتصف أكتوبر بلا حل، وردّ دعم Meta بأنه لا طريقة بديلة)، ثم حالة صاحب SOU9NA في الجزائر.
+المتجر وn8n والبيكسل لا يتأثرون: الذي يتوقف فقط هو ربط الـ ERP بـ Meta (إطلاق الحملات، قراءة الإنفاق، وأحداث الـ ERP).
+1. **أوقف المحاولات.** كثرة طلب الرمز قد تحجب Meta الرسائل مؤقتاً (احتمال لم نتحقق منه).
+2. **أضف طريقة أخرى لاستقبال الرمز في حسابك الشخصي:** Paramètres et confidentialité ← Paramètres ← Espace Comptes ← Mot de passe et sécurité ← Authentification à deux facteurs ← اختر حسابك ← **Application d’authentification** (Google أو Microsoft Authenticator، لا تعتمد على شبكة الهاتف) أو **WhatsApp** إن ظهر.
+   إن لم يظهر هذا المسار: facebook.com/settings?tab=security ← Utiliser l’authentification à deux facteurs ← Modifier.
+   **لا تحذف الرقم**، واحفظ **Codes de récupération**.
+3. **ارجع إلى Générer un token.** افتح تطبيق فيسبوك على هاتفك قبل الضغط (قد يصلك إشعار موافقة)، وإن ظهرت «Essayer une autre méthode» أو «Autres options» فاختر التطبيق أو WhatsApp.
+   هذه الطرق موثّقة عند Meta لتسجيل الدخول؛ لم نتحقق أن شاشة الرمز تعرضها، وقد تعرض SMS فقط.
+4. **شخص موثوق (أو حساب فيسبوك ثانٍ لك برقم آخر) مديراً:** Utilisateurs ← Personnes ← Ajouter ← بريده ← **Contrôle total**. يقبل الدعوة، ويضغط هو **Générer un token** (تصل الرسالة إلى هاتفه)، ويرسل لك الرمز مرة واحدة في رسالة خاصة. تلصقه في الـ ERP وتمسح الرسالة، ثم تزيله من الـ BM.
+5. **دعم Meta:** Business Support Home ← Chat. النص (بلا رموز ولا بيانات شخصية):
+   ```
+   System user token generation blocked: the "Verify account" SMS never arrives (Algeria).
+   Flow: Business settings > Users > System users > [system user] > Generate token > "Account
+   verification required" > Verify account > 6-digit SMS to my security phone number.
+   The SMS never arrives (20+ attempts), and no notification either. The dialog offers no other
+   method. Please give me a supported way to complete this verification (authenticator app,
+   WhatsApp, or a review by your team). Same issue as developers.facebook.com/community/threads/1079377121557456
+   and /2200352837176665 (both unresolved).
+   ```
+
 ## 3) في الـ ERP
 
 1. الإعدادات ← تكاملات المشروع ← بطاقة Meta: الصق الرمز في «رمز System User» ← حفظ (كلمة المرور الحساسة).
@@ -112,6 +134,7 @@ SOU9NA مربوط أصلاً بـ ADCompte 3، وsou9nna_ مربوط بـ ADComp
 | لا يظهر Erp_souqnna عند إسناد التطبيق أو الحساب الإعلاني | مستخدم النظام بدور Employee | «…» ← اجعله Admin، ثم أسند (القسم 2) |
 | لا يقبل Erp_souqnna الحساب الإعلاني حتى وهو Admin | | مستخدم النظام القديم «Toureche ERP» ما زال يملك ADCompte 3 والصفحة والبيكسل وإنستغرام: أسند له التطبيق الجديد (2-ج) وأنشئ الرمز منه |
 | «Jamais» غير موجودة | Meta تفرض على بعض النشاطات رموزاً تنتهي | اختر 60 يوماً وجدّده قبل انتهائه. «اختبار» يُظهر أنه ينتهي |
+| «Vérifier le compte» عند Générer un token، والرسالة لا تصل | خطوة أمان عند Meta (مشكلة معروفة منذ أكتوبر 2026) | القسم 2: «إن طلبت Meta…» |
 | الـ ERP: «رمز Meta لم يعد صالحاً» | حُذف مستخدم النظام، أو أُلغي الرمز، أو انتهى | رمز جديد (القسم 2) ← بطاقة Meta |
 | الـ ERP: «تطبيق Meta غير منشور» | وضع التطوير (1885183) | 1-5 |
 | «اختبار»: الحساب الإعلاني ✗ «لا وصول» | الحساب غير مُسند | 2-أ |
