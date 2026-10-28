@@ -641,12 +641,16 @@ function StoreCheck({ onChanged }) {
         <>
           <p className="flex items-start gap-2 font-medium text-ink">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-            {t(['في المتجر صفحات هبوط لم تعد في الـ ERP (بقايا صفحات حُذفت):', 'Des landing pages restent dans la boutique sans exister dans l’ERP :'])}
+            {t(['في المتجر بقايا صفحات هبوط حُذفت من الـ ERP (قالب، رابط، أو صور). الحذف يزيلها من Shopify، والزيارات والطلبيات القديمة تبقى في الأرقام:', 'Restes de landing pages supprimées de l’ERP (modèle, lien ou images). Supprimer les retire de Shopify ; visites et commandes restent dans les chiffres :'])}
           </p>
           <ul className="space-y-1.5">
             {data.leftovers.map((x) => (
               <li key={x.suffix} className="flex flex-wrap items-center gap-2">
-                <span className="ltr text-xs text-sub">{[...x.redirects.map((r) => r.path), x.template].filter(Boolean).join(' · ')}</span>
+                <span className="min-w-0 flex-1">
+                  <b className="ltr block text-xs text-ink">{x.suffix.replace(/^lp-/, '')}</b>
+                  <span className="ltr block text-xs text-sub">{[...x.redirects.map((r) => r.path), x.template].filter(Boolean).join(' · ')}</span>
+                  {x.files?.length > 0 && <span className="block text-xs text-sub">{t([`${x.files.length} صورة في «Fichiers» بـ Shopify`, `${x.files.length} image(s) dans « Fichiers » Shopify`])}</span>}
+                </span>
                 {x.erp && <Badge tone="warn">{t(['مسحوبة في الـ ERP', 'Retirée dans l’ERP'])}</Badge>}
                 <Button
                   size="sm"

@@ -733,6 +733,28 @@ export async function findFilesByName(cfg, names) {
   return d.files.nodes.filter((f) => f?.id);
 }
 
+/** صور صفحات الهبوط المرفوعة إلى «Fichiers» (lp-<slug>-v<n>.<ext>) مع اسم الملف من رابطه */
+export async function landingFiles(cfg) {
+  const out = [];
+  let after = null;
+  for (let page = 0; page < 10; page++) {
+    const d = await gql(cfg, 'query($after: String) { files(first: 100, after: $after, query: "filename:lp-*") { nodes { id ... on MediaImage { image { url } } ... on GenericFile { url } } pageInfo { hasNextPage endCursor } } }', { after });
+    for (const f of d.files.nodes) {
+      const url = f.image?.url || f.url || '';
+      let name = '';
+      try {
+        name = decodeURIComponent(new URL(url).pathname.split('/').pop());
+      } catch {
+        continue;
+      }
+      if (f.id && name) out.push({ id: f.id, name });
+    }
+    if (!d.files.pageInfo?.hasNextPage) break;
+    after = d.files.pageInfo.endCursor;
+  }
+  return out;
+}
+
 export async function deleteFiles(cfg, ids) {
   if (!ids.length) return [];
   const d = await gql(cfg, 'mutation($ids: [ID!]!) { fileDelete(fileIds: $ids) { deletedFileIds userErrors { field message } } }', { ids });

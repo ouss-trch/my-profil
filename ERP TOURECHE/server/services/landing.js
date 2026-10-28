@@ -1484,6 +1484,21 @@ export async function storeCheck(projectId) {
     }
     if (suffix && !published.has(suffix)) entry(suffix).redirects.push({ id: r.id, path: r.path });
   }
+  // صور صفحة حُذفت من الـ ERP (lp-<slug>-v1.jpg…) تبقى في «Fichiers»: الحذف القديم بعد «سحب من المتجر» لم يكن يحذفها.
+  // صور مسودة أو صفحة مسحوبة ما زالت في الـ ERP ليست بقايا (إعادة النشر تستعملها)
+  let files = [];
+  try {
+    files = await shopify.landingFiles(cfg);
+  } catch {
+    /* دون صلاحية الملفات: تبقى القوالب والروابط وحدها */
+  }
+  for (const f of files) {
+    const m = /^(lp-.+)-v\d+\.[a-z0-9]+$/i.exec(f.name);
+    if (!m) continue;
+    const suffix = m[1].toLowerCase();
+    if (!byView.has(suffix)) (entry(suffix).files ||= []).push(f);
+  }
+  for (const x of leftovers.values()) x.files ||= [];
   const missing = [...published.entries()].filter(([suffix]) => !templates.some((f) => f.toLowerCase() === `templates/product.${suffix}.json`)).map(([, r]) => ({ id: r.id, slug: r.slug, angle: r.angle }));
   return { configured: true, theme: theme?.name || null, leftovers: [...leftovers.values()], missing };
 }
@@ -1500,8 +1515,9 @@ export async function removeLeftover(projectId, suffix) {
       const theme = await shopify.mainTheme(cfg);
       await shopify.deleteThemeFiles(cfg, theme.id, [item.template]);
     }
+    if (item.files.length) await shopify.deleteFiles(cfg, item.files.map((f) => f.id));
   } catch (e) {
-    throw await scopesError(cfg, e);
+    throw await scopesError(cfg, e, item.files.length ? [...LANDING_SCOPES, 'write_files'] : LANDING_SCOPES);
   }
   detachPage(projectId, item.suffix);
   return item;

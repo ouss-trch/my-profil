@@ -37,7 +37,8 @@ test('dashboard sources: orders per page with the visitors of the same period, a
   const d = stats([p.id], today, today);
   const by = Object.fromEntries(d.source_pages.map((x) => [x.key ?? 'none', x]));
   const lp = by['/products/gift?view=lp-gift-hadiya'];
-  assert.deepEqual([lp.kind, lp.visitors, lp.orders, lp.conversion, lp.delivered, lp.returned, lp.delivery_rate, lp.revenue], ['template', 10, 2, 20, 1, 1, 50, 3000]);
+  // صفحة هبوط lp-… لا يعرفها الـ ERP = صفحة حُذفت: أرقامها تبقى، باسم «محذوفة»
+  assert.deepEqual([lp.kind, lp.visitors, lp.orders, lp.conversion, lp.delivered, lp.returned, lp.delivery_rate, lp.revenue], ['deleted', 10, 2, 20, 1, 1, 50, 3000]);
   const product = by['/products/gift'];
   assert.deepEqual([product.kind, product.visitors, product.orders, product.confirmed], ['product', 5, 1, 1]);
   assert.deepEqual([by['/collections/all'].visitors, by['/collections/all'].orders], [6, 0], 'visited by many, no order: shown');

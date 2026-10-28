@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, CircleHelp, EyeOff, FileText, Globe, Home, LayoutTemplate, Package, Rows3 } from 'lucide-react';
+import { Activity, CircleHelp, EyeOff, FileText, Globe, Home, LayoutTemplate, Package, Rows3, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n/index.jsx';
 import { useApi } from '../lib/hooks.js';
 import { ago, n0, pct } from '../lib/format.js';
@@ -23,6 +23,7 @@ export function TrackingBadge({ health }) {
 export const KINDS = {
   landing: { icon: LayoutTemplate, label: ['صفحة هبوط', 'Landing'] },
   template: { icon: LayoutTemplate, label: ['قالب', 'Modèle'] },
+  deleted: { icon: Trash2, label: ['صفحة هبوط محذوفة', 'Landing supprimée'] },
   product: { icon: Package, label: ['صفحة المنتج', 'Fiche produit'] },
   home: { icon: Home, label: ['الرئيسية', 'Accueil'] },
   collection: { icon: Rows3, label: ['مجموعة', 'Collection'] },
@@ -84,7 +85,11 @@ export default function TrafficCard() {
   const [days, setDays] = useState('7');
   const [all, setAll] = useState(false);
   const { data, error, loading, reload } = useApi(`/pages/traffic?days=${days}`);
-  const pages = (data?.pages || []).filter((p) => p.visitors || p.orders);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const visited = (data?.pages || []).filter((p) => p.visitors || p.orders);
+  // صفحات هبوط حذفتها: أرقامها في المجموع، وسطورها مخفية إلا بطلب
+  const deleted = visited.filter((p) => p.kind === 'deleted');
+  const pages = showDeleted ? visited : visited.filter((p) => p.kind !== 'deleted');
   const shown = all ? pages : pages.slice(0, 8);
   return (
     <Card
@@ -125,7 +130,7 @@ export default function TrafficCard() {
             <Stat label={t('c.orders')} value={n0(data.totals.orders)} hint={`${t(['مؤكدة', 'confirmées'])}: ${n0(data.totals.confirmed)}`} />
             <Stat label={t(['التحويل', 'Conversion'])} value={pct(data.totals.conversion, 2)} hint={t(['طلبيات ÷ زوار', 'commandes ÷ visiteurs'])} />
           </div>
-          {!pages.length ? (
+          {!visited.length ? (
             <Empty icon={Activity} title={t(['لا زيارات في هذه الفترة بعد', 'Pas encore de visites sur la période'])}>
               {t(['الأرقام تبدأ من أول زيارة بعد تثبيت عدّاد الزوار (اختبار الصفحات ← «تثبيت على القالب»).', 'Les chiffres démarrent à la première visite après l’installation du compteur (Tests A/B → « Installer sur le thème »).'])}
             </Empty>
@@ -165,6 +170,16 @@ export default function TrafficCard() {
                   })}
                 </tbody>
               </table>
+              {deleted.length > 0 && (
+                <button type="button" className="w-full border-t border-line py-2 text-center text-xs text-muted hover:text-ink" onClick={() => setShowDeleted(!showDeleted)}>
+                  {showDeleted
+                    ? t(['إخفاء صفحات الهبوط المحذوفة', 'Masquer les landings supprimées'])
+                    : t([
+                        `صفحات هبوط محذوفة (${deleted.length}): ${n0(deleted.reduce((s, p) => s + p.visitors, 0))} زائر · ${n0(deleted.reduce((s, p) => s + p.orders, 0))} طلبية، في المجموع أعلاه. إظهارها`,
+                        `Landings supprimées (${deleted.length}) : ${n0(deleted.reduce((s, p) => s + p.visitors, 0))} visiteurs · ${n0(deleted.reduce((s, p) => s + p.orders, 0))} commandes, comptés dans le total. Afficher`,
+                      ])}
+                </button>
+              )}
               {pages.length > 8 && (
                 <button type="button" className="link w-full py-2 text-center text-xs" onClick={() => setAll(!all)}>
                   {all ? t(['عرض أقل', 'Voir moins']) : t([`عرض كل الصفحات (${pages.length})`, `Voir toutes les pages (${pages.length})`])}
@@ -172,7 +187,7 @@ export default function TrafficCard() {
               )}
             </div>
           )}
-          {pages.length > 0 && (
+          {visited.length > 0 && (
             <div className="grid gap-4 lg:grid-cols-2">
               <div>
                 <div className="mb-2 text-xs font-semibold text-sub">{t(['من أين جاء الزوار', 'D’où viennent les visiteurs'])}</div>

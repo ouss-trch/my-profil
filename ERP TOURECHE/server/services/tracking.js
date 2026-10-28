@@ -218,6 +218,8 @@ function labeler(projectIds) {
     if (view) {
       const l = landings.get(`${projectId}|${view}`);
       if (l) return { kind: 'landing', label: l.angle, sub: l.product_title || product?.title || handle, landing_id: l.id, product_id: l.product_id };
+      // صفحة هبوط حُذفت من الـ ERP: زياراتها وطلبياتها تبقى في الأرقام، وتُسمّى «محذوفة» بدل اسم قالبها الخام
+      if (/^lp-/i.test(view)) return { kind: 'deleted', label: view.replace(/^lp-/i, ''), sub: product?.title || handle, product_id: product?.id || null };
       return { kind: 'template', label: view, sub: product?.title || handle, product_id: product?.id || null };
     }
     if (product) return { kind: 'product', label: product.title, sub: null, product_id: product.id };

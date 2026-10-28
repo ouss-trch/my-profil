@@ -115,6 +115,12 @@ test('tracking: traffic report per page with landing angle names, conversion and
   assert.equal(rep.daily.length, 7);
   assert.equal(rep.daily.at(-1).orders, 3);
   assert.ok(rep.health.last_visit_at);
+  // الصفحة تُحذف من الـ ERP: أرقامها تبقى في المجموع، والسطر يُسمّى «محذوفة» (كان يظهر باسم القالب الخام lp-…)
+  db.prepare("DELETE FROM landing_pages WHERE project_id = ? AND slug = 'cadeau'").run(project.id);
+  const after = trafficReport([project.id], { days: 7 });
+  const gone = after.pages.find((p) => p.key === '/products/thermos-enfant?view=lp-cadeau');
+  assert.deepEqual([gone.kind, gone.label, gone.sub, gone.orders], ['deleted', 'cadeau', 'ترمس ميكي', 2]);
+  assert.equal(after.totals.orders, 3);
 });
 
 test('tracking: the public beacon answers 204 cross-origin and is not throttled by the hooks limit (shared mobile IPs)', async () => {

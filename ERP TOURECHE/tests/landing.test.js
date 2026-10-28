@@ -87,6 +87,8 @@ globalThis.fetch = async (url, init) => {
     return json({ data: { themeFilesDelete: { deletedThemeFiles: variables.f.map((filename) => ({ filename })), userErrors: [] } } });
   }
   if (query.includes('urlRedirects(')) return json({ data: { urlRedirects: { nodes: redirects.filter((r) => !variables?.q || variables.q === `path:${r.path}`) } } });
+  // صور صفحات الهبوط كلها (فحص البقايا)، أو بالاسم (حذف صفحة)
+  if (query.includes('filename:lp-*')) return json({ data: { files: { nodes: shopFiles.filter((f) => f.filename.startsWith('lp-')).map((f) => ({ id: f.id, image: { url: `https://cdn.shopify.com/s/files/1/files/${f.filename}?v=1` } })), pageInfo: { hasNextPage: false, endCursor: null } } } });
   if (query.includes('files(first')) return json({ data: { files: { nodes: shopFiles.filter((f) => variables.q.includes(`"${f.filename}"`)) } } });
   if (query.includes('fileDelete')) {
     for (const id of variables.ids) shopFiles.splice(shopFiles.findIndex((f) => f.id === id), 1);
@@ -276,13 +278,21 @@ test('landing: the store check lists leftovers the ERP no longer knows and remov
   // بقايا من صفحة حُذفت قبل هذا الإصلاح: قالب وتحويل في المتجر، لا صفحة في الـ ERP
   files['templates/product.lp-old-quotidien.json'] = '{}';
   redirects.push({ id: 'gid://shopify/UrlRedirect/90', path: '/pages/old-quotidien', target: '/products/thermos-mickey-320?view=lp-old-quotidien' });
+  // وصور صفحة حُذفت بعد «سحب من المتجر» (الحذف القديم لم يكن يحذفها)؛ صور صفحة ما زالت في الـ ERP ليست بقايا
+  shopFiles.push({ id: 'gid://shopify/MediaImage/91', filename: 'lp-old-quotidien-v1.jpg' }, { id: 'gid://shopify/MediaImage/92', filename: 'lp-gone-cadeau-v2.jpg' }, { id: 'gid://shopify/MediaImage/93', filename: 'lp-thermos-mickey-cadeau-v1.png' }, { id: 'gid://shopify/MediaImage/94', filename: 'logo.png' });
   const check = await landing.storeCheck(project.id);
   const left = check.leftovers.find((x) => x.suffix === 'lp-old-quotidien');
-  assert.deepEqual(left, { suffix: 'lp-old-quotidien', template: 'templates/product.lp-old-quotidien.json', redirects: [{ id: 'gid://shopify/UrlRedirect/90', path: '/pages/old-quotidien' }], erp: null });
+  assert.deepEqual(left, { suffix: 'lp-old-quotidien', template: 'templates/product.lp-old-quotidien.json', redirects: [{ id: 'gid://shopify/UrlRedirect/90', path: '/pages/old-quotidien' }], erp: null, files: [{ id: 'gid://shopify/MediaImage/91', name: 'lp-old-quotidien-v1.jpg' }] });
+  assert.deepEqual(check.leftovers.find((x) => x.suffix === 'lp-gone-cadeau'), { suffix: 'lp-gone-cadeau', template: null, redirects: [], erp: null, files: [{ id: 'gid://shopify/MediaImage/92', name: 'lp-gone-cadeau-v2.jpg' }] }, 'images alone are leftovers too');
+  assert.ok(!check.leftovers.some((x) => x.suffix === 'lp-thermos-mickey-cadeau'), 'images of a page still in the ERP are kept');
+  await landing.removeLeftover(project.id, 'lp-gone-cadeau');
+  assert.deepEqual(shopFiles.map((f) => f.id).sort(), ['gid://shopify/MediaImage/91', 'gid://shopify/MediaImage/93', 'gid://shopify/MediaImage/94']);
   // الصفحة المسحوبة (unpublished) ليست في المتجر ولا تُعدّ بقايا
   assert.ok(!check.leftovers.some((x) => x.suffix === 'lp-thermos-mickey-cadeau'));
   await landing.removeLeftover(project.id, 'lp-old-quotidien');
   assert.equal(files['templates/product.lp-old-quotidien.json'], undefined);
+  assert.ok(!shopFiles.some((f) => f.id === 'gid://shopify/MediaImage/91'), 'its images go with it');
+  shopFiles.splice(0, shopFiles.length);
   assert.ok(!redirects.some((r) => r.path === '/pages/old-quotidien'));
   await assert.rejects(landing.removeLeftover(project.id, 'lp-old-quotidien'), /leftover_not_found/);
   // صفحة منشورة اختفى قالبها من المتجر: تظهر «ناقصة» لإعادة نشرها
