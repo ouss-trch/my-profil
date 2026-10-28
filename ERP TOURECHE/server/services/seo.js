@@ -72,16 +72,35 @@ export function buildDescriptionHtml({ intro, specs = [], features = [], faq = [
 const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** بصمة قصيرة ثابتة لسؤال: تعرّف سطر الميزة الذي كتبه الـ ERP في «المميزات» حتى يُستبدل لا يتكرر */
+const qMark = (q) => {
+  let h = 5381;
+  for (const ch of String(q)) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0;
+  return h.toString(36);
+};
+/** صياغة الجواب كميزة: ما كتبه Claude أو التاجر، وإلا «الخاصية: القيمة» */
+export const featureOf = (a) => a.feature || `${a.label}: ${a.value}`;
+
 /**
- * أجوبة التاجر عن أسئلة الزبائن ← وصف صفحة المنتج، دون لمس الباقي: سطر في جدول «المواصفات» (يُستبدل إن وُجد نفس الاسم)
- * وفقرة في «أسئلة شائعة» (تُستبدل إن وُجد نفس السؤال). قسم غير موجود يُنشأ قبل «الطلب والتوصيل». تطبيقها مرتين = لا تغيير.
+ * أجوبة التاجر عن أسئلة الزبائن ← وصف صفحة المنتج، دون لمس الباقي. الجواب خاصية للمنتج لا سؤال شائع:
+ * سطر في جدول «المواصفات» (يُستبدل إن وُجد نفس الاسم) + ميزة في «المميزات» (تُستبدل إن كتبها الـ ERP من قبل)،
+ * ويُحذف من «أسئلة شائعة» ما كتبه الـ ERP سابقاً لنفس السؤال (كانت الأجوبة تُنشر هناك). قسم ناقص يُنشأ قبل «الطلب والتوصيل».
+ * تطبيقها مرتين = لا تغيير.
  */
 export function mergeAnswers(html, answers = []) {
   let out = String(html || '');
-  const before = (section) => {
-    const at = out.search(/<h3[^>]*>\s*الطلب والتوصيل\s*<\/h3>/i);
-    out = at >= 0 ? out.slice(0, at) + section + out.slice(at) : out + section;
+  const at = (re) => out.search(re);
+  const insertBefore = (section, ...heads) => {
+    for (const re of heads) {
+      const i = at(re);
+      if (i >= 0) {
+        out = out.slice(0, i) + section + out.slice(i);
+        return;
+      }
+    }
+    out += section;
   };
+  const H = (t) => new RegExp(`<h3[^>]*>\\s*${t}\\s*</h3>`, 'i');
   const rows = answers.filter((a) => a.label && a.value);
   if (rows.length) {
     const m = out.match(/(<h3[^>]*>\s*المواصفات\s*<\/h3>\s*<table[^>]*>)([\s\S]*?)(<\/table>)/i);
@@ -95,27 +114,36 @@ export function mergeAnswers(html, answers = []) {
       }
       out = out.replace(m[0], m[1] + body + m[3]);
     } else {
-      const faqAt = out.search(/<h3[^>]*>\s*أسئلة شائعة\s*<\/h3>/i);
-      const table = `<h3>المواصفات</h3><table>${rows.map((a) => `<tr><th>${escHtml(a.label)}</th><td>${escHtml(a.value)}</td></tr>`).join('')}</table>`;
-      if (faqAt >= 0) out = out.slice(0, faqAt) + table + out.slice(faqAt);
-      else before(table);
+      insertBefore(`<h3>المواصفات</h3><table>${rows.map((a) => `<tr><th>${escHtml(a.label)}</th><td>${escHtml(a.value)}</td></tr>`).join('')}</table>`, H('المميزات'), H('أسئلة شائعة'), H('الطلب والتوصيل'));
     }
   }
-  const faqs = answers.filter((a) => a.q && (a.faq || a.value));
-  if (faqs.length) {
-    const head = out.match(/<h3[^>]*>\s*أسئلة شائعة\s*<\/h3>/i);
-    if (head) {
-      const start = head.index + head[0].length;
-      const next = out.slice(start).search(/<h3[\s>]/i);
-      const end = next >= 0 ? start + next : out.length;
-      let body = out.slice(start, end);
-      for (const a of faqs) {
-        const p = `<p><strong>${escHtml(a.q)}</strong> ${escHtml(a.faq || a.value)}</p>`;
-        const same = new RegExp(`<p[^>]*>\\s*<strong>\\s*${reEsc(escHtml(a.q))}\\s*</strong>[\\s\\S]*?</p>`, 'i');
-        body = same.test(body) ? body.replace(same, p) : body + p;
+  const feats = answers.filter((a) => a.label && a.value);
+  if (feats.length) {
+    const li = (a) => `<li data-erp-q="${qMark(a.q || a.label)}">${escHtml(featureOf(a))}</li>`;
+    const m = out.match(/(<h3[^>]*>\s*المميزات\s*<\/h3>\s*<ul[^>]*>)([\s\S]*?)(<\/ul>)/i);
+    if (m) {
+      let body = m[2];
+      for (const a of feats) {
+        const mine = new RegExp(`<li[^>]*data-erp-q="${qMark(a.q || a.label)}"[^>]*>[\\s\\S]*?</li>`, 'i');
+        const text = new RegExp(`<li[^>]*>\\s*${reEsc(escHtml(featureOf(a)))}\\s*</li>`, 'i');
+        if (mine.test(body)) body = body.replace(mine, li(a));
+        else if (!text.test(body)) body += li(a);
       }
-      out = out.slice(0, start) + body + out.slice(end);
-    } else before(`<h3>أسئلة شائعة</h3>${faqs.map((a) => `<p><strong>${escHtml(a.q)}</strong> ${escHtml(a.faq || a.value)}</p>`).join('')}`);
+      out = out.replace(m[0], m[1] + body + m[3]);
+    } else {
+      insertBefore(`<h3>المميزات</h3><ul>${feats.map(li).join('')}</ul>`, H('أسئلة شائعة'), H('الطلب والتوصيل'));
+    }
+  }
+  // تنظيف: جواب نُشر سابقاً سؤالاً شائعاً يُحذف من «أسئلة شائعة» (وعنوانها إن فرغت)
+  const asked = answers.filter((a) => a.q);
+  const head = out.match(/<h3[^>]*>\s*أسئلة شائعة\s*<\/h3>/i);
+  if (asked.length && head) {
+    const start = head.index + head[0].length;
+    const next = out.slice(start).search(/<h3[\s>]/i);
+    const end = next >= 0 ? start + next : out.length;
+    let body = out.slice(start, end);
+    for (const a of asked) body = body.replace(new RegExp(`<p[^>]*>\\s*<strong>\\s*${reEsc(escHtml(a.q))}\\s*</strong>[\\s\\S]*?</p>`, 'gi'), '');
+    out = body.trim() ? out.slice(0, start) + body + out.slice(end) : out.slice(0, head.index) + out.slice(end);
   }
   return out;
 }

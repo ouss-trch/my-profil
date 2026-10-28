@@ -149,4 +149,4 @@ When a session discovers a new pitfall, API change or business rule:
 - after a finished phase, add its row to `references/journey.md` (sections 2 and 3);
 - keep SKILL.md under 200 lines.
 
-To use the skill outside this repo, copy the folder to `~/.claude/skills/ecommerce-erp-builder/`. To use it in claude.ai, zip the folder and upload it under Settings → Capabilities → Skills.
+To use the skill outside this repo, copy the folder to `~/.claude/skills/ecommerce-erp-builder/`. To use it in claude.ai (every project and session), run `bash "ERP TOURECHE/scripts/pack-skills.sh" ecommerce-erp-builder` and upload the ZIP under claude.ai → Customize → Skills → Upload a skill.

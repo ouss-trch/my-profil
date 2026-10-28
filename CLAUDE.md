@@ -38,12 +38,15 @@ node scripts/ui-audit.cjs http://localhost:3600 out.json   # contrast, names, la
 ## Skills in this repo (`.claude/skills/`)
 
 - **ecommerce-erp-builder**: how this ERP was built. Start with `references/journey.md` (brief, current state, phases, lessons, reuse guide). It covers the question-first workflow, architecture, Shopify/Meta/carriers/n8n knowledge, pitfalls with their fixes, verification, and delivery. Use it for any new store project (e.g. «مكتبة ألواني»).
+- **cod-landing-page-builder**: the landing page builder's craft (angles, copy, visuals) and ready system/user prompts for any builder. Its `references/{angles,copy,visuals}.md` are copies of `ERP TOURECHE/server/prompts/landing/*.md`, which the ERP loads into its prompts; edit the ERP files, copy them over, run `npm test` (a test fails on drift). Owner answers to buyer questions are product features (specs, features, images), never FAQ entries.
+- **find-skills** (Vercel, MIT): to find a skill for a new need. Search the skills.sh leaderboard first; run the CLI only pinned to a release at least two weeks old (e.g. `npx skills@1.7.2 find <query>`), never `-g -y`; scan with `skill-scanner`, vendor with its LICENSE and a row in `ERP TOURECHE/SKILLS.md`.
 - **impeccable**: frontend design and quality, by pbakaus (Apache-2.0). Use `audit`, `polish`, `harden` and `critique` on the UI. Its engine downloads a binary on first run; if that is blocked, apply its reference checklists (`reference/audit.md`, `craft-floor.md`, `operate.md`) and `scripts/ui-audit.cjs` instead.
 - **Review and improvement skills** (vendored with their licenses; sources in `ERP TOURECHE/SKILLS.md`):
   - security: `sentry-security-review`, `find-bugs`, `sharp-edges`, `supply-chain-risk-auditor`, `skill-scanner` (scan any new skill before adding it);
   - UI and React: `react-best-practices`, `web-design-guidelines`, `webapp-testing`;
   - method: `systematic-debugging`, `verification-before-completion`;
-  - growth: `cro`, `ab-testing`, `offers`, `conversion-tracking`.
+  - growth: `cro`, `ab-testing`, `offers`, `conversion-tracking`, `copywriting`, `marketing-psychology`, `ad-creative`.
+- **The owner's Claude account:** `bash "ERP TOURECHE/scripts/pack-skills.sh"` writes one ZIP per skill to `ERP TOURECHE/dist-skills/` (not committed). Uploaded in claude.ai → Customize → Skills (claude.ai/customize/skills) → + → Create skill → Upload a skill, they follow the owner into every project and session (listed as `anthropic-skills:*`). Re-upload after changing a skill.
 - **Dependencies:** never install a release younger than two weeks; pin exact versions; run `npm audit --omit=dev` after any change.
 
 ## Before finishing any change

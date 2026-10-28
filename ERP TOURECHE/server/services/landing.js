@@ -7,7 +7,7 @@ import * as shopify from '../integrations/shopify.js';
 import { projectConfig } from '../lib/settings.js';
 import { HttpError, badRequest, escapeHtml, nowIso, slugify } from '../lib/util.js';
 import { getProduct, imageBlocks, updateProduct } from './products.js';
-import { answerOnPage, ownerAnswers } from './seo.js';
+import { answerOnPage, featureOf, ownerAnswers } from './seo.js';
 import { getProject, inList } from './projects.js';
 import { deliveryFacts, getDelivery } from './delivery.js';
 import { addPages, storeBase } from './pages.js';
@@ -135,16 +135,37 @@ export function layoutFor(angle, framework, chosen) {
   return FRAMEWORK_LAYOUT[framework] || 'classic';
 }
 
+/**
+ * صنعة الكتابة والصور والزوايا: خلاصة أفضل مهارات صفحات البيع (copywriting، cro، marketing-psychology، product-marketing،
+ * ad-creative، image من coreyhaines31/marketingskills · MIT؛ المصادر والنسخ في server/prompts/landing/SOURCES.md).
+ * نفس الملفات في مهارة cod-landing-page-builder (.claude/skills): تحسين أحدهما يحسّن الآخر (اختبار يمنع الاختلاف).
+ */
+const craft = (name) => fs.readFileSync(new URL(`../prompts/landing/${name}.md`, import.meta.url), 'utf8').trim();
+export const CRAFT = { copy: craft('copy'), visuals: craft('visuals'), angles: craft('angles') };
+
 const TONES = {
   ar: 'العربية الفصحى المبسّطة القريبة من الزبون الجزائري (جمل قصيرة، كلمات يومية).',
   darija: 'الدارجة الجزائرية مكتوبة بالحروف العربية بشكل طبيعي ومحترم، مع كلمات فرنسية شائعة عند الحاجة.',
 };
 
-/** القواعد: من أُطر الكتابة المجرّبة (AIDA، PAS، BAB، FAB، 4P) + معايير Meta للإعلانات + خصوصية الدفع عند الاستلام في الجزائر */
+/**
+ * رسالة النظام لكاتب الصفحة ومخطط صورها (نفسها للطلبين، فيبقى النص والصور قصة واحدة):
+ * الدور ← الصنعة (ملفات المهارة) ← القواعد الإلزامية ← طريقة التفكير قبل الكتابة.
+ * القواعد: أُطر الكتابة المجرّبة (AIDA، PAS، BAB، FAB، 4P) + سياسة Meta + خصوصية الدفع عند الاستلام في الجزائر.
+ */
 export function landingSystem(brand) {
-  return `أنت كاتب صفحات هبوط (Landing pages) محترف لمتجر «${brand}» الجزائري الذي يبيع بالدفع عند الاستلام.
-تكتب صفحة بيع لمنتج واحد، هدفها الوحيد: أن يملأ الزائر نموذج الطلب. الزائر يأتي من إعلان Facebook/Instagram بزاوية تسويقية محددة.
+  return `<role>
+أنت كاتب تحويل (conversion copywriter) ومدير إبداعي لصفحات البيع بالدفع عند الاستلام في الجزائر، تعمل لمتجر «${brand}».
+تكتب صفحة بيع لمنتج واحد وتخطط صورها، وهدفها الوحيد أن يملأ الزائر نموذج الطلب. الزائر يأتي من إعلان Facebook/Instagram بزاوية تسويقية محددة، وعلى الهاتف غالباً.
+</role>
 
+<craft>
+${CRAFT.copy}
+
+${CRAFT.visuals}
+</craft>
+
+<rules>
 قواعد إلزامية (أي مخالفة تُرفض):
 1. هدف واحد: كل جملة تخدم الطلب. لا روابط لصفحات أخرى ولا منتجات أخرى.
 2. تطابق الرسالة: العنوان الرئيسي يعبّر عن الزاوية المطلوبة حرفياً تقريباً، لأن الإعلان مبني عليها.
@@ -156,33 +177,41 @@ export function landingSystem(brand) {
    - المعاينة قبل الدفع، الاسترجاع، الاستبدال، الاسترداد: لخّصها من shipping_policy وreturns_policy بالشروط والمدد المذكورة فيها (مثل عدد الأيام ومن يدفع مصاريف الإرجاع)، دون زيادة ولا حذف لشرط مهم.
    - إن كان delivery فارغاً: اكتفِ بما في store_policies، وأضف «استيراد أسعار التوصيل والسياسات» إلى owner_todo.
 6. الفائدة قبل الخاصية: كل خاصية تُترجم إلى ما يربحه الزبون في يومه.
-7. الأسلوب: ${'{tone}'} جمل قصيرة، فقرة لا تتجاوز سطرين على الهاتف، بلا مبالغة ولا علامات تعجب متتالية ولا رموز تعبيرية.
-8. الطول: العنوان الرئيسي 6–12 كلمة. العنوان الفرعي جملة أو جملتان. 3 نقاط في الأعلى. 3 إلى 5 فوائد. 3 خطوات طلب. 2 إلى 4 ضمانات. 4 إلى 6 أسئلة شائعة عن اعتراضات حقيقية (التوصيل، الدفع، المعاينة، الاستبدال، المقاس/اللون، الاستعمال) بأجوبة من المعطيات فقط.
-9. زر الطلب فعل واضح (مثال: «اطلب الآن وادفع عند الاستلام»).
+7. الأسلوب: ${'{tone}'} جمل قصيرة، فقرة لا تتجاوز سطرين على الهاتف، بلا مبالغة ولا علامات تعجب ولا رموز تعبيرية، وبلا أي من علامات الكتابة الآلية المذكورة في الصنعة.
+8. الطول: العنوان الرئيسي 6–12 كلمة. العنوان الفرعي جملة أو جملتان. 3 نقاط في الأعلى. 3 إلى 5 فوائد. 3 خطوات طلب. 2 إلى 4 ضمانات. 4 إلى 6 أسئلة شائعة عن اعتراضات الشراء نفسها (التوصيل، الدفع، المعاينة، الاستبدال، اختيار المقاس أو اللون) بأجوبة من المعطيات فقط. خصائص المنتج (product.owner_facts وproduct_facts) لا تُكتب أسئلةً شائعة: مكانها النقاط والفوائد والصور.
+9. زر الطلب فعل وما يحصل عليه الزبون (مثال: «اطلب الآن وادفع عند الاستلام»).
 10. product_short و angle_slug: كلمة أو كلمتان بالحروف اللاتينية الصغيرة فقط (a-z و0-9 و-)، لرابط مثل ‎/pages/thermos-cadeau‎.
 11. seo: عنوان حتى 60 حرفاً ووصف حتى 155 حرفاً.
 12. visuals: من 5 إلى 7 صور تكوّن جسم الصفحة نفسه (الصور هي الوصف، لا زينة بين الفقرات)، تُرسم من صورة المنتج الحقيقية المرفقة، وكل صورة تحمل فكرة واحدة من الزاوية مكتوبة داخلها (headline وpoints):
    - إن وُجد angle_brief.beats فاتبعه بالترتيب: صورة لكل beat، بنفس نوعه وفكرته (headline منه تقريباً).
-   - الأولى kind=hero وهي الخطاف: المنتج كبير وواضح مع لمسة الزاوية (هدية ← تغليف ومناسبة؛ مشكلة ← المنتج حلّ واضح؛ يومي ← لحظة الاستعمال؛ جودة ← فخامة التفاصيل). headline = وعد الزاوية، points = فائدتان أو ثلاث قصيرة.
-   - الباقي من: problem (المشكلة كما يعيشها الزبون، لزاوية المشكلة فقط)، benefits (المنتج في الوسط وحوله تسميات لأجزائه الحقيقية)، feature (ميزة واحدة تُرى وهي تعمل، مثل ترمس مقلوب لا يسرّب إن ذُكر ذلك في المعطيات)، in_use (أثناء الاستعمال في مكان حقيقي)، outcome (النتيجة العاطفية: فرحة، راحة، اطمئنان)، gift (المنتج هدية)، detail (خامة أو تفصيل عن قرب)، design، size (فقط إن كان المقاس أو السعة في المعطيات)، variants (الألوان أو الموديلات الموجودة فعلاً في variants فقط).
+   - الأولى kind=hero وهي الخطاف: المنتج كبير وواضح مع لمسة الزاوية (هدية ← تغليف ومناسبة؛ مشكلة ← المنتج حلّ واضح؛ يومي ← لحظة الاستعمال؛ جودة ← فخامة التفاصيل). headline = وعد الزاوية، points = فائدتان أو ثلاث قصيرة. والثانية تكمل وعد الخطاف مباشرة.
+   - الباقي من: problem (المشكلة كما يعيشها الزبون، لزاوية المشكلة فقط)، benefits (المنتج في الوسط وحوله تسميات لأجزائه الحقيقية)، feature (ميزة واحدة تُرى وهي تعمل، مثل ترمس مقلوب لا يسرّب إن ذُكر ذلك في المعطيات)، in_use (أثناء الاستعمال في مكان حقيقي)، outcome (النتيجة العاطفية: فرحة، راحة، اطمئنان)، gift (المنتج هدية)، box (ما يستلمه الزبون في الطرد، من المعطيات فقط)، detail (خامة أو تفصيل عن قرب)، design، size (فقط إن كان المقاس أو السعة في المعطيات)، variants (الألوان أو الموديلات الموجودة فعلاً في variants فقط).
+   - product.owner_facts: كل خاصية منها تخدم الزاوية تظهر في صورة واحدة على الأقل، تسميةً في صورة benefits أو صورةَ feature تُريها تعمل.
    - التنويع إلزامي: لكل صورة مكان مختلف، وframing مختلف قدر الإمكان (macro، close، medium، wide، top_down)، وزاوية كاميرا مختلفة. ممنوع صورتان بنفس الخلفية أو التركيب.
-   - كل ما يُرى حقيقي: من الصور أو المعطيات (product وproduct_facts). ممنوع ملحق أو قطعة أو لون غير موجود، أو ميزة غير مذكورة، أو نتيجة غير مثبتة.
-   - headline: من 3 إلى 7 كلمات بالعربية تقول الفائدة. points: من 0 إلى 3 تسميات من كلمتين إلى 4 تشير لما يُرى في الصورة.
-   - scene: بالإنجليزية لمولّد الصور، جملتان أو ثلاث: المكان والخلفية، الإضاءة، زاوية الكاميرا، ما حول المنتج، وأين تبقى مساحة فارغة للكتابة (أعلى الصورة أو جانبها). لا تكتب النص نفسه في scene ولا تصف المنتج بشكل مختلف عن صوره.
+   - كل ما يُرى حقيقي: من الصور أو المعطيات (product وproduct_facts وowner_facts). ممنوع ملحق أو قطعة أو لون غير موجود، أو ميزة غير مذكورة، أو نتيجة غير مثبتة.
+   - headline: من 3 إلى 7 كلمات بالعربية تقول معنى الصورة وفائدتها، لا وصفها. points: من 0 إلى 3 تسميات من كلمتين إلى 4 تشير لما يُرى في الصورة.
+   - scene: بالإنجليزية لمولّد الصور، من 25 إلى 70 كلمة بالترتيب: ما يحدث وأين المنتج، المكان والخلفية، الإضاءة، التركيب وزاوية الكاميرا، وأين تبقى مساحة فارغة للكتابة (أعلى الصورة أو جانبها). لا تكتب النص نفسه في scene ولا تصف المنتج بشكل مختلف عن صوره.
    - إن لم يوجد angle_brief: اتبع أجواء الصور الخاصة بتصميم الصفحة (layout.shots)، حتى تختلف صور كل زاوية عن صور الزوايا الأخرى.
 13. التصميم (layout) يُعطى مع المعطيات، ولكل تصميم أقسامه الخاصة (occasions، compare، moments، specs): اكتب فقط الأقسام الموجودة في المخطط المطلوب، كما يصفها layout.brief.
    - trust: من 3 إلى 4 نقاط ثقة قصيرة جداً (2–5 كلمات) من delivery وstore_policies فقط، مثل: الدفع عند الاستلام، المعاينة قبل الدفع (إن كانت في السياسة)، التوصيل إلى N ولاية، الاستبدال (إن كان في السياسة).
    - العناوين بنفس الأسلوب والزاوية، والأسطر قصيرة تُقرأ على الهاتف في ثانية.
+14. angle_brief (إن وُجد) هو تحليل هذا المنتج لهذه الزاوية: promise هو العنوان الرئيسي تقريباً، voice كلمات الزبون التي تُبنى منها العناوين، awareness مستوى وعيه الذي تبدأ منه الصفحة، pains في الفقرات الأولى، proofs في الفوائد، objections تجيب عنها الضمانات والأسئلة الشائعة. product_facts هي الحقائق التي وُجدت في صفحة المنتج: لا تتجاوزها. product.owner_facts أجوبة التاجر نفسه عن أسئلة الزبائن: خصائص مؤكدة للمنتج، استعملها في النقاط والفوائد والصور الوصفية، ولا تحوّلها إلى أسئلة شائعة.
+</rules>
 
-14. angle_brief (إن وُجد) هو تحليل هذا المنتج لهذه الزاوية: promise هو العنوان الرئيسي تقريباً، pains في الفقرات الأولى، proofs في الفوائد، objections تجيب عنها الأسئلة الشائعة والضمانات. product_facts هي الحقائق التي وُجدت في صفحة المنتج: لا تتجاوزها. product.answered_questions أجوبة التاجر نفسه عن أسئلة الزبائن: حقائق مؤكدة، استعملها في الفوائد، وابدأ بها الأسئلة الشائعة (السؤال بنصه تقريباً).
+<method>
+قبل أن تكتب، فكّر بهذا الترتيب: من الزائر بالضبط ومستوى وعيه، وبأي كلمات يصف حاله؛ ما وعد الزاوية وما الذي يثبته من owner_facts وproduct_facts؛ ما الذي يقلقه قبل الطلب وكيف تطفئه الصفحة؛ ثم أي قصة تحكيها الصور من الخطاف إلى الطلب.
+بعد الكتابة راجع كل سطر قبل الإخراج: اختبار «الآن يمكنك…»، اختبار الاستبدال، علامات الكتابة الآلية، وأن لكل ادعاء دليلاً في المعطيات. ما لا يجتاز المراجعة يُعاد كتابته.
+</method>
 
 الإطار المطلوب للفقرات (story) يُعطى مع المعطيات؛ اتبعه بالترتيب، وstage لكل فقرة هو اسم مرحلتها.`;
 }
 
 const s = { type: 'string' };
 const sArr = { type: 'array', items: s };
-export const VISUAL_KINDS = ['hero', 'problem', 'benefits', 'feature', 'in_use', 'outcome', 'gift', 'detail', 'design', 'size', 'variants'];
+export const VISUAL_KINDS = ['hero', 'problem', 'benefits', 'feature', 'in_use', 'outcome', 'gift', 'box', 'detail', 'design', 'size', 'variants'];
 export const FRAMINGS = ['macro', 'close', 'medium', 'wide', 'top_down'];
+// مستوى وعي جمهور الزاوية (Schwartz): يحدد من أين تبدأ الصفحة والصورة الأولى
+export const AWARENESS = ['unaware', 'problem', 'solution', 'product'];
 const VISUAL_ITEM = { type: 'object', additionalProperties: false, required: ['kind', 'framing', 'headline', 'points', 'scene'], properties: { kind: { type: 'string', enum: VISUAL_KINDS }, framing: { type: 'string', enum: FRAMINGS }, headline: s, points: sArr, scene: s } };
 /**
  * مخطط واحد بكل الأقسام (النصوص + أقسام الزوايا الأربعة + خطة الصور) تجاوز حدّ Claude لحجم المخطط
@@ -235,26 +264,35 @@ export const planSchema = (extras = []) => ({
 const extrasNames = { occasions: 'occasions (المناسبات)', compare: 'compare (بدونه / معه)', moments: 'moments (لحظات اليوم)', specs: 'specs (المواصفات)' };
 
 // ——— تحليل المنتج: ما في صفحته فعلاً + زوايا تسويقية خاصة به (بدل الزوايا العامة) ———
-export const INSIGHT_SYSTEM = `أنت مسوّق أداء محترف (Direct response) لإعلانات Facebook/Instagram في الجزائر، لمتجر يبيع بالدفع عند الاستلام.
+export const INSIGHT_SYSTEM = `<role>
+أنت مسوّق أداء محترف (Direct response) واستراتيجي منتجات لإعلانات Facebook/Instagram في الجزائر، لمتجر يبيع بالدفع عند الاستلام.
 تحلّل صفحة منتج واحد (العنوان، الوصف، المواصفات، المتغيرات، الصور المرفقة، السعر، العروض) ثم تقترح زوايا تسويقية خاصة بهذا المنتج بالذات.
+</role>
 
+<craft>
+${CRAFT.angles}
+</craft>
+
+<rules>
 1. facts: كل حقيقة يمكن إثباتها من الصفحة (المادة، السعة، المقاس، طريقة الإغلاق، الحزام، الألوان، ما في العلبة…)، مع فائدتها للزبون في يومه (benefit) ومصدرها (source). ما لا تراه في الصور ولا تقرؤه في المعطيات لا يُكتب. لا أرقام أو مدد غير مذكورة (مثل «يحفظ الحرارة 12 ساعة» إن لم يُذكر الرقم).
-2. missing: أسئلة يطرحها الزبون عادة قبل شراء هذا النوع من المنتجات وجوابها غير موجود في الصفحة (التسرب، مدة حفظ الحرارة، العمر المناسب، المقاس، طريقة التنظيف…)، من 0 إلى 6، ليجيب عنها التاجر فتُضاف إلى صفحة المنتج:
+2. missing: أسئلة يطرحها الزبون عادة قبل شراء هذا النوع من المنتجات وجوابها غير موجود في الصفحة (التسرب، مدة حفظ الحرارة، العمر المناسب، المقاس، طريقة التنظيف…)، من 0 إلى 6، ليجيب عنها التاجر فتصير خصائص في صفحة المنتج وصوره:
    - question: السؤال كما يطرحه الزبون، قصير وينتهي بـ «؟». label: اسم الخاصية في جدول المواصفات (كلمتان إلى 4، مثل «مانع للتسرب»). hint: مثال قصير لشكل الجواب (مثل «نعم / لا» أو «ساعتان أو أكثر»).
-   - لا تسأل عمّا في specs أو answered_questions (أجاب عنه التاجر)، ولا عن dismissed_questions (قال إنه لا يهم)، ولا عمّا يُرى بوضوح في الصور.
-3. angles: من 4 إلى 6 زوايا، كل زاوية دافع شراء مختلف عند جمهور مختلف (مشكلة يحلها، استعمال يومي محدد، مناسبة هدية، الجودة مقابل السعر، الأطفال والعائلة، التوفير بعرض حقيقي…)، مسمّاة بشكل ملموس خاص بالمنتج، لا بكلمة عامة.
+   - لا تسأل عمّا في specs أو owner_facts (أجاب عنه التاجر)، ولا عن dismissed_questions (قال إنه لا يهم)، ولا عمّا يُرى بوضوح في الصور.
+3. angles: من 4 إلى 6 زوايا، كل زاوية شريحة ودافع مختلفان (مشكلة يحلها، استعمال يومي محدد، مناسبة هدية، الجودة مقابل السعر، الأطفال والعائلة، التوفير بعرض حقيقي…)، مسمّاة بشكل ملموس خاص بالمنتج، لا بكلمة عامة.
    مثال لترمس أطفال: «مشروب دافئ حتى الاستراحة» لا «الاستعمال اليومي».
    - name: من 2 إلى 6 كلمات بالعربية. slug: كلمة أو كلمتان لاتينية صغيرة (a-z و0-9 و-) للرابط، مثل ecole أو cadeau-aid.
-   - audience: من بالضبط (مثل: أمهات تلاميذ الابتدائي). why: لماذا تناسب هذا المنتج، جملة واحدة.
-   - promise: وعد الزاوية كعنوان إعلان، من 6 إلى 10 كلمات، صادق ومن الحقائق فقط.
-   - pains: من 2 إلى 3 مشكلات أو رغبات يعيشها هذا الجمهور يومياً. proofs: من 2 إلى 4 حقائق من facts تثبت الوعد. objections: من 2 إلى 3 اعتراضات قبل الطلب وما يجيب عنها من الصفحة أو الدفع عند الاستلام.
-   - framework: إطار الكتابة الأنسب (aida جمهور بارد، pas مشكلة معروفة، bab تغيير روتين، fab منتج تقني، fourp جمهور متردد، fomo فقط إن وُجد عرض كمية حقيقي أو مخزون قليل فعلاً). layout: تصميم الصفحة الأنسب (gift، problem، daily، value، family، classic).
+   - audience: من بالضبط (مثل: أمهات تلاميذ الابتدائي). awareness: مستوى وعيه (unaware، problem، solution، product). voice: من 2 إلى 3 عبارات قصيرة كما يقولها هذا الزبون فعلاً. why: لماذا تناسب الزاوية هذا المنتج، جملة واحدة.
+   - promise: وعد الزاوية كعنوان إعلان، من 6 إلى 10 كلمات، صادق ومن الحقائق فقط، ويجتاز اختبار «الآن يمكنك…».
+   - pains: من 2 إلى 3 مشكلات أو رغبات يعيشها هذا الجمهور يومياً. proofs: من 2 إلى 4 حقائق من facts أو owner_facts تثبت الوعد. objections: من 2 إلى 3 اعتراضات قبل الطلب وما يجيب عنها من الصفحة أو الدفع عند الاستلام.
+   - framework: إطار الكتابة الأنسب لمستوى الوعي (aida جمهور بارد، pas مشكلة معروفة، bab تغيير روتين، fab منتج تقني، fourp جمهور متردد، fomo فقط إن وُجد عرض كمية حقيقي أو مخزون قليل فعلاً). layout: تصميم الصفحة الأنسب (gift، problem، daily، value، family، classic).
    - beats: من 5 إلى 7 صور متتابعة تكوّن الصفحة (الصور هي الوصف، مثل صفحات البيع الناجحة: خطاف ثم صور تشرح)، بالترتيب:
-     الأولى kind=hero: الخطاف (المنتج مع لمسة الزاوية ووعدها). ثم صورة لكل فكرة: problem للمشكلة (زاوية المشكلة)، feature لميزة تُرى وهي تعمل، benefits للمنتج وحوله تسميات أجزائه، in_use للاستعمال في مكان حقيقي، outcome للنتيجة العاطفية، gift للهدية، detail للخامة، size إن عُرف المقاس، variants للألوان الموجودة فعلاً.
-     headline: النص الذي يُكتب داخل الصورة (3 إلى 7 كلمات، فائدة لا وصف). shows: ماذا تُظهر الصورة بالضبط، جملة بالعربية.
+     الأولى kind=hero: الخطاف (المنتج مع لمسة الزاوية ووعدها). ثم صورة لكل فكرة: problem للمشكلة (زاوية المشكلة)، feature لميزة تُرى وهي تعمل، benefits للمنتج وحوله تسميات أجزائه (من owner_facts أولاً)، in_use للاستعمال في مكان حقيقي، outcome للنتيجة العاطفية، gift للهدية، box لما يستلمه الزبون، detail للخامة، size إن عُرف المقاس، variants للألوان الموجودة فعلاً.
+     headline: النص الذي يُكتب داخل الصورة (3 إلى 7 كلمات، معنى وفائدة لا وصف). shows: ماذا تُظهر الصورة بالضبط، جملة بالعربية.
      كل beat فكرة واحدة مختلفة ومشهد مختلف؛ والزوايا المختلفة صورها مختلفة.
 4. سياسة Meta: لا ادعاءات صحية أو علاجية، لا مخاطبة صفات شخصية للزائر، لا ندرة أو عدّاد غير حقيقي، لا آراء زبائن مختلقة.
-5. summary: ما هو المنتج ولمن، جملتان قصيرتان.`;
+5. summary: ما هو المنتج ولمن، جملتان قصيرتان.
+6. product.owner_facts أجوبة التاجر المؤكدة عن أسئلة الزبائن: حقائق تُستعمل في proofs وفي beats (تسميات وصور ميزة)، لا أسئلة شائعة.
+</rules>`;
 
 const INSIGHT_SCHEMA = {
   type: 'object',
@@ -269,11 +307,13 @@ const INSIGHT_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'slug', 'audience', 'why', 'promise', 'pains', 'proofs', 'objections', 'framework', 'layout', 'beats'],
+        required: ['name', 'slug', 'audience', 'awareness', 'voice', 'why', 'promise', 'pains', 'proofs', 'objections', 'framework', 'layout', 'beats'],
         properties: {
           name: s,
           slug: s,
           audience: s,
+          awareness: { type: 'string', enum: AWARENESS },
+          voice: sArr,
           why: s,
           promise: s,
           pains: sArr,
@@ -304,6 +344,8 @@ function cleanBrief(a) {
     name: clip(a.name, 80),
     slug: latin(a.slug, 24),
     audience: clip(a.audience, 200),
+    awareness: AWARENESS.includes(a.awareness) ? a.awareness : null,
+    voice: clipList(a.voice, 3, 100),
     why: clip(a.why, 240),
     promise: clip(a.promise, 140),
     pains: clipList(a.pains, 3, 160),
@@ -364,7 +406,7 @@ export function getInsight(productId) {
   return {
     ...data,
     missing: data.missing.filter((m) => !asked.has(m.question) && !dismissed.has(m.question)),
-    answered: answers.map((a) => ({ question: a.q, label: a.label, value: a.value, faq: a.faq || a.value, at: a.at || null, on_store: Boolean(p.shopify_id) && answerOnPage(p.description_html, a) })),
+    answered: answers.map((a) => ({ question: a.q, label: a.label, value: a.value, feature: a.feature || '', at: a.at || null, on_store: Boolean(p.shopify_id) && answerOnPage(p.description_html, a) })),
     product_id: r.product_id,
     on_shopify: Boolean(p.shopify_id),
     at: r.created_at,
@@ -379,19 +421,19 @@ export function insightAngle(productId, name) {
   return getInsight(productId)?.angles?.find((a) => a.name === angle) || null;
 }
 
-const ANSWER_SCHEMA = { type: 'object', additionalProperties: false, required: ['answers', 'label', 'value', 'faq', 'reason'], properties: { answers: { type: 'boolean' }, label: s, value: s, faq: s, reason: s } };
+const ANSWER_SCHEMA = { type: 'object', additionalProperties: false, required: ['answers', 'label', 'value', 'feature', 'reason'], properties: { answers: { type: 'boolean' }, label: s, value: s, feature: s, reason: s } };
 const ANSWER_SYSTEM = `تساعد تاجراً جزائرياً على إكمال صفحة منتجه. يصلك سؤال زبون عن المنتج وجواب التاجر عليه، وقد يكون بالدارجة أو بأخطاء الإملاء الصوتي.
 - answers: هل يعطي جواب التاجر معلومة محددة عن السؤال؟ («موجود في الصورة»، «لا أعرف»، أو كلام عن شيء آخر ليس جواباً).
 - label: اسم الخاصية في جدول المواصفات، من كلمتين إلى 4. احتفظ بالاسم المقترح إن كان مناسباً.
 - value: القيمة مختصرة كما تُكتب في جدول مواصفات (حتى 60 حرفاً)، مثل «نعم، مضاد لتسرب الماء» أو «ساعتان أو أكثر».
-- faq: جواب السؤال لصفحة المنتج، جملة أو جملتان بالعربية الفصحى البسيطة.
+- feature: الخاصية كما تُعرض ميزةً في صفحة المنتج وصوره، من 4 إلى 10 كلمات بالعربية الفصحى البسيطة، الفائدة أولاً (مثل «غطاء ومصاصة مضادان للتسرب: حقيبته تبقى جافة»). ليست سؤالاً ولا جواباً، ولا تبدأ بـ «نعم».
 - ممنوع إضافة أي معلومة أو رقم أو مدة أو مادة غير موجودة في جواب التاجر، وممنوع تغيير الأرقام. إن كان الجواب يحتمل أكثر من معنى فاكتب أوضح ما فهمته واذكر ذلك في reason ليراجعه.
 - reason: إن كان answers=false فما الذي ينقص، بجملة قصيرة موجهة للتاجر؛ وإلا فارغ أو ملاحظة المراجعة.`;
 
 /**
- * جواب التاجر عن سؤال زبون ← بطاقة المنتج (سطر في المواصفات + جواب للأسئلة الشائعة)، ومنها إلى صفحات الهبوط وSEO،
+ * جواب التاجر عن سؤال زبون ← بطاقة المنتج (سطر في المواصفات + ميزة)، ومنها إلى الصور الوصفية وفوائد صفحات الهبوط وSEO،
  * وإلى صفحة المنتج في Shopify بزر «انشر الأجوبة» (كلمة المرور الحساسة). Claude يصوغ الجواب فقط، دون إضافة معلومة.
- * exact: تعديل يدوي لجواب محفوظ (الاسم والقيمة والجملة كما كتبها التاجر، دون Claude).
+ * exact: تعديل يدوي لجواب محفوظ (الاسم والقيمة والميزة كما كتبها التاجر، دون Claude). الجواب خاصية للمنتج: لا يصير سؤالاً شائعاً.
  */
 export async function answerQuestion(projectId, productId, input = {}) {
   const p = getProduct(Number(productId));
@@ -400,13 +442,13 @@ export async function answerQuestion(projectId, productId, input = {}) {
   if (!question) throw badRequest('question_required');
   let out;
   if (input.exact) {
-    out = { label: clip(input.label, 60), value: clip(input.value, 160), faq: clip(input.faq || input.value, 400) };
+    out = { label: clip(input.label, 60), value: clip(input.value, 160), feature: clip(input.feature, 120) };
     if (!out.label || !out.value) throw badRequest('answer_required');
   } else {
     const answer = clip(input.answer, 600);
     if (!answer) throw badRequest('answer_required');
     const label = clip(input.label, 60);
-    out = { label: label || question.replace(/^هل\s+/, '').replace(/[؟?]+$/, '').slice(0, 40), value: answer.slice(0, 160), faq: answer };
+    out = { label: label || question.replace(/^هل\s+/, '').replace(/[؟?]+$/, '').slice(0, 40), value: answer.slice(0, 160), feature: '' };
     if (ai.aiConfigured()) {
       const r = await ai.structured({
         system: ANSWER_SYSTEM,
@@ -417,11 +459,11 @@ export async function answerQuestion(projectId, productId, input = {}) {
         meter: { projectId, kind: 'product_answer' },
       });
       if (!r.answers) throw new HttpError(400, 'answer_not_a_value', null, { reason: clip(r.reason, 300) });
-      out = { label: clip(r.label, 60) || out.label, value: clip(r.value, 160) || out.value, faq: clip(r.faq, 400) || out.faq, note: clip(r.reason, 300) };
+      out = { label: clip(r.label, 60) || out.label, value: clip(r.value, 160) || out.value, feature: clip(r.feature, 120) || out.feature, note: clip(r.reason, 300) };
     }
   }
   // سطر واحد لكل سؤال: الجواب الجديد يحلّ محل القديم، وسطر بنفس الاسم يُستبدل بدل أن يتكرر
-  const row = { label: out.label, value: out.value, q: question, faq: out.faq, source: 'owner', at: nowIso() };
+  const row = { label: out.label, value: out.value, q: question, feature: out.feature, source: 'owner', at: nowIso() };
   const specs = (p.specs || []).filter((x) => x.q !== question && x.label !== row.label);
   const kept = (p.specs || []).findIndex((x) => x.q === question || x.label === row.label);
   specs.splice(kept >= 0 ? Math.min(kept, specs.length) : specs.length, 0, row);
@@ -462,7 +504,7 @@ export async function analyzeProduct(projectId, productId, { fresh = false } = {
   const data = { product: productFacts(p), store_offers: offers, audience_hint: clip(p.audience, 200) || null, dismissed_questions: before?.dismissed || [] };
   const raw = await ai.structured({
     system: INSIGHT_SYSTEM,
-    prompt: `المعطيات (JSON):\n${JSON.stringify(data, null, 2)}\n\n${images.length ? 'الصور المرفقة هي صور المنتج الحقيقية من صفحته.' : 'لا صور للمنتج: اعتمد على النص وحده.'}\n\nحلّل المنتج واقترح زواياه حسب القواعد.`,
+    prompt: `<data>\n${JSON.stringify(data, null, 2)}\n</data>\n\n<task>\n${images.length ? 'الصور المرفقة هي صور المنتج الحقيقية من صفحته.' : 'لا صور للمنتج: اعتمد على النص وحده.'}\nحلّل المنتج واقترح زواياه حسب الصنعة والقواعد: شرائح ودوافع مختلفة، لكل زاوية قواها الأربع ومستوى وعي جمهورها وكلماته، وتسلسل صور يحكي قصتها.\n</task>`,
     schema: INSIGHT_SCHEMA,
     effort: 'medium',
     images,
@@ -604,8 +646,8 @@ function productFacts(p) {
     compare_at_price_da: p.compare_at_price && p.compare_at_price > p.price ? p.compare_at_price : null,
     description_text: String(p.description_html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000),
     specs: (p.specs || []).map((x) => ({ label: x.label, value: x.value })),
-    // أجوبة التاجر نفسه عن أسئلة الزبائن: حقائق مؤكدة (تُستعمل في الفوائد والأسئلة الشائعة)
-    ...(ownerAnswers(p).length ? { answered_questions: ownerAnswers(p).map((x) => ({ q: x.q, a: x.faq || x.value })) } : {}),
+    // أجوبة التاجر نفسه عن أسئلة الزبائن = خصائص مؤكدة للمنتج: نقاط وفوائد وتسميات في الصور، لا أسئلة شائعة
+    ...(ownerAnswers(p).length ? { owner_facts: ownerFacts(p) } : {}),
     notes: p.notes,
     options: p.options,
     variants: (p.variants || []).map((v) => v.title).filter((t) => t && t !== 'Default Title'),
@@ -614,8 +656,11 @@ function productFacts(p) {
   };
 }
 
+/** أجوبة التاجر كما تُرسل للكاتب ومخطط الصور ومولّد الصور: الخاصية، قيمتها، وصياغتها كميزة */
+export const ownerFacts = (p) => ownerAnswers(p).map((x) => ({ label: x.label, value: x.value, feature: featureOf(x) }));
+
 /** ما يُرسل للكاتب من الزاوية: بلا الاسم اللاتيني ولا الإطار والتصميم (يُرسلان في حقولهما) */
-const briefFacts = (b) => ({ audience: b.audience, why: b.why, promise: b.promise, pains: b.pains, proofs: b.proofs, objections: b.objections, beats: b.beats });
+const briefFacts = (b) => ({ audience: b.audience, awareness: b.awareness || null, voice: b.voice || [], why: b.why, promise: b.promise, pains: b.pains, proofs: b.proofs, objections: b.objections, beats: b.beats });
 
 /** توليد النصوص (مسودة، لا شيء يُكتب في Shopify بعد) */
 export async function generateLanding(projectId, input, userId = null) {
@@ -646,14 +691,14 @@ export async function generateLanding(projectId, input, userId = null) {
   };
   const images = await imageBlocks(p.images, 4).catch(() => []);
   const system = landingSystem(brand).replace('{tone}', TONES[tone]);
-  const given = `المعطيات (JSON):\n${JSON.stringify(data, null, 2)}\n\n`;
-  const extra = input.instructions ? `تعليمات إضافية من التاجر: ${clip(input.instructions, 500)}\n\n` : '';
+  const given = `<data>\n${JSON.stringify(data, null, 2)}\n</data>\n\n`;
+  const extra = input.instructions ? `<owner_instructions>${clip(input.instructions, 500)}</owner_instructions>\n\n` : '';
   const extras = layoutExtras(layout);
   // طلبان متوازيان (انتظار واحد): النصوص بكل صور المنتج، وأقسام الزاوية + خطة الصور بالصورة الرئيسية وحدها
   const [raw, plan] = await Promise.all([
     ai.structured({
       system,
-      prompt: `${given}الصور المرفقة هي صور المنتج الحقيقية.\n\n${extra}اكتب نصوص صفحة الهبوط حسب القواعد والإطار (خطة الصور وأقسام التصميم الخاصة تُكتب في طلب آخر).`,
+      prompt: `${given}${extra}<task>\nالصور المرفقة هي صور المنتج الحقيقية.\nاكتب نصوص صفحة الهبوط حسب الصنعة والقواعد والإطار (خطة الصور وأقسام التصميم الخاصة تُكتب في طلب آخر). ابدأ من مستوى وعي الزائر، وابنِ العنوان من وعد الزاوية وكلمات الزبون، واجعل خصائص product.owner_facts في النقاط والفوائد لا في الأسئلة الشائعة. راجع كل سطر قبل الإخراج.\n</task>`,
       schema: LANDING_SCHEMA,
       effort: 'medium',
       images,
@@ -662,7 +707,7 @@ export async function generateLanding(projectId, input, userId = null) {
     ai
       .structured({
         system,
-        prompt: `${given}الصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text.\n\n${extra}${extras.length ? `اكتب أقسام تصميم الصفحة الخاصة بهذه الزاوية: ${extras.map((k) => extrasNames[k]).join('، ')} (القاعدة 13)، ثم ` : 'اكتب '}خطة الصور الوصفية (القاعدة 12).`,
+        prompt: `${given}${extra}<task>\nالصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text.\n${extras.length ? `اكتب أقسام تصميم الصفحة الخاصة بهذه الزاوية: ${extras.map((k) => extrasNames[k]).join('، ')} (القاعدة 13)، ثم ` : 'اكتب '}خطة الصور الوصفية (القاعدة 12): قصة واحدة من الخطاف إلى الطلب، قالب مختلف لكل صورة، وكل خاصية في product.owner_facts تخدم الزاوية تظهر في صورة على الأقل.\n</task>`,
         schema: planSchema(extras),
         effort: 'medium',
         images: images.slice(0, 1),
@@ -711,7 +756,7 @@ export async function planVisuals(id) {
   const missing = layoutExtras(layoutId).filter((k) => empty(l.copy[k]));
   const raw = await ai.structured({
     system: landingSystem(brand).replace('{tone}', TONES[l.tone] || TONES.ar),
-    prompt: `المعطيات (JSON):\n${JSON.stringify({ product: productFacts(p), angle: l.angle, delivery: deliveryFacts(l.project_id), layout: { id: layoutId, brief: layout.brief, shots: layout.shots }, headline: l.copy.hero?.headline, benefits: l.copy.benefits?.items, ...(l.copy.brief ? { angle_brief: briefFacts(l.copy.brief), product_facts: getInsight(p.id)?.facts || [] } : {}) }, null, 2)}\n\nالصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text. ${missing.length ? `اكتب أقسام التصميم الناقصة: ${missing.map((k) => extrasNames[k]).join('، ')} (القاعدة 13)، ثم ` : 'اكتب '}خطة الصور الوصفية (القاعدة 12) لهذه الصفحة.`,
+    prompt: `<data>\n${JSON.stringify({ product: productFacts(p), angle: l.angle, delivery: deliveryFacts(l.project_id), layout: { id: layoutId, brief: layout.brief, shots: layout.shots }, headline: l.copy.hero?.headline, benefits: l.copy.benefits?.items, ...(l.copy.brief ? { angle_brief: briefFacts(l.copy.brief), product_facts: getInsight(p.id)?.facts || [] } : {}) }, null, 2)}\n</data>\n\n<task>\nالصورة المرفقة هي الصورة الرئيسية للمنتج، ووصفه في description_text.\n${missing.length ? `اكتب أقسام التصميم الناقصة: ${missing.map((k) => extrasNames[k]).join('، ')} (القاعدة 13)، ثم ` : 'اكتب '}خطة الصور الوصفية (القاعدة 12) لهذه الصفحة: قصة واحدة من الخطاف إلى الطلب، قالب مختلف لكل صورة، وكل خاصية في product.owner_facts تخدم الزاوية تظهر في صورة على الأقل.\n</task>`,
     schema: planSchema(missing),
     effort: 'medium',
     images,
@@ -737,11 +782,12 @@ const ACCENTS = { gift: ['#be185d', 'deep rose'], problem: ['#0f766e', 'deep tea
 const KIND_STYLE = {
   hero: 'The hook of the page, like a top-performing Facebook ad key visual: the product large, sharp and centered in the foreground, the angle’s setting behind it, strong contrast, generous empty space at the top for the headline.',
   problem: 'Realistic everyday photo of the problem situation described in the scene, as the buyer lives it. The product is not the subject here; if it appears, only small on one side as the answer.',
-  benefits: 'Clean product infographic: the product centered on a soft background lightly tinted with the accent color, with clear space around it for short labels, each label next to the real part it names with a thin pointer line.',
+  benefits: 'Callout infographic: the product centered on a soft background lightly tinted with the accent color, with clear space around it for short labels, each label next to the real part it names with a thin pointer line. The labels name what buyers ask about before ordering.',
   feature: 'Demonstration photo: one real feature shown working, so it is understood without reading. The product is the clear subject.',
   in_use: 'Candid lifestyle photo of the product being used in a real place (home, school, office, car, outdoors), natural light.',
   outcome: 'Emotional lifestyle moment showing the result for the buyer (joy, calm, relief, pride), the product clearly visible in the scene.',
   gift: 'Gift moment: the product offered as a present, wrapping paper and a ribbon around it (never covering or changing the product), warm festive light.',
+  box: 'What the buyer receives: every item that comes in the package laid out neatly on a clean surface, flat lay or 45-degree view, only the items named in the product facts, nothing added.',
   detail: 'Macro photo of a real material, finish or part of the product, crisp texture, shallow depth of field.',
   design: 'Product design shot from a new angle on a styled surface that fits the angle.',
   size: 'Scale photo: the product next to a familiar everyday object so its real size is obvious, real proportions kept.',
@@ -761,18 +807,22 @@ const FRAMING_TEXT = {
  * العنوان شريط بلون تصميم الصفحة والتسميات بجانب ما تشير إليه، والتاجر يراجع الحروف قبل اعتماد الصورة.
  */
 export function visualPrompt(p, v, { layout = 'classic', angle = '' } = {}) {
-  const description = plainText(p.description_html, 900);
   const [hex, color] = ACCENTS[layout] || ACCENTS.classic;
   const text = Boolean(v.with_text && v.headline);
   const labels = text ? (v.points || []).filter(Boolean) : [];
+  // أجوبة التاجر: خصائص مؤكدة يُرى بها المنتج كما هو (مقلوب لا يسرّب، يحفظ البرودة…)، لا نص إضافي في الصورة
+  const facts = ownerFacts(p).map((f) => `${f.label}: ${f.value}`).slice(0, 8);
+  // الوصف مختصر: وصف طويل يشتت المولّد عن مشهد الصورة (40–80 كلمة من التوجيه أفضل من فقرة كاملة)
+  const description = plainText(p.description_html, 500);
   return [
     `${v.kind === 'variants' ? 'The attached photos are the real photos of the product' : 'The attached photo is the main photo of the real product'} "${p.title}". Create one new image of THIS exact product for its landing page${angle ? ` (marketing angle: ${angle})` : ''}.`,
     'Product fidelity must be 100%: identical shape, proportions, colors, prints and characters, logos, materials and parts as in the photo. Do not redesign, recolor, add or remove anything on the product, and do not add accessories that are not in the photo or the description.',
-    description ? `Product description from its page (use it for real details only, never to change how it looks): ${description}` : '',
     `Image type: ${KIND_STYLE[v.kind] || KIND_STYLE.feature}`,
     `Scene: ${v.scene}`,
     v.framing && FRAMING_TEXT[v.framing] ? `Camera: ${FRAMING_TEXT[v.framing]}.` : '',
     'Style: photorealistic high-end commercial photography, natural believable light, sharp focus on the product, portrait 4:5 composition for a phone screen.',
+    facts.length ? `Confirmed product features from the store owner (show a feature only when this image is about it; never write it unless it is one of the texts below): ${facts.join('; ')}.` : '',
+    description ? `Product description from its page (use it for real details only, never to change how it looks): ${description}` : '',
     text
       ? [
           `Text in the image (same design on every image of this page): a bold rounded banner filled with ${hex} (${color}) with white bold modern Arabic sans-serif type, soft shadow; labels are small rounded tags in white with ${hex} text.`,

@@ -223,7 +223,7 @@ function CustomerQuestions({ p, dirty, reload }) {
   return (
     <Card
       title={t(['أسئلة الزبائن عن هذا المنتج', 'Questions des clients sur ce produit'])}
-      subtitle={t(['من تحليل صفحة المنتج. جوابك يُضاف إلى المواصفات، ثم إلى صفحة المنتج في المتجر، وتستعمله صفحات الهبوط وSEO.', 'D’après l’analyse de la fiche. Votre réponse va dans les caractéristiques, puis sur la fiche en ligne, les landings et le SEO.'])}
+      subtitle={t(['من تحليل صفحة المنتج. جوابك خاصية للمنتج: يُضاف إلى المواصفات والمميزات، ثم إلى صفحة المنتج في المتجر، وتستعمله الصور الوصفية وصفحات الهبوط وSEO.', 'D’après l’analyse de la fiche. Votre réponse est une caractéristique : elle va dans les caractéristiques et les points forts, puis sur la fiche en ligne, les visuels, les landings et le SEO.'])}
       actions={
         <Button size="sm" variant="ghost" icon={Sparkles} loading={busy === 'analyze'} onClick={analyze}>
           {insight ? t(['حلّل من جديد', 'Relancer']) : t(['اكتشف أسئلة الزبائن', 'Trouver les questions'])}

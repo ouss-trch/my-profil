@@ -7,7 +7,7 @@ import * as shopify from '../integrations/shopify.js';
 import * as ai from '../integrations/ai.js';
 import * as meta from '../integrations/meta.js';
 import * as n8n from '../integrations/n8n.js';
-import { analyzeSeo, mergeAnswers, ownerAnswers } from './seo.js';
+import { analyzeSeo, featureOf, mergeAnswers, ownerAnswers } from './seo.js';
 import { assertSupplier } from './contacts.js';
 import { uploadPath } from '../integrations/images.js';
 import { getProject, inList } from './projects.js';
@@ -295,8 +295,8 @@ const variantSig = (vs) =>
  * يُرجع warnings لما لم يتم (إذن ناقص) دون إفشال النشر كله.
  */
 export async function publishProduct(id, { status = 'ACTIVE' } = {}) {
-  const p = getProduct(id);
-  // أجوبة التاجر عن أسئلة الزبائن تصل مع كل نشر (سطر في المواصفات + الأسئلة الشائعة)، فلا يبقى المتجر متأخراً عن البطاقة
+  const p = await featureAnswers(getProduct(id));
+  // أجوبة التاجر عن أسئلة الزبائن تصل مع كل نشر (سطر في المواصفات + ميزة)، فلا يبقى المتجر متأخراً عن البطاقة
   p.description_html = mergeAnswers(p.description_html, ownerAnswers(p));
   const cfg = projectConfig(p.project_id);
   if (!shopify.isConfigured(cfg)) throw new HttpError(400, 'shopify_not_configured');
@@ -392,11 +392,39 @@ export async function publishProduct(id, { status = 'ACTIVE' } = {}) {
 }
 
 /**
- * أجوبة التاجر ← صفحة المنتج في Shopify: الوصف كما هو في المتجر الآن (قد يكون عُدّل هناك) + أسطر المواصفات والأسئلة الشائعة،
+ * أجوبة التاجر ← صفحة المنتج في Shopify: الوصف كما هو في المتجر الآن (قد يكون عُدّل هناك) + سطر في المواصفات وميزة لكل جواب
+ * (وتُحذف نسخها القديمة من الأسئلة الشائعة)،
  * دون لمس الباقي (السعر، الصور، المتغيرات). الوصف نفسه يُحفظ في الـ ERP فتبقى البطاقة والمتجر متطابقين.
  */
+const FEATURES_SCHEMA = { type: 'object', additionalProperties: false, required: ['items'], properties: { items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['i', 'feature'], properties: { i: { type: 'integer' }, feature: { type: 'string' } } } } } };
+
+/**
+ * أجوبة حُفظت قبل صياغتها كميزات (كانت أسئلة شائعة): Claude يصوغ لكل واحدة سطر ميزة مرة واحدة، دون إضافة معلومة،
+ * ويُحفظ في بطاقة المنتج. دون Claude أو عند الخطأ: «الخاصية: القيمة».
+ */
+async function featureAnswers(p) {
+  const todo = ownerAnswers(p).filter((x) => !x.feature);
+  if (!todo.length || !ai.aiConfigured()) return p;
+  try {
+    const r = await ai.structured({
+      system: 'تصوغ خصائص منتج لمتجر جزائري. لكل جواب من أجوبة التاجر اكتب feature: الخاصية كما تُعرض ميزةً في صفحة المنتج، من 4 إلى 10 كلمات بالعربية الفصحى البسيطة، الفائدة أولاً، ليست سؤالاً ولا جواباً ولا تبدأ بـ «نعم». ممنوع إضافة أي معلومة أو رقم غير موجود في الجواب، وممنوع تغيير الأرقام. i رقم الجواب كما هو.',
+      prompt: JSON.stringify({ product: p.title, answers: todo.map((x, i) => ({ i, question: x.q, label: x.label, value: x.value, answer: x.faq || x.value })) }, null, 2),
+      schema: FEATURES_SCHEMA,
+      effort: 'low',
+      maxTokens: 3000,
+      meter: { projectId: p.project_id, kind: 'product_answer' },
+    });
+    const by = new Map((r.items || []).filter((x) => todo[x.i]).map((x) => [todo[x.i].q, String(x.feature || '').replace(/\s+/g, ' ').trim().slice(0, 120)]));
+    const specs = p.specs.map((x) => (x.q && !x.feature && by.get(x.q) ? { ...x, feature: by.get(x.q) } : x));
+    return updateProduct(p.id, { specs });
+  } catch (e) {
+    console.warn('[answers] feature wording', e.message);
+    return p;
+  }
+}
+
 export async function publishAnswers(id) {
-  const p = getProduct(id);
+  const p = await featureAnswers(getProduct(id));
   const cfg = projectConfig(p.project_id);
   if (!shopify.isConfigured(cfg)) throw new HttpError(400, 'shopify_not_configured');
   if (!p.shopify_id) throw badRequest('product_not_on_shopify');
@@ -466,7 +494,7 @@ function seoSystem(brand, domain) {
 - seo_description: بين 140 و160 حرفاً، فيه الكلمة المفتاحية وفائدة ملموسة وذكر الدفع عند الاستلام والتوصيل ودعوة لطيفة للطلب.
 - handle: حروف لاتينية صغيرة وشرطات فقط، كلمات فرنسية/لاتينية دالة، 60 حرفاً كحد أقصى (مثال: thermos-enfant-mickey-minnie-320ml).
 - description_html: بين 300 و500 كلمة، بدون <h1>. ابدأ بـ <h2> فيه الكلمة المفتاحية بصياغة طبيعية، ثم فقرتان تذكر الكلمة المفتاحية في أول 100 كلمة،
-  ثم <h3>المواصفات</h3> كجدول <table><tr><th>…</th><td>…</td></tr></table>، ثم <h3>المميزات</h3> كقائمة <ul>، ثم <h3>أسئلة شائعة</h3> (3–5 أسئلة بصيغة <p><strong>السؤال؟</strong> الجواب</p>، تبدأ بكل answered_questions بنصها: أجوبة التاجر المؤكدة)، ثم <h3>الطلب والتوصيل</h3>.
+  ثم <h3>المواصفات</h3> كجدول <table><tr><th>…</th><td>…</td></tr></table> فيه كل owner_facts، ثم <h3>المميزات</h3> كقائمة <ul> فيها ميزات owner_facts، ثم <h3>أسئلة شائعة</h3> (3–5 أسئلة عن الشراء والاستعمال بصيغة <p><strong>السؤال؟</strong> الجواب</p>، دون تكرار owner_facts: هي خصائص لا أسئلة)، ثم <h3>الطلب والتوصيل</h3>.
 - لا تخترع معلومات غير موجودة في المعطيات (مواد، شهادات، أرقام، ضمانات). إن لم تُعطَ معلومة فلا تذكرها، واذكر نقصها في notes.
 - تجنّب الحشو وعلامات الكتابة الآلية: لا شرطات طويلة (—)، ولا عبارات مثل «في عالم اليوم» أو «لا تفوّت الفرصة» أو «تجربة لا مثيل لها». كثافة الكلمة المفتاحية طبيعية (أقل من 3%).
 - image_alts: نص بديل لكل صورة مرفقة بنفس الترتيب، يصف ما يظهر فعلاً في الصورة مع اسم المنتج، 8–16 كلمة، دون «صورة لـ».
@@ -491,7 +519,8 @@ export async function generateSeo(id, { instructions = '' } = {}) {
     variants: (p.variants || []).map((v) => v.title),
     technical_notes: p.notes,
     specs: (p.specs || []).map((x) => ({ label: x.label, value: x.value })),
-    answered_questions: ownerAnswers(p).map((x) => ({ q: x.q, a: x.faq || x.value })),
+    // أجوبة التاجر عن أسئلة الزبائن: خصائص مؤكدة (المواصفات والمميزات، لا الأسئلة الشائعة)
+    owner_facts: ownerAnswers(p).map((x) => ({ label: x.label, value: x.value, feature: featureOf(x) })),
     audience: p.audience,
     existing_description_text: (p.description_html || '').replace(/<[^>]+>/g, ' ').slice(0, 3000),
     existing_tags: p.tags,

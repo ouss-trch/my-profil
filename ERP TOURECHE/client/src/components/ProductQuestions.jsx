@@ -6,8 +6,9 @@ import { Badge, Button, Input, Textarea, cx, useAction } from './ui.jsx';
 
 /**
  * أسئلة الزبائن التي لا تجيب عنها صفحة المنتج (من تحليل المنتج)، والجواب في مكانه:
- * جوابك ← بطاقة المنتج (سطر في المواصفات + جواب للأسئلة الشائعة) ← صفحات الهبوط وSEO تستعمله ←
- * «انشر الأجوبة في صفحة المنتج» يضيفه إلى وصف المنتج في Shopify (كلمة المرور الحساسة) ← «حدّث الزوايا بالأجوبة».
+ * جوابك خاصية للمنتج لا سؤال شائع: بطاقة المنتج (سطر في المواصفات + ميزة) ← تسميات وصور ميزة في الصور الوصفية،
+ * فوائد صفحات الهبوط، وSEO ← «انشر الأجوبة في صفحة المنتج» يضيفه إلى وصف المنتج في Shopify (كلمة المرور الحساسة)
+ * ← «حدّث الزوايا بالأجوبة».
  * blocked: سبب يمنع الحفظ الآن (مثل تعديلات غير محفوظة في بطاقة المنتج كانت ستضيع).
  */
 export default function ProductQuestions({ insight, productId, project, onInsight, onProduct, onReanalyze, blocked = null }) {
@@ -66,7 +67,7 @@ export default function ProductQuestions({ insight, productId, project, onInsigh
           <p className="text-sub">
             <b className="text-ink">{t([`أسئلة يطرحها الزبون ولا تجيب عنها صفحة المنتج (${missing.length})`, `Questions de clients sans réponse sur la fiche (${missing.length})`])}</b>
             <br />
-            {t(['جوابك يُحفظ في بطاقة المنتج، وتستعمله صفحات الهبوط وSEO، ثم تنشره في صفحة المنتج بزر واحد. لا يُختلق شيء.', 'Votre réponse va dans la fiche produit, sert aux landings et au SEO, puis se publie sur la fiche en un clic. Rien n’est inventé.'])}
+            {t(['جوابك خاصية للمنتج: يُحفظ في بطاقته (المواصفات والمميزات)، ويظهر في الصور الوصفية وفوائد صفحات الهبوط، ثم تنشره في صفحة المنتج بزر واحد. لا يُختلق شيء.', 'Votre réponse est une caractéristique du produit : enregistrée dans la fiche, montrée dans les visuels et les bénéfices des landings, puis publiée sur la fiche en un clic. Rien n’est inventé.'])}
           </p>
           {blocked && <p className="font-medium text-ink">{blocked}</p>}
           <ul className="space-y-2">
@@ -134,10 +135,10 @@ export default function ProductQuestions({ insight, productId, project, onInsigh
                       <Input dir="auto" className="text-xs" aria-label={t(['الخاصية', 'Propriété'])} value={edit.label} onChange={(e) => setEdit({ ...edit, label: e.target.value })} />
                       <Input dir="auto" className="text-xs" aria-label={t(['القيمة', 'Valeur'])} value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} />
                     </div>
-                    <Textarea dir="auto" className="min-h-[56px] text-xs" aria-label={t(['الجواب في الأسئلة الشائعة', 'Réponse dans la FAQ'])} value={edit.faq} onChange={(e) => setEdit({ ...edit, faq: e.target.value })} />
+                    <Textarea dir="auto" className="min-h-[56px] text-xs" aria-label={t(['الميزة كما تظهر في الصفحة والصور', 'L’atout tel qu’affiché sur la page et les visuels'])} placeholder={t(['الميزة كما تظهر في الصفحة والصور', 'L’atout tel qu’affiché'])} value={edit.feature} onChange={(e) => setEdit({ ...edit, feature: e.target.value })} />
                     {failed(a.question)}
                     <div className="flex flex-wrap gap-1.5">
-                      <Button size="sm" variant="primary" loading={busy === `a-${a.question}`} disabled={!edit.label.trim() || !edit.value.trim() || Boolean(blocked)} onClick={() => save(a.question, { exact: true, label: edit.label, value: edit.value, faq: edit.faq })}>
+                      <Button size="sm" variant="primary" loading={busy === `a-${a.question}`} disabled={!edit.label.trim() || !edit.value.trim() || Boolean(blocked)} onClick={() => save(a.question, { exact: true, label: edit.label, value: edit.value, feature: edit.feature })}>
                         {t('c.save')}
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => (setEdit(null), setFailure(null))}>
@@ -152,10 +153,10 @@ export default function ProductQuestions({ insight, productId, project, onInsigh
                       <p className="text-sm text-ink">
                         <b>{a.label}:</b> {a.value}
                       </p>
-                      {a.faq && a.faq !== a.value && <p className="text-sub">{a.faq}</p>}
+                      {a.feature ? <p className="text-sub">✓ {a.feature}</p> : insight.on_shopify && !a.on_store && <p className="text-muted">{t(['تُصاغ ميزةً عند النشر في صفحة المنتج', 'Formulée en point fort à la publication'])}</p>}
                     </div>
                     {insight.on_shopify && (a.on_store ? <Globe className="mt-1 h-3.5 w-3.5 shrink-0 text-good" aria-label={t(['في صفحة المنتج', 'Sur la fiche en ligne'])} /> : null)}
-                    <Button size="sm" variant="ghost" icon={Pencil} disabled={Boolean(blocked)} aria-label={t(['تعديل', 'Modifier'])} title={t(['تعديل', 'Modifier'])} onClick={() => (setEdit({ question: a.question, label: a.label, value: a.value, faq: a.faq || '' }), setFailure(null))} />
+                    <Button size="sm" variant="ghost" icon={Pencil} disabled={Boolean(blocked)} aria-label={t(['تعديل', 'Modifier'])} title={t(['تعديل', 'Modifier'])} onClick={() => (setEdit({ question: a.question, label: a.label, value: a.value, feature: a.feature || '' }), setFailure(null))} />
                   </div>
                 )}
               </li>
@@ -174,7 +175,7 @@ export default function ProductQuestions({ insight, productId, project, onInsigh
             )}
           </div>
           {insight.on_shopify && pending > 0 && (
-            <p className="text-muted">{t(['النشر يضيف سطراً لكل جواب في جدول «المواصفات» وفي «أسئلة شائعة» بوصف المنتج، ولا يلمس السعر ولا الصور ولا بقية النص.', 'Ajoute une ligne par réponse dans « Caractéristiques » et « Questions fréquentes » de la description, sans toucher prix, photos ni reste du texte.'])}</p>
+            <p className="text-muted">{t(['النشر يضيف سطراً لكل جواب في جدول «المواصفات» وميزة في «المميزات» بوصف المنتج (ويحذف نسخها القديمة من «أسئلة شائعة»)، ولا يلمس السعر ولا الصور ولا بقية النص.', 'Ajoute une ligne par réponse dans « Caractéristiques » et un atout dans « Points forts » (et retire leurs anciennes copies de la FAQ), sans toucher prix, photos ni reste du texte.'])}</p>
           )}
         </div>
       )}

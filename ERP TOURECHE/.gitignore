@@ -7,3 +7,6 @@ data/
 .DS_Store
 client/dist-demo/
 demo-data/
+
+# حزم المهارات للرفع في claude.ai (scripts/pack-skills.sh)
+dist-skills/

@@ -103,6 +103,7 @@ const KINDS = {
   in_use: ['أثناء الاستعمال', 'En utilisation'],
   outcome: ['النتيجة', 'Résultat'],
   gift: ['هدية', 'Cadeau'],
+  box: ['ما تستلمه', 'Contenu du colis'],
   design: ['التصميم', 'Design'],
   detail: ['تفصيل قريب', 'Détail'],
   size: ['الحجم', 'Taille'],
@@ -303,6 +304,7 @@ function ProductAngles({ productId, picked, onPick, frameworks = [] }) {
   if (!productId) return null;
   const { data, error, busy } = st;
   const fwLabel = (id) => (frameworks.find((x) => x.id === id)?.label?.[0] || id).split(':')[0];
+  const AWARE = { unaware: ['لا يعرف المشكلة بعد', 'Pas encore conscient'], problem: ['يعرف المشكلة', 'Conscient du problème'], solution: ['يعرف الحلول', 'Connaît les solutions'], product: ['يعرف المنتج', 'Connaît le produit'] };
   return (
     <section className="space-y-3 rounded-xl border border-line p-3" aria-busy={busy}>
       <div className="flex flex-wrap items-center gap-2">
@@ -364,7 +366,12 @@ function ProductAngles({ productId, picked, onPick, frameworks = [] }) {
                     <b className="text-ink">{a.name}</b>
                     <Badge>{fwLabel(a.framework)}</Badge>
                   </span>
-                  {a.audience && <span className="text-xs text-muted">{a.audience}</span>}
+                  {a.audience && (
+                    <span className="text-xs text-muted">
+                      {a.audience}
+                      {AWARE[a.awareness] && <> · {t(AWARE[a.awareness])}</>}
+                    </span>
+                  )}
                   {a.promise && <span className="leading-6 text-ink">«{a.promise}»</span>}
                   {a.beats?.length > 0 && (
                     <ol className="list-decimal space-y-0.5 ps-5 text-xs leading-5 text-sub">

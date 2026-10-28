@@ -24,8 +24,26 @@
 | `webapp-testing` | [anthropics/skills](https://github.com/anthropics/skills) · Apache-2.0 | اختبار الصفحات بمتصفح حقيقي (Playwright) |
 | `systematic-debugging` · `verification-before-completion` | [obra/superpowers](https://github.com/obra/superpowers) · MIT | السبب الجذري قبل الإصلاح، ولا إعلان «يعمل» قبل تشغيل الاختبار |
 | `cro` · `ab-testing` · `offers` · `conversion-tracking` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) · MIT | صفحات الهبوط واختبارات A/B، العروض، وتتبّع التحويل (Pixel / CAPI) |
+| `copywriting` (`801b750`) · `marketing-psychology` (`30f9b9a`) · `ad-creative` (`801b750`) | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) · MIT | أكثر مهارات التسويق تثبيتاً على skills.sh (238K، 167K، 136K): منها صنعة كاتب صفحات الهبوط (الوضوح، الفائدة قبل الخاصية، كلمات الزبون، علامات الكتابة الآلية، الخطاف، قوالب الصور، الإقناع الصادق للدفع عند الاستلام) |
+| `find-skills` (`773fb2c`) | [vercel-labs/skills](https://github.com/vercel-labs/skills) · MIT | مهارة Vercel للبحث عن أفضل مهارة لحاجة جديدة (لوحة skills.sh، عدد التثبيتات، سمعة المصدر). أُضيفت إليها قواعد التثبيت الآمن في هذا المستودع: نسخة CLI عمرها أسبوعان على الأقل (`npx skills@1.7.2 find …`)، لا `-g -y`، فحص `skill-scanner`، الرخصة وسطر هنا |
 
 التثبيت في Claude Code: `bash scripts/install-skills.sh` — مهارتا المشروع و Impeccable موجودتان مسبقاً في `.claude/skills/` بجذر المستودع.
+
+## مهارة صفحات الهبوط: `cod-landing-page-builder`
+
+في `.claude/skills/cod-landing-page-builder/`: صنعة باني صفحات الهبوط للدفع عند الاستلام، مستخلصة بطريقة `find-skills` من المهارات أعلاه (ومن `image` و`product-marketing`، والمصادر بنسخها في `references/sources.md`).
+
+- `references/angles.md` · `copy.md` · `visuals.md`: الصنعة بالعربية. **هي نفس الملفات** التي يحمّلها الـ ERP في رسائل النظام (`server/prompts/landing/`)، واختبار `tests/landing-craft.test.js` يفشل إن اختلفت.
+- `references/prompt-templates.md`: رسائل نظام وبرومبتات جاهزة لكل خطوة (تحليل المنتج، جواب التاجر إلى ميزة، الكاتب، مخطط الصور، برومبت الصورة) لأي باني: n8n، محادثة، ERP آخر.
+- القاعدة الأهم: أجوبة التاجر عن أسئلة الزبائن **خصائص للمنتج** (المواصفات، المميزات، الصور الوصفية، الفوائد)، لا أسئلة شائعة.
+
+## المهارات في حسابك على Claude (لكل المشاريع)
+
+مهارات المستودع تعمل في Claude Code داخل هذا المستودع فقط. لتتبعك في كل مشروع ومحادثة على claude.ai وتطبيق Claude:
+
+1. `bash scripts/pack-skills.sh` ← ملف ZIP لكل مهارة في `dist-skills/` (لا يُرفع إلى GitHub).
+2. claude.ai ← **Customize ← Skills** ([claude.ai/customize/skills](https://claude.ai/customize/skills)) ← «+» ← «Create skill» ← «Upload a skill»، وارفع كل ZIP مرة واحدة: `cod-landing-page-builder`، `ecommerce-erp-builder`، `find-skills`، `copywriting`، `marketing-psychology`، `ad-creative`.
+3. تظهر بعدها في كل جلسة باسم `anthropic-skills:<الاسم>`. بعد تعديل مهارة: أعد الحزم وارفع الـ ZIP الجديد مكان القديم.
 
 ## مهارة المشروع: `ecommerce-erp-builder`
 
@@ -39,4 +57,4 @@
 - `references/growth.md`: المؤشرات، المستشار، اختبار الصفحات A/B، ملاحظات مشاريع جديدة (مثل «مكتبة ألواني»).
 - `references/pitfalls.md`: المشاكل التي واجهناها وحلولها، قائمة التحقق، طريقة التسليم.
 
-للاستعمال في أي مشروع: `cp -r .claude/skills/ecommerce-erp-builder ~/.claude/skills/` — أو اضغط المجلد (zip) وارفعه في claude.ai ← الإعدادات ← Capabilities ← Skills.
+للاستعمال في أي مشروع: `cp -r .claude/skills/ecommerce-erp-builder ~/.claude/skills/` — أو `bash scripts/pack-skills.sh ecommerce-erp-builder` وارفع الـ ZIP في claude.ai ← Customize ← Skills (القسم أعلاه).
