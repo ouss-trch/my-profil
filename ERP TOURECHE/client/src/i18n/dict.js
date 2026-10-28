@@ -208,6 +208,8 @@ export const DICT = {
   'err.budget_required': ['حدد الميزانية اليومية (1 على الأقل بعملة الحساب)', 'Indiquez le budget journalier (≥ 1 dans la devise du compte)'],
   'err.ad_account_required': ['اختر حساباً إعلانياً', 'Choisissez un compte publicitaire'],
   'err.meta_token_missing': ['احفظ رمز System User أولاً', 'Enregistrez d’abord le jeton System User'],
+  'err.meta_token_invalid': ['رمز Meta لم يعد صالحاً: انتهى، أو أُلغي، أو حُذف مستخدم النظام الذي أنشأه. أنشئ رمزاً جديداً (مستخدمو النظام ← Générer un token) وضعه في بطاقة Meta', 'Jeton Meta invalide : expiré, révoqué, ou son utilisateur système a été supprimé. Générez-en un nouveau (Utilisateurs système → Générer un token) et collez-le dans la carte Meta'],
+  'err.meta_app_dev_mode': ['تطبيق Meta غير منشور (وضع التطوير)، فترفض Meta إنشاء الإعلان. انشره: developers.facebook.com ← التطبيق ← Publier (بعد وضع رابط سياسة الخصوصية والفئة)', 'L’app Meta est en mode développement : Meta refuse de créer l’annonce. Publiez-la : developers.facebook.com → app → Publier (après l’URL de confidentialité et la catégorie)'],
   'err.meta_account_required': ['اختر حساباً إعلانياً واحداً على الأقل', 'Choisissez au moins un compte publicitaire'],
   'err.update_backup_failed': ['فشلت النسخة الاحتياطية قبل التحديث، فلم يتغيّر شيء. افتح «سجل آخر تحديث».', 'La sauvegarde avant mise à jour a échoué : rien n’a changé. Voir le journal.'],
   'err.update_pull_failed': ['تعذّر جلب النسخة الجديدة من GitHub، فلم يتغيّر شيء. افتح «سجل آخر تحديث».', 'Impossible de télécharger depuis GitHub : rien n’a changé. Voir le journal.'],
